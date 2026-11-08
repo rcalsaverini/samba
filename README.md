@@ -42,6 +42,12 @@ Run these from the root of the target git repository.
      command: uv run pytest -q
    claude:
      model: sonnet
+     allow:                        # replaces the default list, so keep edits and commits
+       - Edit
+       - Write
+       - "Bash(uv run pytest:*)"   # lets the agent check its own work before handing it in
+       - "Bash(git add:*)"
+       - "Bash(git commit:*)"
    ---
    Task: {{ task.title }}
 
@@ -55,12 +61,14 @@ Run these from the root of the target git repository.
    samba run
    ```
 
-3. Follow along and review:
+3. Follow along and review. New tasks are planned first: the plan waits in `plan-review` until
+   you accept it (`samba task new --skip-plan` goes straight to work).
 
    ```
    samba task list
    samba task show <id>
-   samba work accept <id>      # merge the branch, once the task is in work-review
+   samba plan accept <id>      # once the task is in plan-review: the agent starts the work
+   samba work accept <id>      # once the task is in work-review: merge the branch
    ```
 
 ## Commands
@@ -77,6 +85,7 @@ Task ids can be abbreviated to any unique prefix.
 
 ## Docs
 
+- [`docs/manual.md`](docs/manual.md): the user manual (setup, daily loop, questions, troubleshooting).
 - [`SPEC.md`](SPEC.md): the full specification and source of truth for behavior.
 - [`CLAUDE.md`](CLAUDE.md): a map of the code, for agents and contributors.
 

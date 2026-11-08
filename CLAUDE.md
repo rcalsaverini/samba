@@ -6,6 +6,10 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
 
 - `SPEC.md`: the source of truth for behavior. Read the sections relevant to your task before
   changing code, and update the spec in the same change when behavior changes.
+- `README.md`: entry point with a short quickstart; links to the manual and SPEC.
+- `docs/manual.md`: the user manual (setup, daily loop, troubleshooting), for people using Samba.
+  `tests/test_manual.py` fails when a CLI subcommand is not mentioned in it, so update it when
+  you add, rename or remove a command.
 - `src/samba/`
   - `cli.py`: `run` and `<noun> <verb>` commands, no aliases: `task new|list|show|retry|stop|discard`,
     `plan`/`work` review commands (including `work accept`), `question list|show|answer`
@@ -31,6 +35,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     on files and on calls recorded by the fake. **It must never import the `samba` package**:
     the suite is meant to be reused unchanged against a future rewrite in another language.
   - `conftest.py`: the `Sandbox` fixture (temp git repo, WORKFLOW.md, tasks, helpers).
+  - `test_manual.py`: drift check for `docs/manual.md`. Runs the CLI's `--help` and reads files,
+    never imports `samba`.
   - `fake_claude.py`: scripted fake of the `claude` CLI. Standard library only.
 
 ## Checks
