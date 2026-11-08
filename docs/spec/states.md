@@ -7,9 +7,9 @@ the status (`todo`, `running`, `review`) are both in the name. Moving a file is 
 
 | Folder         | Meaning                                              | Who moves files in         |
 |----------------|------------------------------------------------------|----------------------------|
-| `plan-todo`    | Ready to be planned (new, or plan revision, planning)     | Human, or Samba (retry) |
+| `plan-todo`    | Ready to be planned (new, or plan revision)          | Human, or Samba (retry) |
 | `plan-running` | Claimed for planning; a planner is (about to be) running | Samba only          |
-| `plan-review`  | Plan written; waiting for the human (planning)            | Samba                   |
+| `plan-review`  | Plan written; waiting for the human                  | Samba                   |
 | `work-todo`    | Ready to run (new, retry, rework, or plan approved)  | Human, or Samba (retry) |
 | `work-running` | Claimed; an agent is (or is about to be) running     | Samba only              |
 | `work-review`  | Validation passed; branch ready for the human        | Samba                   |
@@ -19,9 +19,41 @@ the status (`todo`, `running`, `review`) are both in the name. Moving a file is 
 | `discarded`    | Terminal: abandoned                                  | Human                      |
 
 `question` and `stuck` have no stage in their name. The sidecar records where the task came from
-(`last_stage`, states, Sidecar state) and why it is there (`blocked_cause`, states, Sidecar state).
+(`last_stage`) and why it is there (`blocked_cause`), both in states, Sidecar state.
 
 `done` and `discarded` both remove the task's worktree and neither deletes its branch (orchestrator, Tick).
+
+### Planning stage
+
+Planning is **opt-in per task** (or per repo with `planning.require_plan`, workflow-config, Config).
+It lets the human review a plan before any code is written. Tasks that skip it go straight through
+the work stage. A planning run can read the repository but cannot change anything: the plan comes
+back as structured output and Samba writes it into the task file (running-claude, Planning run).
+
+The stage is part of the folder name, so no sidecar field says which stage a running task is in.
+`task list` shows the folder name as the state (observability).
+
+```
+plan-todo ──dispatch──> plan-running ──planned──> plan-review
+                           │  ├──blocked──> question
+                           │  ├──budget / gave up──> stuck
+                           │  └──failure, attempts left──> plan-todo (retry)
+plan-review ──human approves: move to work-todo──> work-todo ──> work-running ──> work-review ...
+plan-review ──human adds ## Feedback, moves to plan-todo──> plan-todo   (revises the same plan)
+```
+
+Reconcile, stop, shutdown and recovery work per running folder: on recovery or shutdown (the
+`recover` rows) a file in `plan-running/` goes back to `plan-todo/`, and a retry (`retry_plan`,
+`retry_work`) goes back to the todo folder of the same stage. Giving up goes to `stuck/`
+(orchestrator, Failures and retries).
+
+### Dependencies
+
+Front matter `depends_on: [task-id, ...]` (optional, human-owned, task-files, Format) names tasks
+that must be finished first. It is a guard on the dispatch rows, not a state: a waiting task stays
+in its `plan-todo/` or `work-todo/` folder and no folder is added. The behavior (waiting, unknown
+ids, discarded dependencies, cycles) is in orchestrator, Dependencies. The guard `deps_met` is
+described under the transition table below.
 
 ### Transition table
 
@@ -35,7 +67,10 @@ fails if it drifts from the code.
 
 Event names are the future command names (`plan.accept`, `work.reject`, ...). Actor `samba`
 rows are fired by the orchestrator; actor `human` rows are fired by a command or observed as a hand
-move (below). Guards are names evaluated in code: `deps_met` (dependencies), `plan_required` (`require_plan`
+move (below). Guards are names evaluated in code: `deps_met` (on `dispatch_plan`, `dispatch_work` and
+`route_to_plan`: every id in `depends_on` is in `done/`; `done` means merged, so the worktree of the
+dependent task, branched from the base branch at dispatch, already contains the dependency's work;
+`discarded/` does not count; the guard gates planning as well as execution), `plan_required` (`require_plan`
 is set and the plan is not approved), `last_stage=plan|work|unset` (the sidecar field, states, Sidecar state; `unset` means none is recorded: a task from
 before the stage layout, or put into `question` or `stuck` by hand). For `question.answer` and
 `task.retry` with `last_stage` unset, either todo folder is accepted: the folder the human chose
@@ -104,7 +139,9 @@ an observed hand move `work-review -> work-todo` selects, so a hand move never r
 `dispatch_plan` and `dispatch_work` are the only rows that start an agent. A `work-todo` task that
 needs a plan first (`plan_required`) takes `route_to_plan`, then `dispatch_plan` in the same tick.
 Approval is the `plan.accept` row only: nothing is inferred from `last_outcome` or from the
-presence of a plan session. The attempts reset of a task sent back from `question` or `stuck` is
+presence of a plan session. It sets `plan_approved = true`, so a later stop or retry does not route
+the task to planning again, and clears `session_id`: execution starts a fresh session
+(prompts, Protocol prompt). The attempts reset of a task sent back from `question` or `stuck` is
 an effect of `question.answer` and `task.retry`.
 
 ### Observed hand moves
@@ -159,18 +196,21 @@ Owned by Samba. Fields:
   task in `question` or `stuck`, or one that is stopped or retried, which stage it belongs to.
 - `blocked_cause` (string or null): why the task is in `question` or `stuck`. Values now:
   `question` (the agent asked), `budget`, `gave_up`, `dependency_discarded`, `dependency_cycle`
-  (dependencies), `stopped` (a human ran `task stop`). It is an open string, not a closed set: later versions add values. Cleared at dispatch
+  (orchestrator, Dependencies), `stopped` (a human ran `task stop`). It is an open string, not a closed set: later versions add values. Cleared at dispatch
   and by the rows that send a task back to a todo folder.
-- `plan_session_id`, `plan_approved` (planning, planning, Sidecar and status)
+- `plan_session_id` (string or null): the planning session, separate from `session_id`
+  (running-claude, Planning run).
+- `plan_approved` (bool, default false): set by `plan.accept`. Rework from `work-review/` keeps it
+  true and resumes the execution session.
 - `questions` (list of question records, states, Questions). A missing field means an empty list.
 - `turns_total` (int)
 - `cost_usd_total` (float), `input_tokens_total`, `output_tokens_total` (ints)
 - `branch` (string), `workspace` (absolute path)
 - `updated_at` (ISO timestamp)
 
-If the sidecar is missing or unreadable it is recreated empty (attempts 0, no session). Unknown
-fields (for example the removed `phase` of older versions) are ignored on load and dropped on the
-next save.
+If the sidecar is missing or unreadable it is recreated empty (attempts 0, no session). Old sidecars
+load with defaults. Unknown fields (for example the removed `phase` of older versions) are ignored
+on load and dropped on the next save.
 
 ## Questions
 
@@ -186,7 +226,7 @@ A question is a record owned by Samba, stored in the sidecar `questions` list:
 | `asked_at` | ISO-8601 local time |
 | `answer`, `answered_at` | null until answered. A dismissed question keeps `answer` null and gets `answered_at` set. |
 
-- **Asking.** A `blocked` outcome (work or planning, running-claude, Outcome) carries `questions: [{text, context}]`.
+- **Asking.** A `blocked` outcome (work: running-claude, Outcome; planning: running-claude, Planning run) carries `questions: [{text, context}]`.
   The orchestrator assigns ids and the round, saves the records and renders `## Questions` (task-files, Write discipline)
   before firing `work_blocked` or `plan_blocked`. Malformed entries are dropped. A `blocked` outcome
   without a valid question (for example an agent stopped by a permission denial) still goes to

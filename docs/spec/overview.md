@@ -1,4 +1,4 @@
-# Samba: Specification v0
+# Samba: Specification
 
 Status: Draft v0. Derived from OpenAI's Symphony spec (Draft v1), trimmed for local, single-user
 experimentation, and informed by OpenAI's "harness engineering" write-up.
@@ -34,6 +34,8 @@ Principles taken from harness engineering:
   missing (tool, doc, fixture), so the human fixes the harness rather than retrying harder.
 
 ### Non-goals (v0)
+
+Ideas not built yet are in backlog.
 
 - Remote trackers (Jira, Linear, GitHub Issues). The task store sits behind a small interface (states, Task store interface)
   so one can be added later.

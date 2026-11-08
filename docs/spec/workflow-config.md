@@ -50,13 +50,13 @@ prompts:                        # override the built-in continuation prompts (pr
   validate_failed: null
   resume: null
   give_up: null
-  plan: null                    # planning prompts (planning, Prompts)
+  plan: null                    # planning prompts (prompts, Built-in defaults)
   plan_revise: null
 
-planning:                       # optional planning phase (planning, Config)
-  require_plan: false
-  model: null
-  allow: ["Read", "Grep", "Glob"]
+planning:                       # optional planning stage (states, Planning stage)
+  require_plan: false           # true: work-todo/ tasks are planned (and reviewed) before execution
+  model: null                   # defaults to claude.model
+  allow: ["Read", "Grep", "Glob"]   # always used with dontAsk (running-claude, Planning run)
 ---
 ```
 
@@ -68,7 +68,7 @@ warning.
 
 Headless runs cannot answer permission prompts. With `permission_mode: dontAsk`, any tool call not
 allowed is denied; the run continues, the agent is told it was denied, and the denial is listed in
-the `result` event's `permission_denials` (verified, implementation-notes, Verified Claude Code behavior). Samba appends each denial to the
+the `result` event's `permission_denials` (verified, running-claude, Verified Claude Code behavior). Samba appends each denial to the
 task's `## Log` so the human can widen `allow` or treat it as a harness gap.
 
 **The allow list lives in `WORKFLOW.md`, not in the repo's `.claude/settings.json`.** Claude Code

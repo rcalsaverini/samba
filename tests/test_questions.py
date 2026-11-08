@@ -1,4 +1,4 @@
-"""Black-box tests for questions as data (spec: states, cli, planning). Must not import samba."""
+"""Black-box tests for questions as data (spec: states, cli, running-claude). Must not import samba."""
 
 from __future__ import annotations
 

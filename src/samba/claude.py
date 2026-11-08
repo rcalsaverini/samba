@@ -27,7 +27,7 @@ class Invocation:
     tasks_dir: Path
     system_prompt: str
     max_budget_usd: float | None
-    planning: PlanningConfig | None = None  # set for a planning run (spec: planning, The planning run)
+    planning: PlanningConfig | None = None  # set for a planning run (spec: running-claude, Planning run)
 
 
 MEMORY_FILE_NAMES = ("CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md", ".claude/CLAUDE.local.md")

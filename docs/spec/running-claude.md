@@ -28,7 +28,7 @@
   prompt (prompts, Which prompt is sent). This does not count as a failed attempt.
 - `--add-dir` gives the agent read and write access to the tasks folder. Without it, reading the task
   file is denied.
-- `--max-budget-usd` is set to `max_cost_usd_per_task - cost_usd_total` when a task cap is set.
+- `--max-budget-usd` is set to `max_cost_usd_per_task - cost_usd_total` when a task cap is set. The cap applies to planning runs too.
 - The prompt is passed as an argument.
 
 ## Reading the stream
@@ -75,6 +75,47 @@ Claude Code returns the parsed object in `result.structured_output` (verified). 
 If `structured_output` is missing or invalid, treat as `continue` and log a warning. `summary` is
 written into the task's `## Log` line for that run.
 
+## Planning run
+
+Same machinery as the rest of this chapter (worktree, stream reading, timeouts, cost accounting,
+budget cap, denials logged), with these differences:
+
+- **Permissions:** always `--permission-mode dontAsk` and `--allowedTools <planning.allow>`
+  (default `Read`, `Grep`, `Glob`), regardless of `claude.permission_mode` and `claude.allow`.
+  Verified (below, Verified Claude Code behavior): writes are denied, read-only shell commands
+  still run. Do **not** use `--permission-mode plan`: it writes files into `~/.claude/plans/` and
+  changes the model.
+- **Model:** `--model <planning.model>` if set, else `claude.model`.
+- **Session:** its own session id, stored in sidecar `plan_session_id` (separate from
+  `session_id`). First planning run: new session with the `plan` prompt. Revision (sidecar has
+  `plan_session_id`): `--resume` it with the `plan_revise` prompt. Missing session: start fresh
+  with the `plan` prompt, as in Invocation above.
+- **One invocation per dispatch** (no continue loop, no validation).
+- **Outcome schema** (passed with `--json-schema`, instead of the work schema above):
+
+  ```json
+  {"type": "object",
+   "properties": {"outcome": {"type": "string", "enum": ["planned", "blocked"]},
+                  "plan": {"type": "string"},
+                  "assumptions": {"type": "string"},
+                  "questions": {"type": "array", "minItems": 1,
+                                "items": {"type": "object",
+                                          "properties": {"text": {"type": "string"},
+                                                         "context": {"type": "string"}},
+                                          "required": ["text", "context"]}},
+                  "summary": {"type": "string"}},
+   "required": ["outcome", "plan", "summary"]}
+  ```
+
+- **Protocol prompt:** the planning variant (prompts, Protocol prompt).
+- **Writing the result** follows task-files, Write discipline (the plan and assumptions sections,
+  `## Questions`, and the `## Log` line with `summary`).
+- **Transitions:** `planned` goes to `plan-review/` with `last_outcome = "planned"`. `blocked` goes
+  to `question/` with `last_outcome = "blocked"`, `blocked_cause = "question"`, and `last_stage`
+  stays `plan`; the questions are recorded as in states, Questions. Budget exceeded goes to
+  `stuck/` (cause `budget`). Missing or invalid structured output, or no `plan` text with outcome
+  `planned`, is a failure (orchestrator, Failures and retries).
+
 ## User config isolation
 
 Headless Claude Code normally loads the user's own config as well as the repo's. On the test machine
@@ -116,4 +157,36 @@ Rejected alternatives:
 - `CLAUDE_CONFIG_DIR` pointing at an empty folder: logged out, would need a separate login.
 
 If a repo needs MCP servers, a later version can pass them explicitly with `--mcp-config`.
+
+## Verified Claude Code behavior (2.1.220, 2026-11-06)
+
+Tested with throwaway repos and `--model haiku`:
+
+- `-p --output-format stream-json` errors without `--verbose`.
+- `--session-id <uuid>` sets the id; reusing an id errors ("already in use"); `--resume <id>` from a
+  new process (and a different cwd) keeps conversation memory; unknown id gives exit 1,
+  `subtype: error_during_execution`, stderr "No conversation found".
+- `result.total_cost_usd` is per invocation.
+- An auth failure gives exit 1, `is_error: true`, but `subtype: "success"`.
+- `--add-dir <dir>` allows reading and editing files there; without it reads are denied.
+- `--append-system-prompt` and the repo `CLAUDE.md` both apply in `-p` mode.
+- Claude Code's built-in prompt makes the agent treat commits as needing the user's request, even
+  with user config isolated; the protocol prompt must authorize commits explicitly.
+- `--permission-mode dontAsk`: disallowed calls are denied, the run continues and exits 0, denials
+  are listed in `result.permission_denials`, and the agent does not try to work around them.
+- `permissions.allow` in the repo's `.claude/settings.json` is ignored in untrusted folders (stderr
+  warning); `--allowedTools` and `--settings` allow rules are honored.
+- `--json-schema` returns the parsed object in `result.structured_output`.
+- Isolation results: see User config isolation above.
+- Ancestor memory files (2026-11-07): run from a folder under `$HOME` with
+  `--setting-sources project,local --strict-mcp-config`, the agent still saw a rule that exists
+  only in `~/.claude/CLAUDE.md`; run from a folder under `/tmp`, it did not. Adding
+  `--settings '{"claudeMdExcludes": [<each ancestor's CLAUDE.md, CLAUDE.local.md,
+  .claude/CLAUDE.md>]}'` removed the user rule while the folder's own `CLAUDE.md` still loaded.
+  `claudeMdExcludes` accepts absolute paths and globs.
+- Read-only planning (Planning run above): `--permission-mode plan` runs headless without hanging, but its Write
+  tool still succeeds by redirecting to `~/.claude/plans/<name>.md` (a file in the user's home), and
+  it switched to a different model than `--model` asked for (17x the cost in the test).
+  `dontAsk` with `--allowedTools Read Grep Glob` denies writes, still auto-allows read-only shell
+  commands (`git log`, `git status`, `ls`), honors `--model`, and returns structured output.
 

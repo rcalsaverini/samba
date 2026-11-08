@@ -8,7 +8,7 @@ Samba is run from the root of a target git repository:
   CLAUDE.md                      # optional, the repo's own agent map; Claude Code loads it
   .samba/                     # created by Samba, added to .git/info/exclude
     tasks/
-      plan-todo/     <id>.md         # planning stage (planning): ready to be planned
+      plan-todo/     <id>.md         # planning stage (states, Planning stage): ready to be planned
       plan-running/  <id>.md
       plan-review/   <id>.md
       work-todo/     <id>.md         # work stage: ready to run
