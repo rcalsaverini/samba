@@ -207,6 +207,17 @@ def human_row(src: State, dst: State, side: Sidecar) -> Transition | None:
     return None
 
 
+def human_events(src: State, side: Sidecar) -> list[Transition]:
+    """The human events legal in `src`, one row per event name, in table order. Only the
+    `last_stage=*` guards are checked: human rows have no other guards."""
+    rows: list[Transition] = []
+    for r in TRANSITIONS:
+        if (r.actor == "human" and r.src == src and _own_guards_ok(r, side)
+                and all(r.event != x.event for x in rows)):
+            rows.append(r)
+    return rows
+
+
 def _stage_guard_ok(guard: str, side: Sidecar) -> bool:
     """`last_stage=plan|work|unset` against the sidecar (unset: no stage recorded)."""
     return guard == f"last_stage={side.last_stage or 'unset'}"

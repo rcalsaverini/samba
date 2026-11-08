@@ -732,7 +732,7 @@ If a repo needs MCP servers, a later version can pass them explicitly with `--mc
   turn start/end, outcome, validation result, state moves, failures, cost.
 - `runs/`: raw event streams and validation outputs for debugging.
 - Task `## Log`: the human-readable summary, one line per worker exit.
-- `symphony status`: prints a table from folders and sidecars: id, state, attempts, turns, cost,
+- `symphony status` (`task list` with no filter, §11) prints a table from folders and sidecars: id, state, attempts, turns, cost,
   last outcome, last error. The STATE column is the folder name; for `question` and `stuck` it is
   followed by the `blocked_cause` in parentheses, for example `stuck (budget)`. A task waiting for a
   retry delay shows `(retry in Ns)` in the last-outcome column. A task in a todo folder held only
@@ -748,12 +748,39 @@ symphony run      [--repo PATH] [--exit-when-idle]
                   # (§15) do not count, so a dependency waiting for a human cannot hang the
                   # run. Exits 1 with an `mv` recipe if old-layout folders still hold tasks
                   # (§5.1).
+symphony task list [STATE...] [--repo PATH]
+symphony task show ID         [--repo PATH]
+symphony list [STATE...]      # alias of `task list`
+symphony show ID              # alias of `task show`
 symphony status   [--repo PATH]
+                  # exactly `task list` with no filter.
 symphony transitions
                   # print the transition table (§4.1) as Markdown; needs no repo.
 symphony new "Title" [--priority N] [--plan]
                   # create work-todo/<slug>.md (plan-todo/<slug>.md with --plan)
 ```
+
+Read-only commands (`task list`, `task show`, `status`) read folders and sidecars only. They never
+need a running orchestrator and change nothing.
+
+- **State arguments** of `task list`: each is an exact state name or a prefix. A prefix expands to
+  every state it matches, so `work` is `work-todo`, `work-running` and `work-review`, `q` is
+  `question`, and `d` is `done` and `discarded`. An exact name always means just that state. A
+  prefix that matches no state is an error: exit 2, the valid states listed on stderr. Several
+  arguments give the union, printed in the canonical state order (§2). Columns and cell texts are
+  those of `status` (§10). No matching task prints the header row only.
+- **Task id resolver** (shared by every command that takes a task id): an exact id wins, even when
+  it is also a prefix of other ids; otherwise a unique prefix over the ids in all state folders.
+  An unknown id, or a prefix matching several ids, is exit 2 with a message on stderr (the
+  candidates listed when ambiguous).
+- **`task show ID`** prints `key: value` lines, `-` for unset values: `id`, `title`, `state`,
+  `blocked_cause`, `priority`, `attempts`, `turns`, `cost`, `last_outcome`, `last_error` (full
+  text), `retry_in` (only while in a retry delay), `depends_on` (`-`, or one `  <id> (<state>)`
+  line each, `unknown` for an id with no task file) and, for a held todo task,
+  `dependency_status`, then `branch`, `worktree`, `session_id`, `plan_session_id`, and `events:`:
+  the human events legal in the task's state, one `  <event> -> <state>` line each, computed
+  from the transition table (§4.1) with the `last_stage` guards applied to the sidecar, or
+  `events: (none)` (`done`, `discarded`).
 
 On Ctrl-C: kill all agent processes, move their tasks back to the todo folder of their stage
 (`plan-todo/` or `work-todo/`, no attempt increment), exit.

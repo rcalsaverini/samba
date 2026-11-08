@@ -1,4 +1,4 @@
-"""Command line: `symphony run | status | new` (SPEC §11)."""
+"""Command line: `symphony run | status | new | task list|show | list | show` (SPEC §11)."""
 
 from __future__ import annotations
 
@@ -8,15 +8,15 @@ import logging
 import re
 import signal
 import sys
-import time
 from pathlib import Path
+from typing import cast
 
 from symphony.config import Config, ConfigError, load_config
-from symphony.deps import evaluate
 from symphony.orchestrator import Orchestrator, StartupError
 from symphony.prompts import TASK_TEMPLATE
 from symphony.tasks import STATES, SidecarStore, TaskStore
 from symphony.transitions import render_markdown_table
+from symphony.views import ResolveError, print_table, render_show, resolve_states, resolve_task_id, task_rows
 
 
 def _setup_logging(config: Config) -> None:
@@ -56,30 +56,31 @@ def cmd_run(config: Config, exit_when_idle: bool) -> int:
     return 0
 
 
-def cmd_status(config: Config) -> int:
+def cmd_task_list(config: Config, states: list[str]) -> int:
+    """`task list [STATE...]`; `status` is the same with no filter."""
+    try:
+        chosen = resolve_states(states) if states else STATES
+    except ResolveError as e:
+        print(f"symphony: {e.render()}", file=sys.stderr)
+        return 2
     tasks = TaskStore(config.symphony_dir / "tasks")
     sidecars = SidecarStore(config.symphony_dir / "state")
-    rows: list[list[str]] = [["ID", "STATE", "ATTEMPTS", "TURNS", "COST", "LAST", "ERROR"]]
-    now = time.time()
-    for state in STATES:
-        for task in tasks.list(state):
-            s = sidecars.load(task.id)
-            last = s.last_outcome or "-"
-            if state in ("plan-todo", "work-todo"):
-                if s.not_before and s.not_before > now:
-                    last += f" (retry in {s.not_before - now:.0f}s)"
-                else:
-                    dep = evaluate(tasks, task)
-                    if dep.kind == "waiting":
-                        last = f"waiting on {', '.join(dep.waiting)}"
-            shown = state
-            if state in ("question", "stuck") and s.blocked_cause:
-                shown = f"{state} ({s.blocked_cause})"
-            rows.append([task.id, shown, str(s.attempts), str(s.turns_total),
-                         f"${s.cost_usd_total:.2f}", last, (s.last_error or "")[:60]])
-    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
-    for r in rows:
-        print("  ".join(c.ljust(w) for c, w in zip(r, widths)).rstrip())
+    print_table(task_rows(tasks, sidecars, chosen))
+    return 0
+
+
+def cmd_task_show(config: Config, text: str) -> int:
+    tasks = TaskStore(config.symphony_dir / "tasks")
+    sidecars = SidecarStore(config.symphony_dir / "state")
+    try:
+        task = tasks.find(resolve_task_id(tasks, text))
+    except ResolveError as e:
+        print(f"symphony: {e.render()}", file=sys.stderr)
+        return 2
+    if task is None:
+        print(f"symphony: unknown task {text!r}", file=sys.stderr)
+        return 2
+    print("\n".join(render_show(tasks, task, sidecars.load(task.id))))
     return 0
 
 
@@ -108,14 +109,32 @@ def main(argv: list[str] | None = None) -> int:
     p_run = sub.add_parser("run", help="run the orchestrator loop")
     p_run.add_argument("--exit-when-idle", action="store_true",
                        help="exit once nothing is running and plan-todo/ and work-todo/ are empty")
-    p_status = sub.add_parser("status", help="show tasks and their state")
+    p_status = sub.add_parser("status", help="show tasks and their state (task list, no filter)")
+
+    def add_list_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument("states", nargs="*", metavar="STATE",
+                       help="state names or unique prefixes (default: all)")
+
+    def add_show_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument("id", help="task id or unique prefix")
+
+    p_list = sub.add_parser("list", help="alias of `task list`")
+    add_list_args(p_list)
+    p_show = sub.add_parser("show", help="alias of `task show`")
+    add_show_args(p_show)
+    p_task = sub.add_parser("task", help="task commands: list, show")
+    task_sub = p_task.add_subparsers(dest="task_command", required=True)
+    p_tlist = task_sub.add_parser("list", help="list tasks, optionally filtered by state")
+    add_list_args(p_tlist)
+    p_tshow = task_sub.add_parser("show", help="show one task in detail")
+    add_show_args(p_tshow)
     p_new = sub.add_parser("new", help="create a task in work-todo/")
     p_new.add_argument("title")
     p_new.add_argument("--priority", type=int)
     p_new.add_argument("--plan", action="store_true", help="create the task in plan-todo/ instead")
     p_trans = sub.add_parser("transitions",
                              help="print the transition table as Markdown (SPEC §4.1)")
-    for p in (p_run, p_status, p_new, p_trans):
+    for p in (p_run, p_status, p_new, p_trans, p_list, p_show, p_tlist, p_tshow):
         p.add_argument("--repo", type=Path, default=Path.cwd(),
                        help="repository root (default: current directory)")
     args = parser.parse_args(argv)
@@ -132,6 +151,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         return cmd_run(config, args.exit_when_idle)
-    if args.command == "status":
-        return cmd_status(config)
+    command = str(args.command)
+    if command == "task":
+        command = str(args.task_command)
+    if command == "status":
+        return cmd_task_list(config, [])
+    if command == "list":
+        return cmd_task_list(config, cast(list[str], args.states))
+    if command == "show":
+        return cmd_task_show(config, str(args.id))
     return cmd_new(config, args.title, args.priority, args.plan)

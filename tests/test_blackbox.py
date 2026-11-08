@@ -438,3 +438,197 @@ def test_status_command_lists_tasks(sb: Sandbox) -> None:
     res = sb.run("status")
     assert res.returncode == 0, res.stderr
     assert "t1" in res.stdout and "blocked" in res.stdout and "0.50" in res.stdout
+
+
+# ---- task list / task show (SPEC §11) --------------------------------------------------------
+
+
+def _ids(stdout: str) -> list[str]:
+    return [line.split()[0] for line in stdout.splitlines()[1:]]
+
+
+def _populate(sb: Sandbox) -> None:
+    sb.add_task("a-plan", state="plan-review")
+    sb.add_task("b-todo", state="work-todo")
+    sb.add_task("c-run", state="work-running")
+    sb.add_task("d-review", state="work-review")
+    sb.add_task("e-q", state="question")
+    sb.write_sidecar("e-q", {"blocked_cause": "question", "last_stage": "work"})
+    sb.add_task("f-stuck", state="stuck")
+    sb.write_sidecar("f-stuck", {"blocked_cause": "budget", "last_stage": "plan"})
+    sb.add_task("g-done", state="done")
+    sb.add_task("h-dis", state="discarded")
+
+
+def test_list_without_filter_equals_status(sb: Sandbox) -> None:
+    _populate(sb)
+    status = sb.run("status")
+    listed = sb.run("task", "list")
+    assert status.returncode == 0 and listed.returncode == 0
+    assert status.stdout == listed.stdout
+    assert len(_ids(listed.stdout)) == 8
+
+
+def test_list_filters_by_full_name_and_prefix(sb: Sandbox) -> None:
+    _populate(sb)
+    assert _ids(sb.run("task", "list", "plan-review").stdout) == ["a-plan"]
+    assert _ids(sb.run("task", "list", "work").stdout) == ["b-todo", "c-run", "d-review"]
+    assert _ids(sb.run("task", "list", "q").stdout) == ["e-q"]
+    assert "question (question)" in sb.run("task", "list", "q").stdout
+    assert _ids(sb.run("task", "list", "d").stdout) == ["g-done", "h-dis"]
+
+
+def test_list_several_states_in_canonical_order(sb: Sandbox) -> None:
+    _populate(sb)
+    res = sb.run("task", "list", "stuck", "plan-review")
+    assert res.returncode == 0
+    assert _ids(res.stdout) == ["a-plan", "f-stuck"]
+    assert "stuck (budget)" in res.stdout
+
+
+def test_list_unknown_state_exits_2(sb: Sandbox) -> None:
+    _populate(sb)
+    res = sb.run("task", "list", "zzz")
+    assert res.returncode == 2
+    assert "zzz" in res.stderr and "work-todo" in res.stderr
+
+
+def test_list_shows_waiting_on(sb: Sandbox) -> None:
+    sb.add_task("dep", state="work-review")
+    sb.add_task("child", depends_on=["dep"])
+    res = sb.run("task", "list", "work-todo")
+    assert _ids(res.stdout) == ["child"]
+    assert "waiting on dep" in res.stdout
+
+
+def test_list_empty_prints_header_only(sb: Sandbox) -> None:
+    res = sb.run("task", "list", "stuck")
+    assert res.returncode == 0
+    assert len(res.stdout.splitlines()) == 1
+
+
+def _table_events(sb: Sandbox, state: str, last_stage: str | None) -> list[tuple[str, str]]:
+    """Human events for `state` read from the `symphony transitions` output (the table)."""
+    want = last_stage or "unset"
+    seen: list[tuple[str, str]] = []
+    for line in sb.run("transitions").stdout.splitlines():
+        cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
+        if len(cells) < 5 or cells[3] != "human" or cells[1] != state:
+            continue
+        stage_guards = [g for g in cells[4].split(",") if g.startswith("last_stage=")]
+        if stage_guards and stage_guards != [f"last_stage={want}"]:
+            continue
+        if cells[0] not in [e for e, _ in seen]:
+            seen.append((cells[0], cells[2]))
+    return seen
+
+
+def _shown_events(out: str) -> list[tuple[str, str]]:
+    lines = out.splitlines()
+    if "events: (none)" in lines:
+        return []
+    start = lines.index("events:") + 1
+    events: list[tuple[str, str]] = []
+    for line in lines[start:]:
+        if not line.startswith("  ") or "->" not in line:
+            break
+        ev, dst = line.strip().split(" -> ")
+        events.append((ev, dst))
+    return events
+
+
+def test_show_plan_review(sb: Sandbox) -> None:
+    sb.add_task("p1", state="plan-review", title="Plan me", priority=3)
+    sb.write_sidecar("p1", {"attempts": 2, "turns_total": 7, "cost_usd_total": 1.5,
+                            "last_outcome": "planned", "last_error": "x" * 100,
+                            "branch": "symphony/p1", "workspace": "/tmp/ws/p1",
+                            "session_id": "sess-1", "plan_session_id": "psess-1"})
+    res = sb.run("task", "show", "p1")
+    assert res.returncode == 0, res.stderr
+    out = res.stdout
+    assert "title: Plan me" in out
+    assert "state: plan-review" in out
+    assert "blocked_cause: -" in out
+    assert "attempts: 2" in out and "turns: 7" in out and "cost: $1.50" in out
+    assert "last_outcome: planned" in out
+    assert "last_error: " + "x" * 100 in out
+    assert "branch: symphony/p1" in out and "worktree: /tmp/ws/p1" in out
+    assert "session_id: sess-1" in out and "plan_session_id: psess-1" in out
+    assert _shown_events(out) == _table_events(sb, "plan-review", None)
+    assert [e for e, _ in _shown_events(out)] == ["plan.accept", "plan.reject", "task.discard"]
+
+
+def test_show_events_come_from_the_table(sb: Sandbox) -> None:
+    cases: list[tuple[str, str | None]] = [
+        ("plan-todo", None), ("plan-running", None), ("work-todo", None),
+        ("work-running", None), ("work-review", None), ("done", None),
+        ("discarded", None), ("question", "plan"), ("question", "work"),
+        ("question", None), ("stuck", "plan"), ("stuck", "work"), ("stuck", None),
+    ]
+    for i, (state, stage) in enumerate(cases):
+        tid = f"t{i}"
+        sb.add_task(tid, state=state)
+        if stage:
+            sb.write_sidecar(tid, {"last_stage": stage})
+        out = sb.run("task", "show", tid).stdout
+        assert _shown_events(out) == _table_events(sb, state, stage), (state, stage, out)
+    assert "events: (none)" in sb.run("task", "show", "t5").stdout
+    stuck = _shown_events(sb.run("task", "show", "t12").stdout)
+    assert [e for e, _ in stuck].count("task.retry") == 1
+
+
+def test_show_question_cause(sb: Sandbox) -> None:
+    sb.add_task("q1", state="question")
+    sb.write_sidecar("q1", {"blocked_cause": "question", "last_stage": "work"})
+    out = sb.run("task", "show", "q1").stdout
+    assert "state: question" in out and "blocked_cause: question" in out
+    assert "question.answer -> work-todo" in out
+
+
+def test_show_depends_on_with_states(sb: Sandbox) -> None:
+    sb.add_task("d1", state="work-review")
+    sb.add_task("d2", state="done")
+    sb.add_task("child", depends_on=["d1", "d2", "ghost"])
+    res = sb.run("task", "show", "child")
+    assert res.returncode == 0, res.stderr
+    assert "  d1 (work-review)" in res.stdout
+    assert "  d2 (done)" in res.stdout
+    assert "  ghost (unknown)" in res.stdout
+    assert "waiting" in res.stdout
+
+
+def test_show_done_task(sb: Sandbox) -> None:
+    sb.add_task("fin", state="done")
+    res = sb.run("task", "show", "fin")
+    assert res.returncode == 0 and "state: done" in res.stdout
+
+
+def test_resolver_exact_prefix_ambiguous_unknown(sb: Sandbox) -> None:
+    sb.add_task("alpha", state="work-todo")
+    sb.add_task("alpha-two", state="stuck")
+    sb.add_task("beta-one", state="done")
+    sb.add_task("beta-two", state="discarded")
+    exact = sb.run("task", "show", "alpha")
+    assert exact.returncode == 0 and "id: alpha\n" in exact.stdout
+    pre = sb.run("task", "show", "alpha-t")
+    assert pre.returncode == 0 and "id: alpha-two\n" in pre.stdout
+    uniq = sb.run("task", "show", "beta-o")
+    assert uniq.returncode == 0 and "id: beta-one\n" in uniq.stdout
+    amb = sb.run("task", "show", "beta")
+    assert amb.returncode == 2
+    assert "beta-one" in amb.stderr and "beta-two" in amb.stderr
+    unk = sb.run("task", "show", "nope")
+    assert unk.returncode == 2 and "nope" in unk.stderr
+
+
+def test_aliases_match_canonical_forms(sb: Sandbox) -> None:
+    _populate(sb)
+    for canon, alias in [
+        (("task", "list"), ("list",)),
+        (("task", "list", "work"), ("list", "work")),
+        (("task", "list", "zzz"), ("list", "zzz")),
+        (("task", "show", "a-plan"), ("show", "a-plan")),
+        (("task", "show", "nope"), ("show", "nope")),
+    ]:
+        a, b = sb.run(*canon), sb.run(*alias)
+        assert (a.returncode, a.stdout, a.stderr) == (b.returncode, b.stdout, b.stderr), alias
