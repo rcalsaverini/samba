@@ -12,8 +12,8 @@ from typing import Any, Literal, cast
 
 from symphony.config import ConfigError, split_front_matter
 
-State = Literal["todo", "running", "review", "blocked", "done"]
-STATES: tuple[State, ...] = ("todo", "running", "review", "blocked", "done")
+State = Literal["plan", "plan-review", "todo", "running", "review", "blocked", "done"]
+STATES: tuple[State, ...] = ("plan", "plan-review", "todo", "running", "review", "blocked", "done")
 ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
@@ -108,6 +108,49 @@ class TaskStore:
         p = self.path(task_id, state)
         p.write_text(append_to_log_section(p.read_text(), line))
 
+    def set_section(self, task_id: str, heading: str, content: str) -> None:
+        state = self.state_of(task_id)
+        if state is None:
+            return
+        p = self.path(task_id, state)
+        p.write_text(replace_section(p.read_text(), heading, content))
+
+
+def _demote(content: str) -> str:
+    """Turn `#` and `##` headings into `###` so they cannot be mistaken for task sections."""
+    out: list[str] = []
+    for ln in content.strip().splitlines():
+        if ln.startswith("# ") or ln.startswith("## "):
+            ln = "### " + ln.split(" ", 1)[1]
+        out.append(ln)
+    return "\n".join(out)
+
+
+def replace_section(text: str, heading: str, content: str) -> str:
+    """Replace the `## <heading>` section with `content` (never duplicates it).
+
+    A missing section is created before `## Log` if present, else at the end.
+    """
+    lines = text.splitlines()
+    block = [f"## {heading}", *_demote(content).splitlines(), ""]
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == f"## {heading}"), None)
+    if start is not None:
+        end = len(lines)
+        for i in range(start + 1, len(lines)):
+            if lines[i].startswith("## "):
+                end = i
+                break
+        lines[start:end] = block
+    else:
+        log_at = next((i for i, ln in enumerate(lines) if ln.strip() == "## Log"), None)
+        if log_at is None:
+            while lines and not lines[-1].strip():
+                lines.pop()
+            lines += ["", *block]
+        else:
+            lines[log_at:log_at] = block
+    return "\n".join(lines).rstrip("\n") + "\n"
+
 
 def append_to_log_section(text: str, line: str) -> str:
     """Append `line` at the end of the `## Log` section, creating the section if missing."""
@@ -136,6 +179,9 @@ def append_to_log_section(text: str, line: str) -> str:
 @dataclass
 class Sidecar:
     session_id: str | None = None
+    phase: str | None = None  # "plan" | "execute" (SPEC §14.8)
+    plan_session_id: str | None = None
+    plan_approved: bool = False
     attempts: int = 0
     not_before: float | None = None  # unix timestamp
     last_error: str | None = None

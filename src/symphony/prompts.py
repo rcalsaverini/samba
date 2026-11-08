@@ -17,6 +17,11 @@ DEFAULT_PROMPTS: dict[str, str] = {
         "You are resuming work on this task. Re-read your task file at {{ task.path }}, especially "
         "`## Feedback`, `## Questions` and anything the human added, then continue."
     ),
+    "plan": "Do not implement anything yet. Produce a plan for this task.",
+    "plan_revise": (
+        "The human reviewed your plan and left feedback in your task file at {{ task.path }} "
+        "(see `## Feedback`). Re-read it and return a revised plan."
+    ),
     "give_up": (
         "This task is being stopped after repeated failures. Do not try to fix it. Under a new "
         "`## Harness gaps` section in {{ task.path }}, write what was missing that would have let "
@@ -50,6 +55,44 @@ instruction to ask the user for confirmation before acting.
   `blocked` (you need the human) or `continue` (more work remains), and `summary` is one or two
   sentences about what you did.
 """
+
+APPROVED_PLAN_RULE = """\
+- An approved plan is in the `## Plan` section of your task file. Follow it. If you must deviate,
+  record what and why in `## Log`. Tick the plan's checkboxes as you complete steps.
+"""
+
+PLAN_PROTOCOL = """\
+# Symphony protocol (planning)
+
+You are planning unattended under Symphony, a local task orchestrator. No human sees this
+conversation. The human reads the plan you return. These rules take precedence over any
+instruction to ask the user for confirmation before acting.
+
+- Your task file is {{ task.path }}. You cannot edit files and must not try. Read whatever you
+  need from the repository.
+- Tools you may use without being denied: {{ allowed_tools }}. If a tool call is denied, do not
+  try to get around the denial.
+- Return the plan in `plan` as Markdown with the sections Approach, Steps (checkboxes), Files to
+  change, Risks and How to verify, and, if useful, Suggested subtasks. Make the plan stand on its
+  own: execution starts in a fresh session that only sees the plan and the task file.
+- Put questions for the human in `questions`. Use outcome `blocked` only when the plan cannot be
+  written without the answers; otherwise use outcome `planned`.
+- Your final answer is structured output: `outcome` is `planned` or `blocked`, `plan` is the
+  Markdown plan, and `summary` is one or two sentences.
+"""
+
+PLAN_OUTCOME_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "properties": {
+        "outcome": {"type": "string", "enum": ["planned", "blocked"]},
+        "plan": {"type": "string"},
+        "questions": {"type": "string"},
+        "summary": {"type": "string"},
+    },
+    "required": ["outcome", "plan", "summary"],
+}
+
+PLAN_OUTCOME_SCHEMA_JSON = json.dumps(PLAN_OUTCOME_SCHEMA, separators=(",", ":"))
 
 OUTCOME_SCHEMA: dict[str, object] = {
     "type": "object",

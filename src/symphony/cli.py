@@ -65,7 +65,8 @@ def cmd_status(config: Config) -> int:
             last = s.last_outcome or "-"
             if state == "todo" and s.not_before and s.not_before > now:
                 last += f" (retry in {s.not_before - now:.0f}s)"
-            rows.append([task.id, state, str(s.attempts), str(s.turns_total),
+            shown = f"running ({s.phase})" if state == "running" and s.phase else state
+            rows.append([task.id, shown, str(s.attempts), str(s.turns_total),
                          f"${s.cost_usd_total:.2f}", last, (s.last_error or "")[:60]])
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
     for r in rows:
@@ -78,7 +79,7 @@ def slugify(title: str) -> str:
     return slug[:60].strip("-") or "task"
 
 
-def cmd_new(config: Config, title: str, priority: int | None) -> int:
+def cmd_new(config: Config, title: str, priority: int | None, plan: bool = False) -> int:
     tasks = TaskStore(config.symphony_dir / "tasks")
     tasks.ensure()
     base = slugify(title)
@@ -86,7 +87,7 @@ def cmd_new(config: Config, title: str, priority: int | None) -> int:
     while tasks.state_of(task_id) is not None:
         task_id, n = f"{base}-{n}", n + 1
     front = f"---\npriority: {priority}\n---\n" if priority is not None else ""
-    path = tasks.path(task_id, "todo")
+    path = tasks.path(task_id, "plan" if plan else "todo")
     path.write_text(TASK_TEMPLATE.format(front=front, title=title))
     print(path)
     return 0
@@ -102,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     p_new = sub.add_parser("new", help="create a task in todo/")
     p_new.add_argument("title")
     p_new.add_argument("--priority", type=int)
+    p_new.add_argument("--plan", action="store_true", help="create the task in plan/ instead")
     for p in (p_run, p_status, p_new):
         p.add_argument("--repo", type=Path, default=Path.cwd(),
                        help="repository root (default: current directory)")
@@ -117,4 +119,4 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run(config, args.exit_when_idle)
     if args.command == "status":
         return cmd_status(config)
-    return cmd_new(config, args.title, args.priority)
+    return cmd_new(config, args.title, args.priority, args.plan)

@@ -21,7 +21,7 @@ import pytest
 import yaml
 
 FAKE_CLAUDE = Path(__file__).parent / "fake_claude.py"
-STATES = ("todo", "running", "review", "blocked", "done")
+STATES = ("plan", "plan-review", "todo", "running", "review", "blocked", "done")
 
 
 def symphony_cmd() -> list[str]:

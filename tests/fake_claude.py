@@ -23,6 +23,9 @@ Step fields (all optional):
     malformed       bool, emit a non-JSON line first
     denials         list of tool names to report in permission_denials
     missing_session bool, when called with --resume, fail like an unknown session id
+    plan            string, put in structured_output.plan (planning runs)
+    questions       string, put in structured_output.questions
+    (for planning runs "outcome" is "planned" or "blocked"; the default there is "planned")
 
 `claude auth status` prints {"loggedIn": true} unless FAKE_CLAUDE_LOGGED_OUT is set.
 
@@ -73,7 +76,7 @@ def main() -> int:
     n = int(counter.read_text()) if counter.exists() else 0
     counter.write_text(str(n + 1))
     steps = plan.get(task_id, [])
-    step: dict[str, Any] = steps[n] if n < len(steps) else {"outcome": "done"}
+    step: dict[str, Any] = steps[n] if n < len(steps) else {}  # default outcome: done/planned
 
     resume = arg_value(argv, "--resume")
     session_id = resume or arg_value(argv, "--session-id") or str(uuid.uuid4())
@@ -119,9 +122,15 @@ def main() -> int:
     if step.get("no_result"):
         return int(step.get("exit_code", 1))
 
-    outcome = step.get("outcome", "done")
-    structured = None if outcome is None else {"outcome": outcome,
-                                               "summary": step.get("summary", f"step {n + 1}")}
+    planning = "planned" in (arg_value(argv, "--json-schema") or "")
+    outcome = step.get("outcome", "planned" if planning else "done")
+    structured: dict[str, Any] | None = None
+    if outcome is not None:
+        structured = {"outcome": outcome, "summary": step.get("summary", f"step {n + 1}")}
+        if planning:
+            structured["plan"] = step.get("plan", f"plan {n + 1}")
+            if "questions" in step:
+                structured["questions"] = step["questions"]
     is_error = bool(step.get("is_error", False))
     emit({"type": "result", "subtype": "success", "is_error": is_error,
           "result": json.dumps(structured) if structured else "no structured output",

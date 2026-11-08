@@ -16,7 +16,14 @@ from typing import Literal
 from symphony.claude import Invocation, RunResult, logged_in, run_claude
 from symphony.config import Config
 from symphony.proc import git, run_shell
-from symphony.prompts import DEFAULT_PROMPTS, PROTOCOL, allowed_tools_note, validate_note
+from symphony.prompts import (
+    APPROVED_PLAN_RULE,
+    DEFAULT_PROMPTS,
+    PLAN_PROTOCOL,
+    PROTOCOL,
+    allowed_tools_note,
+    validate_note,
+)
 from symphony.tasks import Sidecar, SidecarStore, State, Task, TaskStore
 from symphony.template import TemplateError, render
 from symphony.workspace import WorkspaceError, Workspaces, branch_name
@@ -85,8 +92,9 @@ class Orchestrator:
         await self._exclude_symphony_dir()
 
         for task in self.tasks.list("running"):
-            if self.tasks.move(task.id, "running", "todo"):
-                log.info(kv("recovered", task=task.id))
+            origin = self._origin(task.id)
+            if self.tasks.move(task.id, "running", origin):
+                log.info(kv("recovered", task=task.id, to=origin))
 
     async def _exclude_symphony_dir(self) -> None:
         try:
@@ -114,7 +122,8 @@ class Orchestrator:
         try:
             while True:
                 await self.tick()
-                if exit_when_idle and not self.running and not self.tasks.list("todo"):
+                if (exit_when_idle and not self.running and not self.tasks.list("todo")
+                        and not self.tasks.list("plan")):
                     await self.cleanup_workspaces()
                     log.info(kv("idle_exit"))
                     return
@@ -148,35 +157,50 @@ class Orchestrator:
                     log.warning(kv("workspace_remove_failed", task=task_id, error=e))
 
     def dispatch(self) -> None:
-        for name in self.tasks.invalid_names("todo"):
-            if name not in self.warned_invalid:
-                self.warned_invalid.add(name)
-                log.warning(kv("invalid_task_name", file=name,
-                               hint="use only letters, digits, '.', '_' and '-'"))
+        for folder in ("plan", "todo"):
+            for name in self.tasks.invalid_names(folder):
+                if name not in self.warned_invalid:
+                    self.warned_invalid.add(name)
+                    log.warning(kv("invalid_task_name", file=name,
+                                   hint="use only letters, digits, '.', '_' and '-'"))
         now = time.time()
-        candidates: list[tuple[Task, Sidecar]] = []
-        for task in self.tasks.list("todo"):
-            if task.id in self.running:
-                continue
-            side = self.sidecars.load(task.id)
-            if side.not_before is not None and side.not_before > now:
-                continue
-            candidates.append((task, side))
-        candidates.sort(key=lambda ts: (ts[0].priority is None, ts[0].priority or 0,
-                                        ts[0].mtime, ts[0].id))
-        for task, side in candidates:
+        candidates: list[tuple[Task, Sidecar, State]] = []
+        for folder in ("plan", "todo"):
+            for task in self.tasks.list(folder):
+                if task.id in self.running:
+                    continue
+                side = self.sidecars.load(task.id)
+                if side.not_before is not None and side.not_before > now:
+                    continue
+                candidates.append((task, side, folder))
+        candidates.sort(key=lambda c: (c[0].priority is None, c[0].priority or 0,
+                                       c[0].mtime, c[0].id))
+        for task, side, folder in candidates:
             if len(self.running) >= self.config.max_concurrent:
                 break
-            if not self.tasks.move(task.id, "todo", "running"):
+            if not self.tasks.move(task.id, folder, "running"):
                 continue
             if side.last_outcome in ("blocked", "failed"):
                 side.attempts = 0  # the human sent it back
+            if folder == "plan":
+                side.phase = "plan"
+            elif side.last_outcome == "planned":
+                # The human approved the plan: execution starts a fresh session (SPEC §14.3).
+                side.plan_approved = True
+                side.session_id = None
+                side.last_outcome = "approved"
+                side.phase = "execute"
+            elif self.config.planning.require_plan and not side.plan_approved:
+                side.phase = "plan"
+            else:
+                side.phase = "execute"
             side.not_before = None
             if side.first_dispatched_at is None:
                 side.first_dispatched_at = time.time()
             self.sidecars.save(task.id, side)
-            log.info(kv("dispatch", task=task.id, attempt=side.attempts,
-                        resume=bool(side.session_id)))
+            log.info(kv("dispatch", task=task.id, attempt=side.attempts, phase=side.phase,
+                        resume=bool(side.plan_session_id if side.phase == "plan"
+                                    else side.session_id)))
             worker = asyncio.create_task(self.work(task.id))
             self.running[task.id] = Running(task=worker, started_at=time.monotonic())
             worker.add_done_callback(functools.partial(self._on_worker_done, task.id))
@@ -203,8 +227,10 @@ class Orchestrator:
             entry = self.running.get(task_id)
             reason = entry.stop_reason if entry else "shutdown"
             log.info(kv("stopped", task=task_id, reason=reason))
-            if reason == "shutdown" and self.tasks.move(task_id, "running", "todo"):
-                self.tasks.append_log(task_id, self._log_line("stopped by shutdown, back to todo"))
+            origin = self._origin(task_id)
+            if reason == "shutdown" and self.tasks.move(task_id, "running", origin):
+                self.tasks.append_log(task_id, self._log_line(
+                    f"stopped by shutdown, back to {origin}"))
             elif reason == "moved" and self.tasks.state_of(task_id) in (None, "done"):
                 with contextlib.suppress(WorkspaceError):
                     await self.workspaces.remove(task_id)
@@ -230,9 +256,12 @@ class Orchestrator:
         task = self.tasks.find(task_id)
         if task is None:
             return
+        if side.phase == "plan":
+            await self._plan(task, side, ws)
+            return
         try:
             variables = self._variables(task, ws, side)
-            system_prompt = self._system_prompt(variables)
+            system_prompt = self._system_prompt(variables, side)
             if side.session_id:
                 prompt, resume = self._prompt("resume", variables), True
             else:
@@ -290,19 +319,91 @@ class Orchestrator:
 
         await self._fail(task_id, side, f"max_turns ({cfg.max_turns}) exhausted")
 
+    async def _plan(self, task: Task, side: Sidecar, ws: Path) -> None:
+        """One planning invocation (SPEC §14.4)."""
+        cfg = self.config
+        task_id = task.id
+        try:
+            variables = self._variables(task, ws, side)
+            system_prompt = render(PLAN_PROTOCOL, {
+                **variables,
+                "allowed_tools": allowed_tools_note(cfg.planning.allow, "dontAsk"),
+            })
+            first = self._first_plan_prompt(variables)
+            if side.plan_session_id:
+                prompt, resume = self._prompt("plan_revise", variables), True
+            else:
+                prompt, resume = first, False
+        except TemplateError as e:
+            await self._fail(task_id, side, str(e))
+            return
+        entry = self.running.get(task_id)
+        if entry:
+            entry.turn = 1
+        left = self._budget_left(side)
+        if left is not None and left <= 0:
+            await self._finish(task_id, side, "blocked", "blocked",
+                               f"budget exceeded (${side.cost_usd_total:.2f})")
+            return
+        res = await self._invoke(task_id, side, ws, prompt, resume, system_prompt, planning=True)
+        if res.session_missing:
+            log.info(kv("session_missing", task=task_id))
+            side.plan_session_id = None
+            res = await self._invoke(task_id, side, ws, first, False, system_prompt,
+                                     planning=True)
+        for denial in res.denials:
+            self.tasks.append_log(task_id, self._log_line(f"permission denied: {denial}"))
+        if not res.ok:
+            await self._fail(task_id, side, res.error())
+            return
+        left = self._budget_left(side)
+        if left is not None and left <= 0:
+            await self._finish(task_id, side, "blocked", "blocked",
+                               f"budget exceeded (${side.cost_usd_total:.2f})", res.summary)
+            return
+        outcome = res.outcome
+        log.info(kv("turn_end", task=task_id, turn=1, outcome=outcome or "missing",
+                    cost=f"{res.cost_usd:.4f}"))
+        if outcome not in ("planned", "blocked") or not res.plan_text:
+            await self._fail(task_id, side, "planning run returned no valid outcome and plan")
+            return
+        self.tasks.set_section(task_id, "Plan", res.plan_text)
+        if res.questions:
+            self.tasks.set_section(task_id, "Questions", res.questions)
+        if outcome == "planned":
+            await self._finish(task_id, side, "plan-review", "planned", "planned", res.summary)
+        else:
+            await self._finish(task_id, side, "blocked", "blocked", "blocked", res.summary)
+
+    def _first_plan_prompt(self, variables: dict[str, str]) -> str:
+        override = self.config.prompts.get("plan")
+        if override:
+            return render(override, variables)
+        return render(self.config.prompt_template, variables) + "\n\n" + DEFAULT_PROMPTS["plan"]
+
+    def _origin(self, task_id: str) -> State:
+        """Folder a running task returns to when stopped or recovered."""
+        return "plan" if self.sidecars.load(task_id).phase == "plan" else "todo"
+
     async def _invoke(self, task_id: str, side: Sidecar, ws: Path, prompt: str, resume: bool,
-                      system_prompt: str) -> RunResult:
-        if not resume or not side.session_id:
-            side.session_id = str(uuid.uuid4())
+                      system_prompt: str, planning: bool = False) -> RunResult:
+        session = side.plan_session_id if planning else side.session_id
+        if not resume or not session:
+            session = str(uuid.uuid4())
             resume = False
+        if planning:
+            side.plan_session_id = session
+        else:
+            side.session_id = session
         side.turns_total += 1
         self.sidecars.save(task_id, side)
-        inv = Invocation(prompt=prompt, session_id=side.session_id, resume=resume,
+        inv = Invocation(prompt=prompt, session_id=session, resume=resume,
                          tasks_dir=self.tasks.root.resolve(), system_prompt=system_prompt,
-                         max_budget_usd=self._budget_left(side))
+                         max_budget_usd=self._budget_left(side),
+                         planning=self.config.planning if planning else None)
         stream_log = self.runs_dir / task_id / f"{side.turns_total:03d}.jsonl"
         log.info(kv("turn_start", task=task_id, n=side.turns_total, resume=resume,
-                    session=side.session_id))
+                    session=session, phase="plan" if planning else None))
         res = await run_claude(self.config.claude, inv, ws, stream_log)
         side.cost_usd_total += res.cost_usd
         tin, tout = res.tokens()
@@ -341,7 +442,7 @@ class Orchestrator:
     async def _finish(self, task_id: str, side: Sidecar, to: State, outcome: str, what: str,
                       summary: str = "") -> None:
         side.last_outcome = outcome
-        if to == "review":
+        if to in ("review", "plan-review"):
             side.attempts = 0
             side.last_error = None
         self.sidecars.save(task_id, side)
@@ -363,20 +464,21 @@ class Orchestrator:
             side.not_before = time.time() + delay
             side.last_outcome = "retrying"
             self.sidecars.save(task_id, side)
-            moved = self.tasks.move(task_id, "running", "todo")
+            moved = self.tasks.move(task_id, "running", self._origin(task_id))
             if moved:
                 self.tasks.append_log(task_id, self._log_line(
                     f"attempt {side.attempts} failed: {error}; retry in {delay:.0f}s"))
             return
 
-        if cfg.reflect_on_give_up and side.session_id and self.tasks.state_of(task_id) == "running":
+        if (cfg.reflect_on_give_up and side.session_id and side.phase != "plan"
+                and self.tasks.state_of(task_id) == "running"):
             task = self.tasks.find(task_id)
             if task is not None:
                 with contextlib.suppress(TemplateError):
                     ws = Path(side.workspace or self.workspaces.path(task_id))
                     variables = self._variables(task, ws, side)
                     await self._invoke(task_id, side, ws, self._prompt("give_up", variables),
-                                       True, self._system_prompt(variables))
+                                       True, self._system_prompt(variables, side))
         side.last_outcome = "failed"
         self.sidecars.save(task_id, side)
         moved = self.tasks.move(task_id, "running", "blocked")
@@ -399,13 +501,16 @@ class Orchestrator:
             "validate_command": self.config.validate_command or "",
         }
 
-    def _system_prompt(self, variables: dict[str, str]) -> str:
+    def _system_prompt(self, variables: dict[str, str], side: Sidecar) -> str:
         cfg = self.config
-        return render(PROTOCOL, {
+        text = render(PROTOCOL, {
             **variables,
             "validate_note": validate_note(cfg.validate_command),
             "allowed_tools": allowed_tools_note(cfg.claude.allow, cfg.claude.permission_mode),
         })
+        if side.plan_approved:
+            text = text.rstrip("\n") + "\n" + APPROVED_PLAN_RULE
+        return text
 
     def _prompt(self, key: str, variables: dict[str, str]) -> str:
         return render(self.config.prompts.get(key) or DEFAULT_PROMPTS[key], variables)

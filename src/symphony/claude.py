@@ -10,11 +10,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from symphony.config import ClaudeConfig
+from symphony.config import ClaudeConfig, PlanningConfig
 from symphony.proc import kill_group, run_cmd
-from symphony.prompts import OUTCOME_SCHEMA_JSON
+from symphony.prompts import OUTCOME_SCHEMA_JSON, PLAN_OUTCOME_SCHEMA_JSON
 
-Outcome = Literal["done", "blocked", "continue"]
+Outcome = Literal["done", "blocked", "continue", "planned"]
 LINE_LIMIT = 10 * 1024 * 1024
 STDERR_KEEP = 20_000
 
@@ -27,6 +27,7 @@ class Invocation:
     tasks_dir: Path
     system_prompt: str
     max_budget_usd: float | None
+    planning: PlanningConfig | None = None  # set for a planning run (SPEC §14.4)
 
 
 def build_argv(cfg: ClaudeConfig, inv: Invocation) -> list[str]:
@@ -36,12 +37,15 @@ def build_argv(cfg: ClaudeConfig, inv: Invocation) -> list[str]:
     argv += ["--resume", inv.session_id] if inv.resume else ["--session-id", inv.session_id]
     argv += ["--add-dir", str(inv.tasks_dir)]
     argv += ["--append-system-prompt", inv.system_prompt]
-    argv += ["--json-schema", OUTCOME_SCHEMA_JSON]
-    argv += ["--permission-mode", cfg.permission_mode]
-    if cfg.allow:
-        argv += ["--allowedTools", *cfg.allow]
-    if cfg.model:
-        argv += ["--model", cfg.model]
+    plan = inv.planning
+    argv += ["--json-schema", PLAN_OUTCOME_SCHEMA_JSON if plan else OUTCOME_SCHEMA_JSON]
+    argv += ["--permission-mode", "dontAsk" if plan else cfg.permission_mode]
+    allow = plan.allow if plan else cfg.allow
+    if allow:
+        argv += ["--allowedTools", *allow]
+    model = (plan.model or cfg.model) if plan else cfg.model
+    if model:
+        argv += ["--model", model]
     if inv.max_budget_usd is not None:
         argv += ["--max-budget-usd", f"{inv.max_budget_usd:.4f}"]
     if cfg.isolate_user_config:
@@ -95,9 +99,25 @@ class RunResult:
         structured = (self.result or {}).get("structured_output")
         if isinstance(structured, dict):
             value = cast(dict[str, Any], structured).get("outcome")
-            if value == "done" or value == "blocked" or value == "continue":
+            if value == "done" or value == "blocked" or value == "continue" or value == "planned":
                 return value
         return None
+
+    def _structured_text(self, key: str) -> str:
+        structured = (self.result or {}).get("structured_output")
+        if isinstance(structured, dict):
+            value = cast(dict[str, Any], structured).get(key)
+            if isinstance(value, str):
+                return value
+        return ""
+
+    @property
+    def plan_text(self) -> str:
+        return self._structured_text("plan").strip()
+
+    @property
+    def questions(self) -> str:
+        return self._structured_text("questions").strip()
 
     @property
     def summary(self) -> str:

@@ -11,7 +11,7 @@ import yaml
 
 WORKFLOW_FILE = "WORKFLOW.md"
 PERMISSION_MODES = ("dontAsk", "acceptEdits", "bypassPermissions", "default", "auto", "plan")
-PROMPT_KEYS = ("continue", "validate_failed", "resume", "give_up")
+PROMPT_KEYS = ("continue", "validate_failed", "resume", "give_up", "plan", "plan_revise")
 
 DEFAULT_ALLOW = [
     "Edit",
@@ -41,6 +41,13 @@ class ClaudeConfig:
 
 
 @dataclass(frozen=True)
+class PlanningConfig:
+    require_plan: bool = False
+    model: str | None = None
+    allow: list[str] = field(default_factory=lambda: ["Read", "Grep", "Glob"])
+
+
+@dataclass(frozen=True)
 class Config:
     repo: Path
     symphony_dir: Path
@@ -63,6 +70,7 @@ class Config:
     claude: ClaudeConfig
     prompt_template: str
     prompts: dict[str, str] = field(default_factory=lambda: {})
+    planning: PlanningConfig = field(default_factory=PlanningConfig)
     warnings: list[str] = field(default_factory=lambda: [])
 
 
@@ -188,6 +196,7 @@ def load_config(repo: Path) -> Config:
     validate = r.section("validate")
     claude = r.section("claude")
     prompts_r = r.section("prompts")
+    planning_r = r.section("planning")
 
     symphony_dir = _expand(r.string("symphony_dir", ".symphony") or ".symphony", repo)
     workspaces_root = _expand(r.string("workspaces_root", "~/.symphony/workspaces")
@@ -225,6 +234,12 @@ def load_config(repo: Path) -> Config:
         stall_timeout_s=claude.number("stall_timeout_s", 300),
     )
 
+    planning_cfg = PlanningConfig(
+        require_plan=planning_r.boolean("require_plan", False),
+        model=planning_r.string("model", None),
+        allow=planning_r.string_list("allow", ["Read", "Grep", "Glob"]),
+    )
+
     config = Config(
         repo=repo,
         symphony_dir=symphony_dir,
@@ -247,8 +262,9 @@ def load_config(repo: Path) -> Config:
         claude=claude_cfg,
         prompt_template=body.strip(),
         prompts=prompts,
+        planning=planning_cfg,
     )
-    for reader in (r, hooks, validate, claude, prompts_r):
+    for reader in (r, hooks, validate, claude, prompts_r, planning_r):
         config.warnings.extend(f"unknown config key ignored: {k}" for k in reader.unknown())
     if not config.prompt_template:
         raise ConfigError("WORKFLOW.md has an empty prompt body")

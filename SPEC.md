@@ -52,6 +52,8 @@ Symphony is run from the root of a target git repository:
   CLAUDE.md                      # optional, the repo's own agent map; Claude Code loads it
   .symphony/                     # created by Symphony, added to .git/info/exclude
     tasks/
+      plan/        <id>.md           # optional planning phase (§14)
+      plan-review/ <id>.md
       todo/        <id>.md
       running/     <id>.md
       review/      <id>.md
@@ -127,6 +129,8 @@ States are folders. Moving a file is a state transition.
 
 | Folder     | Meaning                                         | Who moves files in       |
 |------------|-------------------------------------------------|--------------------------|
+| `plan`        | Ready to be planned (new, or plan revision, §14) | Human, or Symphony (retry) |
+| `plan-review` | Plan written; waiting for the human (§14)      | Symphony                 |
 | `todo`     | Ready to run (new, retry, or rework)            | Human, or Symphony (retry) |
 | `running`  | Claimed; an agent is (or is about to be) running | Symphony only           |
 | `review`   | Validation passed; branch ready for the human   | Symphony                 |
@@ -141,6 +145,7 @@ todo ──dispatch──> running ──DONE + validate ok──> review ──
                      │  └──failure, attempts left──> todo (with retry delay)
                      └──human moves it elsewhere──> agent stopped
 review / blocked ──human adds Feedback──> todo   (resumes the same session)
+plan ──> running (phase plan) ──> plan-review ──human approves──> todo   (planning flow: §14.2)
 ```
 
 A task file deleted by the human is treated like `done`.
@@ -154,7 +159,9 @@ Owned by Symphony. Fields:
 - `attempts` (int): failed attempts so far (reset to 0 when the task reaches `review`).
 - `not_before` (ISO timestamp or null): retry delay; the task is not dispatched before this.
 - `last_error` (string or null)
-- `last_outcome` (`done` | `blocked` | `failed` | `validate_failed` | null)
+- `last_outcome` (`done` | `blocked` | `failed` | `validate_failed` | `retrying` | `planned` |
+  `approved` | null)
+- `phase`, `plan_session_id`, `plan_approved` (planning, §14.8)
 - `turns_total` (int)
 - `cost_usd_total` (float), `input_tokens_total`, `output_tokens_total` (ints)
 - `branch` (string), `workspace` (absolute path)
@@ -293,6 +300,13 @@ prompts:                        # override the built-in continuation prompts (§
   validate_failed: null
   resume: null
   give_up: null
+  plan: null                    # planning prompts (§14.5)
+  plan_revise: null
+
+planning:                       # optional planning phase (§14.7)
+  require_plan: false
+  model: null
+  allow: ["Read", "Grep", "Glob"]
 ---
 ```
 
@@ -382,6 +396,8 @@ Symphony never deletes branches.
 | New worker run, session exists (retry, rework, answered question) | `resume`                | resume           |
 | Resume fails (session not found)                 | `WORKFLOW.md` body                       | new              |
 | Giving up                                        | `give_up`                                | resume           |
+| Planning run, no plan session (§14.4)            | `plan`                                   | new (plan session) |
+| Planning run, plan session exists (revision)     | `plan_revise`                            | resume (plan session) |
 
 ### 8.3 Built-in defaults
 
@@ -560,7 +576,8 @@ If a repo needs MCP servers, a later version can pass them explicitly with `--mc
 - `runs/`: raw event streams and validation outputs for debugging.
 - Task `## Log`: the human-readable summary, one line per worker exit.
 - `symphony status`: prints a table from folders and sidecars: id, state, attempts, turns, cost,
-  last outcome, last error, and for running tasks the elapsed time and current turn.
+  last outcome, last error, and for running tasks the phase (shown as `running (plan)` or
+  `running (execute)`).
 
 ## 11. CLI
 
@@ -569,7 +586,7 @@ symphony run      [--repo PATH] [--exit-when-idle]
                   # start the loop (foreground; Ctrl-C stops agents and exits).
                   # --exit-when-idle: exit once nothing is running and todo/ is empty.
 symphony status   [--repo PATH]
-symphony new "Title" [--priority N]  # create todo/<slug>.md from a template
+symphony new "Title" [--priority N] [--plan]  # create todo/<slug>.md (plan/<slug>.md with --plan)
 ```
 
 On Ctrl-C: kill all agent processes, move their tasks back to `todo/` (no attempt increment), exit.
@@ -631,8 +648,19 @@ Tested with throwaway repos and `--model haiku`:
 
 ## 14. Planning phase (v0.2)
 
-Status: specified, not implemented. This section is self-contained so it can be handed to an agent
-as a task. Where it changes earlier sections, it says so; update those sections in the same change.
+Status: implemented. Details settled during implementation:
+
+- `--exit-when-idle` also waits while `plan/` is non-empty (`plan-review/` is the human's, like
+  `review/`).
+- On approval (rule 2) Symphony sets `last_outcome = "approved"` so a later stop or retry does not
+  clear the execution session again.
+- Headings `#` and `##` inside `plan` and `questions` are written as `###`, so they cannot be
+  mistaken for task sections when the `## Plan` section is replaced.
+- A configured `prompts.plan` replaces the default whole (the default is the `WORKFLOW.md` body
+  rendered, then the sentence in §14.5); `prompts.plan_revise` replaces the revise prompt.
+- The planning variant of the execution protocol lives in `prompts.PLAN_PROTOCOL`; budget caps apply
+  to planning like to execution (§9.1).
+- In `symphony status` the running phase appears in the STATE column.
 
 ### 14.1 Goal
 
