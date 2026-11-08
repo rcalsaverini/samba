@@ -56,6 +56,22 @@ def test_question_list_truncates_to_terminal_width(sb: Sandbox) -> None:
     assert rows[1].endswith("...")
 
 
+def test_question_list_shows_full_text_on_wide_terminal(sb: Sandbox) -> None:
+    sb.add_task("t1")
+    long = "Should we use the managed database " + "with a very long reason " * 5
+    long = long.strip()
+    sb.steps("t1", {"outcome": "blocked", "questions": [{"text": long, "context": "c"}]})
+    sb.run_idle()
+    wide = sb.run("question", "list", COLUMNS="200").stdout.splitlines()
+    assert len(long) > 100
+    assert wide[1].endswith(long) and "..." not in wide[1]
+    narrow = sb.run("question", "list", COLUMNS="70").stdout.splitlines()
+    assert narrow[1].endswith("...") and len(narrow[1]) <= 70
+    for row in (wide[1], narrow[1]):
+        assert row.split()[:3] == ["t1", "t1/q1", "work"]
+        assert " 20" in row[:40]
+
+
 def test_partial_answer_keeps_task_in_question_then_resumes(sb: Sandbox) -> None:
     block_two(sb, {"outcome": "done"})
     res = answer(sb, "t1/q1", "Use SQLite.")

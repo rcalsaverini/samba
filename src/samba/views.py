@@ -80,33 +80,40 @@ def task_rows(tasks: TaskStore, sidecars: SidecarStore,
             if state in ("question", "stuck") and s.blocked_cause:
                 shown = f"{state} ({s.blocked_cause})"
             rows.append([task.id, shown, str(s.attempts), str(s.turns_total),
-                         f"${s.cost_usd_total:.2f}", last, (s.last_error or "")[:60]])
+                         f"${s.cost_usd_total:.2f}", last, " ".join((s.last_error or "").split())])
     return rows
 
 
 QUESTION_HEADER = ["TASK", "QID", "STAGE", "ASKED", "QUESTION"]
 
 
-def question_rows(tasks: TaskStore, sidecars: SidecarStore, width: int) -> list[list[str]]:
-    """Every open question of every task, QUESTION truncated so rows fit in `width` columns.
-    QID is the full name `<task>/<qid>`, ready to paste into `question answer`."""
+def question_rows(tasks: TaskStore, sidecars: SidecarStore) -> list[list[str]]:
+    """Every open question of every task. QID is the full name `<task>/<qid>`, ready to paste
+    into `question answer`."""
     rows: list[list[str]] = []
     for task_id in tasks.ids("question"):
         for q in open_questions(sidecars.load(task_id).questions):
             rows.append([task_id, f"{task_id}/{qstr(q, 'id')}", qstr(q, "stage"),
                          qstr(q, "asked_at")[:16].replace("T", " "),
                          " ".join(qstr(q, "text").split())])
-    fixed = [QUESTION_HEADER, *rows]
-    used = sum(max(len(r[i]) for r in fixed) + 2 for i in range(4))
-    room = max(width - used, 20)
-    for r in rows:
-        if len(r[4]) > room:
-            r[4] = r[4][:room - 3] + "..."
     return [QUESTION_HEADER, *rows]
 
 
-def print_table(rows: list[list[str]]) -> None:
+MIN_FLEX = 20
+
+
+def print_table(rows: list[list[str]], width: int | None = None, flex: int | None = None) -> None:
+    """Print left-aligned columns separated by two spaces. With `flex` (a column index), that
+    column gets the room left in `width` and longer cells are cut with `...`; other columns are
+    never cut. The flex column is at least MIN_FLEX wide."""
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    if flex is not None and width is not None:
+        used = sum(w + 2 for i, w in enumerate(widths) if i != flex)
+        room = max(width - used, MIN_FLEX)
+        if widths[flex] > room:
+            widths[flex] = room
+            rows = [r[:flex] + [r[flex] if len(r[flex]) <= room else r[flex][:room - 3] + "..."]
+                    + r[flex + 1:] for r in rows]
     for r in rows:
         print("  ".join(c.ljust(w) for c, w in zip(r, widths)).rstrip())
 
