@@ -627,7 +627,8 @@ Notes:
   --allowedTools <claude.allow...> \
   [--model <claude.model>] \
   [--max-budget-usd <remaining task budget>] \
-  [--setting-sources project,local --strict-mcp-config]   # when isolate_user_config (§9.4)
+  [--setting-sources project,local --strict-mcp-config \
+   --settings '{"claudeMdExcludes": [<ancestor CLAUDE.md paths>]}']   # when isolate_user_config (§9.4)
   <claude.args...>
 ```
 
@@ -691,11 +692,23 @@ including claude.ai connectors (Gmail, Drive, Calendar and more). Besides confli
 gives an unattended agent access to the user's accounts.
 
 When `claude.isolate_user_config` is true, Symphony adds
-`--setting-sources project,local --strict-mcp-config`. Verified effect (Claude Code 2.1.220):
+`--setting-sources project,local --strict-mcp-config` and
+`--settings '{"claudeMdExcludes": [...]}'`, where the list holds `CLAUDE.md`, `CLAUDE.local.md`,
+`.claude/CLAUDE.md` and `.claude/CLAUDE.local.md` for **every ancestor directory of the worktree**
+(not the worktree itself, so the repo's own files still load).
+
+The exclude list is needed because Claude Code also loads memory files from each ancestor of its
+working directory, and `--setting-sources` does not cover that route. Worktrees live under
+`~/.symphony/workspaces/` by default, so the home directory is an ancestor and the user's
+`~/.claude/CLAUDE.md` is found there as an ancestor's `.claude/CLAUDE.md`. Found in use: personal
+rules ("ask before committing", "no Co-Authored-By") appeared in a planner's output. Do not use a
+broad pattern such as `$HOME/**`: it would also exclude the repo's own `CLAUDE.md`.
+
+Verified effect (Claude Code 2.1.220):
 
 | Source | Default | Isolated |
 |---|---|---|
-| User `~/.claude/CLAUDE.md` | loaded | **not loaded** |
+| User `~/.claude/CLAUDE.md` | loaded | **not loaded** (needs the ancestor excludes when the worktree is under `$HOME`) |
 | Repo `CLAUDE.md` | loaded | loaded |
 | User skills and user-installed plugins | loaded | **not loaded** |
 | Repo `.claude/skills/` | loaded | loaded |
@@ -783,6 +796,12 @@ Tested with throwaway repos and `--model haiku`:
   warning); `--allowedTools` and `--settings` allow rules are honored.
 - `--json-schema` returns the parsed object in `result.structured_output`.
 - Isolation results: see §9.4.
+- Ancestor memory files (2026-11-07): run from a folder under `$HOME` with
+  `--setting-sources project,local --strict-mcp-config`, the agent still saw a rule that exists
+  only in `~/.claude/CLAUDE.md`; run from a folder under `/tmp`, it did not. Adding
+  `--settings '{"claudeMdExcludes": [<each ancestor's CLAUDE.md, CLAUDE.local.md,
+  .claude/CLAUDE.md>]}'` removed the user rule while the folder's own `CLAUDE.md` still loaded.
+  `claudeMdExcludes` accepts absolute paths and globs.
 - Read-only planning (§14.4): `--permission-mode plan` runs headless without hanging, but its Write
   tool still succeeds by redirecting to `~/.claude/plans/<name>.md` (a file in the user's home), and
   it switched to a different model than `--model` asked for (17x the cost in the test).

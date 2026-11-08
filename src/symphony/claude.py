@@ -30,7 +30,20 @@ class Invocation:
     planning: PlanningConfig | None = None  # set for a planning run (SPEC §14.4)
 
 
-def build_argv(cfg: ClaudeConfig, inv: Invocation) -> list[str]:
+MEMORY_FILE_NAMES = ("CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md", ".claude/CLAUDE.local.md")
+
+
+def ancestor_memory_files(cwd: Path) -> list[str]:
+    """CLAUDE.md paths in every parent directory of `cwd` (SPEC §9.4).
+
+    Claude Code loads these from each ancestor of its working directory, outside the reach of
+    `--setting-sources`. A worktree under the home directory would otherwise load the user's own
+    `~/.claude/CLAUDE.md`. The worktree's own files are not listed, so the repo's CLAUDE.md loads.
+    """
+    return [str(parent / name) for parent in cwd.resolve().parents for name in MEMORY_FILE_NAMES]
+
+
+def build_argv(cfg: ClaudeConfig, inv: Invocation, cwd: Path) -> list[str]:
     # The prompt comes right after -p: several flags below are variadic and would swallow a
     # positional argument placed after them.
     argv = [*cfg.command, "-p", inv.prompt, "--output-format", "stream-json", "--verbose"]
@@ -50,6 +63,8 @@ def build_argv(cfg: ClaudeConfig, inv: Invocation) -> list[str]:
         argv += ["--max-budget-usd", f"{inv.max_budget_usd:.4f}"]
     if cfg.isolate_user_config:
         argv += ["--setting-sources", "project,local", "--strict-mcp-config"]
+        excludes = {"claudeMdExcludes": ancestor_memory_files(cwd)}
+        argv += ["--settings", json.dumps(excludes, separators=(",", ":"))]
     argv += cfg.args
     return argv
 
@@ -144,7 +159,7 @@ class RunResult:
 
 async def run_claude(cfg: ClaudeConfig, inv: Invocation, cwd: Path, stream_log: Path) -> RunResult:
     """Run one Claude invocation. Cancelling the coroutine kills the process group."""
-    argv = build_argv(cfg, inv)
+    argv = build_argv(cfg, inv, cwd)
     res = RunResult()
     started = time.monotonic()
     stream_log.parent.mkdir(parents=True, exist_ok=True)

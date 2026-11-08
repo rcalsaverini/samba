@@ -273,6 +273,25 @@ def test_isolation_can_be_disabled(sb: Sandbox) -> None:
     argv = sb.calls("t1")[0]
     assert "--setting-sources" not in argv
     assert "--strict-mcp-config" not in argv
+    assert "--settings" not in argv
+
+
+def test_isolation_excludes_ancestor_claude_md(sb: Sandbox) -> None:
+    # Claude Code loads CLAUDE.md from every ancestor of its cwd, which --setting-sources does not
+    # cover: a worktree under $HOME would load the user's ~/.claude/CLAUDE.md (SPEC §9.4).
+    sb.add_task("t1")
+    sb.run_idle()
+    argv = sb.calls("t1")[0]
+    settings = json.loads(flag(argv, "--settings") or "{}")
+    excludes = settings["claudeMdExcludes"]
+    wt = sb.worktree("t1").resolve()
+    for parent in (wt.parent, wt.parents[2], sb.root.resolve()):
+        assert str(parent / "CLAUDE.md") in excludes
+        assert str(parent / ".claude" / "CLAUDE.md") in excludes
+        assert str(parent / "CLAUDE.local.md") in excludes
+    assert "/.claude/CLAUDE.md" in excludes  # filesystem root, so every ancestor is covered
+    for own in ("CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"):
+        assert str(wt / own) not in excludes  # the repo's own memory files still load
 
 
 def test_agent_runs_in_worktree_outside_repo(sb: Sandbox) -> None:
