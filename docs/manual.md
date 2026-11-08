@@ -373,10 +373,44 @@ ERROR. STATE is the folder name; `question` and `stuck` add the cause, as in `st
 LAST is the last run's outcome, or `(retry in 45s)` while the task waits out a retry delay, or
 `waiting on other-task` when a todo task is held only by dependencies.
 
+For example, with one planned task and one that depends on it:
+
+```
+$ samba task list
+ID                                 STATE      ATTEMPTS  TURNS  COST   LAST                                          ERROR
+add-csv-export-to-the-report-page  plan-todo  0         0      $0.00  -
+wire-the-export-button             work-todo  0         0      $0.00  waiting on add-csv-export-to-the-report-page
+```
+
 `task show <id>` prints the details as `key: value` lines: title, state, cause, priority,
 attempts, turns, cost, last outcome, the full last error, `depends_on` with each dependency's
-state, branch, worktree path, session ids, and `events:` (the commands that are legal for the
-task right now). Neither command needs `samba run` and neither changes anything.
+state, open question count, branch, worktree path, session ids, and `events:` (the commands that
+are legal for the task right now). Neither command needs `samba run` and neither changes
+anything.
+
+```
+$ samba task show wire
+id: wire-the-export-button
+title: Wire the export button
+state: work-todo
+blocked_cause: -
+priority: 1
+attempts: 0
+turns: 0
+cost: $0.00
+last_outcome: -
+last_error: -
+depends_on:
+  add-csv-export-to-the-report-page (plan-todo)
+dependency_status: waiting on add-csv-export-to-the-report-page
+open_questions: 0
+branch: -
+worktree: -
+session_id: -
+plan_session_id: -
+events:
+  task.discard -> discarded
+```
 
 Where to look when you want more:
 
