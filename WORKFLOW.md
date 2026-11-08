@@ -19,6 +19,20 @@ claude:
     - "Bash(git status:*)"
     - "Bash(git diff:*)"
     - "Bash(git log:*)"
+    # Trying the CLI in a scratch repo. Not `samba run` (an orchestrator inside a worktree) and
+    # not `work accept` (it merges into a real base branch); their --help is allowed.
+    - "Bash(uv run samba --help)"
+    - "Bash(uv run samba task:*)"
+    - "Bash(uv run samba plan:*)"
+    - "Bash(uv run samba question:*)"
+    - "Bash(uv run samba dev:*)"
+    - "Bash(uv run samba work reject:*)"
+    - "Bash(uv run samba work --help)"
+    - "Bash(uv run samba work accept --help)"
+    - "Bash(uv run samba run --help)"
+    - "Bash(mktemp:*)"
+    - "Bash(git init:*)"
+    - "Bash(cp WORKFLOW.md:*)"
   turn_timeout_s: 3600
   stall_timeout_s: 600
 ---
