@@ -5,17 +5,22 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import re
+import shlex
 import signal
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import cast
 
 from symphony.config import Config, ConfigError, load_config
+from symphony.lock import repo_lock
 from symphony.orchestrator import Orchestrator, StartupError
 from symphony.prompts import TASK_TEMPLATE
-from symphony.tasks import STATES, SidecarStore, TaskStore
-from symphony.transitions import render_markdown_table
+from symphony.tasks import STATES, SidecarStore, State, TaskStore
+from symphony.transitions import Machine, human_events, render_markdown_table
 from symphony.views import ResolveError, print_table, render_show, resolve_states, resolve_task_id, task_rows
 
 
@@ -84,6 +89,83 @@ def cmd_task_show(config: Config, text: str) -> int:
     return 0
 
 
+def _edit_feedback() -> str | None:
+    """Collect text in `$EDITOR` (then `$VISUAL`, then `vi`). None if the editor failed."""
+    editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "feedback.md"
+        path.write_text("")
+        try:
+            res = subprocess.run([*shlex.split(editor), str(path)])
+        except OSError as e:
+            print(f"symphony: cannot run editor {editor!r}: {e}", file=sys.stderr)
+            return None
+        if res.returncode != 0:
+            print(f"symphony: editor exited with {res.returncode}; nothing changed",
+                  file=sys.stderr)
+            return None
+        return path.read_text().strip()
+
+
+def cmd_transition(config: Config, text: str, event: str, label: str, *,
+                   feedback: str | None = None, edit: bool = False,
+                   takes_feedback: bool = False) -> int:
+    """The command pattern (SPEC §11): resolve, check the event is legal, do the outside effect
+    (feedback text), then `Machine.fire`. Nothing else moves a task. Holds the repo lock."""
+    tasks = TaskStore(config.symphony_dir / "tasks")
+    sidecars = SidecarStore(config.symphony_dir / "state")
+
+    def legal(task_id: str) -> State | None:
+        """The task's state if `event` is legal there, else report and return None."""
+        state = tasks.state_of(task_id)
+        if state is None:
+            print(f"symphony: task {task_id!r} has no file", file=sys.stderr)
+            return None
+        events = [r.event for r in human_events(state, sidecars.load(task_id))]
+        if event in events:
+            return state
+        names = ", ".join(events) or "none"
+        print(f"symphony: {task_id} is in {state}; {label} not allowed. Legal events: {names}",
+              file=sys.stderr)
+        return None
+
+    try:
+        task_id = resolve_task_id(tasks, text)
+    except ResolveError as e:
+        print(f"symphony: {e.render()}", file=sys.stderr)
+        return 2
+    if legal(task_id) is None:
+        return 1
+    if takes_feedback and edit:  # before the lock: editing can take long
+        feedback = _edit_feedback()
+        if feedback is None:
+            return 1
+    feedback = (feedback or "").strip()
+    if takes_feedback and not feedback:
+        print("warning: rejecting without feedback", file=sys.stderr)
+
+    with repo_lock(config.symphony_dir) as held:
+        if not held:
+            print("symphony: another command or the orchestrator holds .symphony/lock; "
+                  "try again", file=sys.stderr)
+            return 1
+        if legal(task_id) is None:  # re-check: a hand move may have raced in
+            return 1
+        tasks.ensure()  # the destination folder may not exist yet
+        message = ""
+        if feedback:
+            n = tasks.append_feedback(task_id, feedback)
+            message = f"feedback round {n}"
+        if not Machine(tasks, sidecars).fire(task_id, event, message=message):
+            note = "; the feedback was already written" if feedback else ""
+            print(f"symphony: {event} did not apply to {task_id}{note}", file=sys.stderr)
+            return 1
+    state = tasks.state_of(task_id)
+    if state is not None:
+        print(tasks.path(task_id, state))
+    return 0
+
+
 def slugify(title: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
     return slug[:60].strip("-") or "task"
@@ -134,7 +216,28 @@ def main(argv: list[str] | None = None) -> int:
     p_new.add_argument("--plan", action="store_true", help="create the task in plan-todo/ instead")
     p_trans = sub.add_parser("transitions",
                              help="print the transition table as Markdown (SPEC §4.1)")
-    for p in (p_run, p_status, p_new, p_trans, p_list, p_show, p_tlist, p_tshow):
+
+    def add_reject_args(p: argparse.ArgumentParser, fresh: bool = False) -> None:
+        p.add_argument("id", help="task id or unique prefix")
+        group = p.add_mutually_exclusive_group()
+        group.add_argument("--feedback", metavar="TEXT", help="feedback for the agent")
+        group.add_argument("--edit", action="store_true", help="write the feedback in $EDITOR")
+        if fresh:
+            p.add_argument("--fresh", action="store_true",
+                           help="also clear the session so rework starts a fresh conversation")
+
+    p_plan = sub.add_parser("plan", help="plan review commands: accept, reject")
+    plan_sub = p_plan.add_subparsers(dest="plan_command", required=True)
+    p_pacc = plan_sub.add_parser("accept", help="approve the plan; the task goes to work-todo")
+    p_pacc.add_argument("id", help="task id or unique prefix")
+    p_prej = plan_sub.add_parser("reject", help="send the plan back; the task goes to plan-todo")
+    add_reject_args(p_prej)
+    p_work = sub.add_parser("work", help="work review commands: reject")
+    work_sub = p_work.add_subparsers(dest="work_command", required=True)
+    p_wrej = work_sub.add_parser("reject", help="send the work back; the task goes to work-todo")
+    add_reject_args(p_wrej, fresh=True)
+    for p in (p_run, p_status, p_new, p_trans, p_list, p_show, p_tlist, p_tshow, p_pacc, p_prej,
+              p_wrej):
         p.add_argument("--repo", type=Path, default=Path.cwd(),
                        help="repository root (default: current directory)")
     args = parser.parse_args(argv)
@@ -152,6 +255,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         return cmd_run(config, args.exit_when_idle)
     command = str(args.command)
+    if command == "plan":
+        verb = str(args.plan_command)
+        return cmd_transition(config, str(args.id), f"plan.{verb}", f"plan.{verb}",
+                              feedback=cast(str | None, getattr(args, "feedback", None)),
+                              edit=bool(getattr(args, "edit", False)),
+                              takes_feedback=verb == "reject")
+    if command == "work":
+        fresh = bool(args.fresh)
+        return cmd_transition(config, str(args.id), "work.reject_fresh" if fresh else "work.reject",
+                              "work.reject", feedback=cast(str | None, args.feedback),
+                              edit=bool(args.edit), takes_feedback=True)
     if command == "task":
         command = str(args.task_command)
     if command == "status":

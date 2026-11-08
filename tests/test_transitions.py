@@ -209,6 +209,8 @@ def test_human_row_is_observed(sb: Sandbox, key: tuple[str, str, str, str]) -> N
         assert side[k] == v, (k, side)
 
 
+COMMAND_ONLY = {("work-review", "work.reject_fresh", "", "work-todo")}
+
 LIVE_ROWS = [("plan-running", "plan-todo", "task.stop"), ("work-running", "work-todo", "task.stop"),
              ("plan-running", "discarded", "task.discard"),
              ("work-running", "discarded", "task.discard")]
@@ -238,6 +240,7 @@ def test_human_row_out_of_running_stops_agent(sb: Sandbox, src: str, dst: str,
 def test_every_row_has_a_test(sb: Sandbox) -> None:
     rows = table(sb)
     covered = set(HUMAN_ROWS) | {(s, e, "", d) for s, d, e in LIVE_ROWS}
+    covered |= COMMAND_ONLY  # no hand move selects these rows; tests/test_commands.py covers them
     covered |= {(*k, rows_dst) for k in SYMPHONY_ROWS
                 for rows_dst in {r[3] for r in rows if r[:3] == k}}
     assert set(rows) == covered

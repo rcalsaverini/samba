@@ -146,6 +146,17 @@ class TaskStore:
         p = self.path(task_id, state)
         p.write_text(append_to_log_section(p.read_text(), line))
 
+    def append_feedback(self, task_id: str, text: str) -> int | None:
+        """Append `text` as a new round of `## Feedback`. Returns the round number, or None if
+        the task does not exist."""
+        state = self.state_of(task_id)
+        if state is None:
+            return None
+        p = self.path(task_id, state)
+        new_text, n = append_to_feedback_section(p.read_text(), text)
+        p.write_text(new_text)
+        return n
+
     def set_section(self, task_id: str, heading: str, content: str) -> None:
         state = self.state_of(task_id)
         if state is None:
@@ -188,6 +199,34 @@ def replace_section(text: str, heading: str, content: str) -> str:
         else:
             lines[log_at:log_at] = block
     return "\n".join(lines).rstrip("\n") + "\n"
+
+
+ROUND_RE = re.compile(r"^### Round (\d+)\s*$")
+
+
+def append_to_feedback_section(text: str, feedback: str) -> tuple[str, int]:
+    """Append `feedback` under a new `### Round N` heading at the end of `## Feedback`, creating
+    the section (before `## Log`) if missing. Earlier rounds and prose are never rewritten.
+    Returns the new text and N (one more than the highest existing round)."""
+    lines = text.splitlines()
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == "## Feedback"), None)
+    if start is None:
+        return replace_section(text, "Feedback", f"### Round 1\n\n{_demote(feedback)}"), 1
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].startswith("## "):
+            end = i
+            break
+    rounds = [int(m.group(1)) for ln in lines[start + 1:end] if (m := ROUND_RE.match(ln))]
+    n = max(rounds, default=0) + 1
+    insert_at = end
+    while insert_at > start + 1 and not lines[insert_at - 1].strip():
+        insert_at -= 1
+    block = ["", f"### Round {n}", "", *_demote(feedback).splitlines()]
+    if end < len(lines):
+        block.append("")
+    lines[insert_at:end] = block
+    return "\n".join(lines).rstrip("\n") + "\n", n
 
 
 def append_to_log_section(text: str, line: str) -> str:

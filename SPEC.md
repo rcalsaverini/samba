@@ -128,6 +128,16 @@ Free-form description written by the human: goal, context, acceptance criteria.
   and after the worker ends), using read-modify-write of the whole file, and only appends lines to
   `## Log` (creating the section if missing).
 - Orchestrator bookkeeping goes to the sidecar (§4.2), not to the markdown.
+- A command (§11) may also write a task file, only to append feedback to `## Feedback` of a task in
+  a review folder, where no agent runs.
+- **Repo lock.** `.symphony/lock` is an advisory `flock`. Every state-changing command holds it for
+  its whole resolve, check, write, `fire` sequence (blocking up to about 10 s, then exit 1). The
+  orchestrator takes it non-blocking at the start of each tick and **skips the whole tick** when it
+  is held. Without it a tick could see a command's file already renamed but its sidecar `state`
+  not yet saved, and apply the move a second time as an observed hand move (or dispatch the task
+  before the command saved its effects). A skipped tick only delays the next one. Hand moves with
+  `mv` take no lock and are observed as before. Workers fire events only on running tasks, which
+  commands never touch; an orchestrator step that fires events on other tasks must take the lock.
 
 ## 4. Domain model
 
@@ -206,6 +216,7 @@ dragging a task from `work-review` to `done` never merges anything.
 | `plan.reject` | `plan-review` | `plan-todo` | human | | |
 | `work.accept` | `work-review` | `done` | human | | |
 | `work.reject` | `work-review` | `work-todo` | human | | |
+| `work.reject_fresh` | `work-review` | `work-todo` | human | | `session_id=None` |
 | `question.answer` | `question` | `plan-todo` | human | `last_stage=plan` | `attempts=0`, `blocked_cause=None` |
 | `question.answer` | `question` | `work-todo` | human | `last_stage=work` | `attempts=0`, `blocked_cause=None` |
 | `question.answer` | `question` | `plan-todo` | human | `last_stage=unset` | `attempts=0`, `blocked_cause=None`, `last_stage=plan` |
@@ -225,6 +236,10 @@ dragging a task from `work-review` to `done` never merges anything.
 | `task.discard` | `question` | `discarded` | human | | |
 | `task.discard` | `stuck` | `discarded` | human | | |
 <!-- transitions:end -->
+
+`work.reject_fresh` exists only for `work reject --fresh` (§11): it is `work.reject` plus clearing
+`session_id`, so rework starts a fresh session. It is listed after `work.reject`, which is the row
+an observed hand move `work-review -> work-todo` selects, so a hand move never resets the session.
 
 `dispatch_plan` and `dispatch_work` are the only rows that start an agent. A `work-todo` task that
 needs a plan first (`plan_required`) takes `route_to_plan`, then `dispatch_plan` in the same tick.
@@ -758,7 +773,33 @@ symphony transitions
                   # print the transition table (§4.1) as Markdown; needs no repo.
 symphony new "Title" [--priority N] [--plan]
                   # create work-todo/<slug>.md (plan-todo/<slug>.md with --plan)
+symphony plan accept ID [--repo PATH]
+symphony plan reject ID [--feedback TEXT | --edit] [--repo PATH]
+symphony work reject ID [--feedback TEXT | --edit] [--fresh] [--repo PATH]
 ```
+
+State-changing commands (`plan accept`, `plan reject`, `work reject`) follow one **command
+pattern**: resolve the id, take the repo lock (§3.3), check that the task's folder has a human row
+for the event, do the **outside effect** (here: write the feedback into the task file), then
+**fire** the event through `Machine.fire` (§4.1). Table rows only change Symphony's state, and no
+command moves a task or writes the sidecar except through `fire`. Later commands reuse the pattern.
+
+- Exit codes: 0 done; 1 wrong state, lock timeout, editor failure or a `fire` that did not apply;
+  2 usage error, unknown or ambiguous id, config error. A refusal changes nothing.
+- On success the command prints only the task file's new path on stdout. The `## Log` line names
+  the event, with `feedback round N` when feedback was written.
+- Wrong state: stderr says `<id> is in <state>; <event> not allowed. Legal events: a, b` (`none`
+  when the state has no human event), listing the events of §4.1 for that state.
+- `plan reject` and `work reject` take `--feedback TEXT` or `--edit` (both together is a usage
+  error). `--edit` runs `$EDITOR` (else `$VISUAL`, else `vi`) on an empty temporary file and uses
+  its content; an editor that exits non-zero aborts with exit 1 and no change. Feedback is appended
+  to the task's `## Feedback` section under a new `### Round N` heading (N is one more than the
+  highest existing round), creating the section before `## Log` if missing. Earlier text is never
+  rewritten, and `#`/`##` headings inside the text are demoted to `###`. No feedback (or empty)
+  is allowed: no round is added and `warning: rejecting without feedback` goes to stderr.
+- `plan accept` fires `plan.accept` (§14). `plan reject` fires `plan.reject` and leaves
+  `plan_session_id` alone. `work reject` fires `work.reject`; with `--fresh` it fires
+  `work.reject_fresh`, which also clears `session_id`.
 
 Read-only commands (`task list`, `task show`, `status`) read folders and sidecars only. They never
 need a running orchestrator and change nothing.
@@ -802,6 +843,8 @@ On Ctrl-C: kill all agent processes, move their tasks back to the todo folder of
   writes, commits, exit code, `is_error`, missing result, hang, malformed lines, permission denials,
   missing session on resume) and records each invocation's argv for assertions.
 - Symphony checks `claude auth status` at startup and refuses to start when logged out.
+- Test-only knob: `SYMPHONY_DEBUG_FIRE_DELAY=<seconds>` makes `fire` sleep between the rename and
+  the sidecar save, so black-box tests can make the race the repo lock covers (§3.3) deterministic.
 
 ### 12.1 Verified Claude Code behavior (2.1.220, 2026-11-06)
 

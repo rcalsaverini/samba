@@ -8,6 +8,7 @@ appending an answer) belong to the commands that fire an event, never to a row.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -27,6 +28,9 @@ from symphony.tasks import (
 )
 
 log = logging.getLogger("symphony")
+
+# Test-only knob (SPEC §12): seconds `fire` sleeps between the rename and the sidecar save.
+DEBUG_FIRE_DELAY = float(os.environ.get("SYMPHONY_DEBUG_FIRE_DELAY") or 0)
 
 Actor = Literal["symphony", "human"]
 
@@ -91,6 +95,9 @@ TRANSITIONS: tuple[Transition, ...] = (
     _t("plan-review", "plan.reject", H, "plan-todo"),
     _t("work-review", "work.accept", H, "done"),
     _t("work-review", "work.reject", H, "work-todo"),
+    # Command-only: `work reject --fresh`. Keep it after work.reject, which `human_row` must pick
+    # for an observed hand move (a hand move never resets the session).
+    _t("work-review", "work.reject_fresh", H, "work-todo", "", "session_id=None"),
     _t("question", "question.answer", H, "plan-todo", "last_stage=plan", "attempts=0",
        "blocked_cause=None"),
     _t("question", "question.answer", H, "work-todo", "last_stage=work", "attempts=0",
@@ -274,6 +281,8 @@ class Machine:
             return False
         if not self.tasks.move(task_id, row.src, row.dst):
             return False
+        if DEBUG_FIRE_DELAY:
+            time.sleep(DEBUG_FIRE_DELAY)  # test-only: widens the window the repo lock covers
         _apply(row, side, ctx)
         self.sidecars.save(task_id, side)
         self.tasks.append_log(task_id, entry_line(row, message))

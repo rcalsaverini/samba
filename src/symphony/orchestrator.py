@@ -24,6 +24,7 @@ from symphony.prompts import (
     validate_note,
 )
 from symphony.deps import evaluate
+from symphony.lock import repo_lock
 from symphony.tasks import (
     STATES,
     Sidecar,
@@ -175,10 +176,17 @@ class Orchestrator:
                 if tid not in self.held]
 
     async def tick(self) -> None:
-        self.observe()
-        self.reconcile()
-        await self.cleanup_workspaces()
-        self.dispatch()
+        # A state-changing command holds the repo lock for its whole rename + sidecar + log
+        # sequence (SPEC §3.3). Skip the tick while it does: observe() would misread the half-done
+        # move as a hand move, and dispatch could claim the task before the command saved.
+        with repo_lock(self.sym, blocking=False) as held:
+            if not held:
+                log.debug(kv("tick_skipped", reason="repo lock held"))
+                return
+            self.observe()
+            self.reconcile()
+            await self.cleanup_workspaces()
+            self.dispatch()
 
     def _note(self, task_id: str, line: str) -> None:
         """Append to `## Log`, or hold the line until the agent stops (SPEC §3.3)."""
