@@ -1,6 +1,6 @@
 # Samba specification index
 
-The Samba specification used to be one file, `SPEC.md`. It is now split into the chapters below. Chapters are referenced by name (for example "states, Sidecar state"), not by number. Read the chapter that matches what you are changing.
+The Samba specification is split into the chapters below, one file per topic. Chapters are referenced by name (for example "states, Sidecar state"), not by number. Read the chapter that matches what you are changing.
 
 - [overview.md](overview.md): read first, for what Samba is and the v0 non-goals.
 - [layout.md](layout.md): read when touching the repo layout, the `.samba/` folder or where files live on disk.
