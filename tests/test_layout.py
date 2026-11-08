@@ -1,4 +1,4 @@
-"""Black-box tests for the stage x status folder layout (SPEC §2, §4). No samba import."""
+"""Black-box tests for the stage x status folder layout (spec: layout, states). No samba import."""
 
 from __future__ import annotations
 

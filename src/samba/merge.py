@@ -1,4 +1,4 @@
-"""Git steps of `work accept` (SPEC §11): preflight, merge, validate the merged result, commit."""
+"""Git steps of `work accept` (spec: cli): preflight, merge, validate the merged result, commit."""
 
 from __future__ import annotations
 

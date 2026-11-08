@@ -1,4 +1,4 @@
-"""Folder-based task store and orchestrator sidecar state (SPEC §3, §4)."""
+"""Folder-based task store and orchestrator sidecar state (spec: task-files, states)."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ STATES: tuple[State, ...] = ("plan-todo", "plan-running", "plan-review", "work-t
                              "work-running", "work-review", "question", "stuck", "done",
                              "discarded")
 Stage = Literal["plan", "work"]
-# Folders of the pre-stage layout (SPEC §5.1 refuses to start while they hold task files).
+# Folders of the pre-stage layout (spec: orchestrator, Startup, refuses to start while they hold task files).
 LEGACY_STATES: tuple[str, ...] = ("plan", "todo", "running", "review", "blocked")
 
 # Values of Sidecar.blocked_cause. Plain strings, not a closed type: more are added later.
@@ -160,7 +160,7 @@ class TaskStore:
         return n
 
     def render_questions(self, task_id: str, questions: list[dict[str, object]]) -> None:
-        """Regenerate `## Questions` from the records (SPEC §3.3). No records: no section."""
+        """Regenerate `## Questions` from the records (spec: task-files, Write discipline). No records: no section."""
         if questions:
             self.set_section(task_id, "Questions", render_questions(questions))
 
@@ -260,7 +260,7 @@ def append_to_log_section(text: str, line: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-# ---- question records (SPEC §4.2, §4.3) -----------------------------------------------------
+# ---- question records (spec: states, Sidecar state and Questions) -----------------------------------------------------
 
 Question = dict[str, object]
 
@@ -333,7 +333,7 @@ def render_questions(questions: list[Question]) -> str:
 
 
 def round_pairs(questions: list[Question]) -> str:
-    """The latest round as question and answer pairs, for the resume prompt (SPEC §8.2)."""
+    """The latest round as question and answer pairs, for the resume prompt (spec: prompts, Which prompt is sent)."""
     out: list[str] = []
     for q in round_questions(questions):
         status = qstr(q, "status")
@@ -348,9 +348,9 @@ def round_pairs(questions: list[Question]) -> str:
 
 @dataclass
 class Sidecar:
-    state: str | None = None  # last known folder, for observed hand moves (SPEC §4.1)
+    state: str | None = None  # last known folder, for observed hand moves (spec: states)
     session_id: str | None = None
-    last_stage: str | None = None  # "plan" | "work", set at dispatch (SPEC §4.2)
+    last_stage: str | None = None  # "plan" | "work", set at dispatch (spec: states, Sidecar state)
     blocked_cause: str | None = None  # why the task is in question/stuck (CAUSE_*)
     plan_session_id: str | None = None
     plan_approved: bool = False
@@ -366,7 +366,7 @@ class Sidecar:
     workspace: str | None = None
     first_dispatched_at: float | None = None
     updated_at: float | None = None
-    questions: list[dict[str, object]] = field(default_factory=lambda: [])  # SPEC §4.2
+    questions: list[dict[str, object]] = field(default_factory=lambda: [])  # spec: states, Sidecar state
 
 
 class SidecarStore:

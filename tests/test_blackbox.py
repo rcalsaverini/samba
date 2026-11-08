@@ -278,7 +278,7 @@ def test_isolation_can_be_disabled(sb: Sandbox) -> None:
 
 def test_isolation_excludes_ancestor_claude_md(sb: Sandbox) -> None:
     # Claude Code loads CLAUDE.md from every ancestor of its cwd, which --setting-sources does not
-    # cover: a worktree under $HOME would load the user's ~/.claude/CLAUDE.md (SPEC §9.4).
+    # cover: a worktree under $HOME would load the user's ~/.claude/CLAUDE.md (spec: running-claude, User config isolation).
     sb.add_task("t1")
     sb.run_idle()
     argv = sb.calls("t1")[0]
@@ -441,7 +441,7 @@ def test_task_list_shows_cause_and_cost(sb: Sandbox) -> None:
     assert "t1" in res.stdout and "blocked" in res.stdout and "0.50" in res.stdout
 
 
-# ---- task list / task show (SPEC §11) --------------------------------------------------------
+# ---- task list / task show (spec: cli) --------------------------------------------------------
 
 
 def _ids(stdout: str) -> list[str]:

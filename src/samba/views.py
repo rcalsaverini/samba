@@ -1,4 +1,4 @@
-"""Read-only views shared by the CLI commands (SPEC §10, §11): table, state and id matching, show."""
+"""Read-only views shared by the CLI commands (spec: observability, cli): table, state and id matching, show."""
 
 from __future__ import annotations
 

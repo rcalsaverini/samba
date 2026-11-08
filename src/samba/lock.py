@@ -1,4 +1,4 @@
-"""Advisory repo lock (SPEC §3.3): serialises state-changing commands against the orchestrator."""
+"""Advisory repo lock (spec: task-files, Write discipline): serialises state-changing commands against the orchestrator."""
 
 from __future__ import annotations
 

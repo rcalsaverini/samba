@@ -1,4 +1,4 @@
-"""Run Claude Code headless and read its stream-json output (SPEC §9)."""
+"""Run Claude Code headless and read its stream-json output (spec: running-claude)."""
 
 from __future__ import annotations
 
@@ -27,14 +27,14 @@ class Invocation:
     tasks_dir: Path
     system_prompt: str
     max_budget_usd: float | None
-    planning: PlanningConfig | None = None  # set for a planning run (SPEC §14.4)
+    planning: PlanningConfig | None = None  # set for a planning run (spec: planning, The planning run)
 
 
 MEMORY_FILE_NAMES = ("CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md", ".claude/CLAUDE.local.md")
 
 
 def ancestor_memory_files(cwd: Path) -> list[str]:
-    """CLAUDE.md paths in every parent directory of `cwd` (SPEC §9.4).
+    """CLAUDE.md paths in every parent directory of `cwd` (spec: running-claude, User config isolation).
 
     Claude Code loads these from each ancestor of its working directory, outside the reach of
     `--setting-sources`. A worktree under the home directory would otherwise load the user's own

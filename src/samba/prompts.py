@@ -1,4 +1,4 @@
-"""Built-in prompts, the Samba-owned protocol prompt and the outcome schema (SPEC §8, §9.3)."""
+"""Built-in prompts, the Samba-owned protocol prompt and the outcome schema (spec: prompts, running-claude)."""
 
 from __future__ import annotations
 

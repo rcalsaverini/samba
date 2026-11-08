@@ -1,4 +1,4 @@
-"""The poll loop, dispatch, and per-task workers (SPEC §5)."""
+"""The poll loop, dispatch, and per-task workers (spec: orchestrator)."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ log = logging.getLogger("samba")
 StopReason = Literal["moved", "shutdown"]
 STATE_BY_NAME: dict[str, State] = {s: s for s in STATES}
 
-# Where a task file of an old-layout folder goes (SPEC §5.1). Shown in the refusal message.
+# Where a task file of an old-layout folder goes (spec: orchestrator, Startup). Shown in the refusal message.
 LEGACY_MOVES: dict[str, str] = {
     "plan": "plan-todo",
     "todo": "work-todo",
@@ -108,7 +108,7 @@ class Orchestrator:
             return
         root = self.tasks.root
         lines = [f"old task folders still hold tasks: {', '.join(old)}. Move them to the new "
-                 "layout (SPEC §2), then start again:", f"  mkdir -p {root}/work-todo "
+                 "layout (spec: layout), then start again:", f"  mkdir -p {root}/work-todo "
                  f"{root}/plan-todo {root}/work-review {root}/question {root}/stuck"]
         for folder in old:
             lines.append(f"  mv {root}/{folder}/*.md {root}/{LEGACY_MOVES[folder]}")
@@ -175,13 +175,13 @@ class Orchestrator:
             await self.shutdown()
 
     def _runnable_todo(self) -> list[str]:
-        """Todo tasks that will run eventually: not held only by dependencies (SPEC §11)."""
+        """Todo tasks that will run eventually: not held only by dependencies (spec: cli)."""
         return [tid for folder in ("plan-todo", "work-todo") for tid in self.tasks.ids(folder)
                 if tid not in self.held]
 
     async def tick(self) -> None:
         # A state-changing command holds the repo lock for its whole rename + sidecar + log
-        # sequence (SPEC §3.3). Skip the tick while it does: observe() would misread the half-done
+        # sequence (spec: task-files, Write discipline). Skip the tick while it does: observe() would misread the half-done
         # move as a hand move, and dispatch could claim the task before the command saved.
         with repo_lock(self.sym, blocking=False) as held:
             if not held:
@@ -193,14 +193,14 @@ class Orchestrator:
             self.dispatch()
 
     def _note(self, task_id: str, line: str) -> None:
-        """Append to `## Log`, or hold the line until the agent stops (SPEC §3.3)."""
+        """Append to `## Log`, or hold the line until the agent stops (spec: task-files, Write discipline)."""
         if task_id in self.running:
             self.pending_notes.setdefault(task_id, []).append(line)
         else:
             self.tasks.append_log(task_id, line)
 
     def observe(self) -> None:
-        """Interpret hand moves: a task in another folder than its sidecar `state` (SPEC §4.1)."""
+        """Interpret hand moves: a task in another folder than its sidecar `state` (spec: states)."""
         for folder in STATES:
             for task_id in self.tasks.ids(folder):
                 side = self.sidecars.load(task_id)
@@ -281,7 +281,7 @@ class Orchestrator:
             worker.add_done_callback(functools.partial(self._on_worker_done, task.id))
 
     def _deps_ready(self, task: Task) -> bool:
-        """The dependency guard of the dispatch rows (SPEC §15). Fires the stuck rows."""
+        """The dependency guard of the dispatch rows (spec: dependencies). Fires the stuck rows."""
         status = evaluate(self.tasks, task)
         if status.kind == "ready":
             return True
@@ -414,7 +414,7 @@ class Orchestrator:
         await self._fail(task_id, side, f"max_turns ({cfg.max_turns}) exhausted")
 
     async def _plan(self, task: Task, side: Sidecar, ws: Path) -> None:
-        """One planning invocation (SPEC §14.4)."""
+        """One planning invocation (spec: planning, The planning run)."""
         cfg = self.config
         task_id = task.id
         try:
@@ -578,7 +578,7 @@ class Orchestrator:
             "base_branch": self.config.base_branch,
             "attempt": str(side.attempts),
             "validate_command": self.config.validate_command or "",
-            # The answered round, for the first run after a question (SPEC §8.2).
+            # The answered round, for the first run after a question (spec: prompts, Which prompt is sent).
             "questions": (round_pairs(side.questions)
                           if side.last_outcome == "blocked" and not open_questions(side.questions)
                           else ""),
@@ -606,7 +606,7 @@ class Orchestrator:
         return text
 
     def _ask(self, task_id: str, side: Sidecar, stage: str, res: RunResult) -> None:
-        """Record the questions of a blocked run (SPEC §4.3). A blocked run without a valid
+        """Record the questions of a blocked run (spec: states, Questions). A blocked run without a valid
         question (for example a permission denial) gets one synthesized from its summary."""
         items = res.question_items
         if not items:

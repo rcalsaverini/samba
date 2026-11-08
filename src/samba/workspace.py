@@ -1,4 +1,4 @@
-"""Per-task git worktrees outside the repository (SPEC §7)."""
+"""Per-task git worktrees outside the repository (spec: workspaces)."""
 
 from __future__ import annotations
 

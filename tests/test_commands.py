@@ -1,4 +1,4 @@
-"""Black-box tests for `plan accept|reject` and `work reject` (SPEC §11). Must not import samba."""
+"""Black-box tests for `plan accept|reject` and `work reject` (spec: cli). Must not import samba."""
 
 from __future__ import annotations
 

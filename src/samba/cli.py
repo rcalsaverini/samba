@@ -1,4 +1,4 @@
-"""Command line: `samba run`, and `<noun> <verb>` for task, plan, work, question, dev (SPEC §11)."""
+"""Command line: `samba run`, and `<noun> <verb>` for task, plan, work, question, dev (spec: cli)."""
 
 from __future__ import annotations
 
@@ -129,7 +129,7 @@ def _edit_feedback() -> str | None:
 
 
 def confirm(prompt: str, command: str, yes: bool) -> int | None:
-    """The confirmation policy of dangerous commands (SPEC §11). Returns the exit code to stop
+    """The confirmation policy of dangerous commands (spec: cli). Returns the exit code to stop
     with, or None to proceed: `--yes` skips; without a terminal exit 2; else ask `[y/N]`."""
     if yes:
         return None
@@ -159,7 +159,7 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
                    feedback_mode: Literal["none", "optional", "required"] = "none",
                    confirm_plan: str | None = None, yes: bool = False,
                    hints: bool = False) -> int:
-    """The command pattern (SPEC §11): resolve, check the event is legal, do the outside effect
+    """The command pattern (spec: cli): resolve, check the event is legal, do the outside effect
     (feedback text), then `Machine.fire`. Nothing else moves a task. Holds the repo lock.
     `confirm_plan` marks a dangerous command (asks after the legality check, before the lock)."""
     tasks = TaskStore(config.samba_dir / "tasks")
@@ -298,7 +298,7 @@ def _edit_answer(q: Question) -> str | None:
 
 
 def cmd_question_answer(config: Config, target: str, text: str | None, edit: bool) -> int:
-    """`question answer` (SPEC §11): records the answer at once; fires `question.answer` only when
+    """`question answer` (spec: cli): records the answer at once; fires `question.answer` only when
     no question of the round is still open."""
     tasks = TaskStore(config.samba_dir / "tasks")
     sidecars = SidecarStore(config.samba_dir / "state")
@@ -385,7 +385,7 @@ def cmd_question_answer(config: Config, target: str, text: str | None, edit: boo
 
 def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: bool, yes: bool,
                     dry_run: bool) -> int:
-    """`work accept` (SPEC §11): the command pattern with a merge as the outside effect."""
+    """`work accept` (spec: cli): the command pattern with a merge as the outside effect."""
     tasks = TaskStore(config.samba_dir / "tasks")
     sidecars = SidecarStore(config.samba_dir / "state")
     event = "work.accept"
@@ -523,7 +523,7 @@ def _ask(prompt: str) -> str:
 
 def cmd_task_new(config: Config, title: str | None, body: str | None, depends: str | None,
                  priority: int, skip_plan: bool) -> int:
-    """`task new` (SPEC §11): flags give every field; on a terminal the missing ones are asked."""
+    """`task new` (spec: cli): flags give every field; on a terminal the missing ones are asked."""
     tasks = TaskStore(config.samba_dir / "tasks")
     tty = sys.stdin.isatty() and sys.stdout.isatty()
     if title is None and not tty:
@@ -619,7 +619,7 @@ def main(argv: list[str] | None = None) -> int:
                            description="Commands for working on Samba itself.")
     dev_sub = p_dev.add_subparsers(dest="dev_command", required=True)
     p_trans = dev_sub.add_parser("transitions",
-                                 help="print the transition table as Markdown (SPEC §4.1)")
+                                 help="print the transition table as Markdown (spec: states)")
 
     def add_reject_args(p: argparse.ArgumentParser, fresh: bool = False) -> None:
         p.add_argument("id", help="task id or unique prefix")

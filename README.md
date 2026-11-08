@@ -86,7 +86,7 @@ Task ids can be abbreviated to any unique prefix.
 ## Docs
 
 - [`docs/manual.md`](docs/manual.md): the user manual (setup, daily loop, questions, troubleshooting).
-- [`SPEC.md`](SPEC.md): the full specification and source of truth for behavior.
+- [`docs/spec/`](docs/spec/README.md): the full specification and source of truth for behavior, one chapter per topic.
 - [`CLAUDE.md`](CLAUDE.md): a map of the code, for agents and contributors.
 
 ## Development

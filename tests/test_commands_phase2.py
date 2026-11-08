@@ -1,4 +1,4 @@
-"""Black-box tests for `question answer`, `task retry|stop|discard` (SPEC §11).
+"""Black-box tests for `question answer`, `task retry|stop|discard` (spec: cli).
 
 Must not import samba.
 """

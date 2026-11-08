@@ -1,4 +1,4 @@
-"""Strict `{{ name }}` template rendering (SPEC §8.1)."""
+"""Strict `{{ name }}` template rendering (spec: prompts, Template rendering)."""
 
 from __future__ import annotations
 

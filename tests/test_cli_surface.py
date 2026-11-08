@@ -1,4 +1,4 @@
-"""Black-box tests for the shape of the command line (SPEC §11). Must not import samba."""
+"""Black-box tests for the shape of the command line (spec: cli). Must not import samba."""
 
 from __future__ import annotations
 
