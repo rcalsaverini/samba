@@ -1,4 +1,4 @@
-"""Black-box tests for the planning phase (SPEC §14). Must not import the samba package."""
+"""Black-box tests for the planning phase (spec: planning). Must not import the samba package."""
 
 from __future__ import annotations
 

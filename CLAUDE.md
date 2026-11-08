@@ -4,9 +4,13 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
 
 ## Map
 
-- `SPEC.md`: the source of truth for behavior. Read the sections relevant to your task before
-  changing code, and update the spec in the same change when behavior changes.
-- `README.md`: entry point with a short quickstart; links to the manual and SPEC.
+- `docs/spec/`: the specification, the source of truth for behavior. Start at `docs/spec/README.md`,
+  the index: one line per chapter saying when to read it. Chapters are named by topic (`overview`,
+  `layout`, `task-files`, `states`, `orchestrator`, `workflow-config`, `workspaces`, `prompts`,
+  `running-claude`, `observability`, `cli`, `implementation-notes`, `later`, `planning`,
+  `dependencies`) and are referenced by name, not by number. Read the chapters relevant to your task
+  before changing code, and update the spec in the same change when behavior changes.
+- `README.md`: entry point with a short quickstart; links to the manual and the spec.
 - `docs/manual.md`: the user manual (setup, daily loop, troubleshooting), for people using Samba.
   `tests/test_manual.py` fails when a CLI subcommand is not mentioned in it, so update it when
   you add, rename or remove a command.
@@ -23,9 +27,10 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `render_questions`); `## Questions` in a task file is rendered from the sidecar records.
   - `orchestrator.py`: poll loop, dispatch, workers, retries, transitions.
   - `transitions.py`: the transition table (plain data) and `Machine.fire`, the only path that moves
-    a task (SPEC §4.1). `samba dev transitions` prints it; SPEC embeds the output.
+    a task (`docs/spec/states.md`). `samba dev transitions` prints it; the states chapter embeds the
+    output.
   - `lock.py`: `repo_lock`, the `.samba/lock` flock shared by commands and orchestrator ticks.
-  - `deps.py`: `depends_on` evaluation (SPEC §15).
+  - `deps.py`: `depends_on` evaluation (`docs/spec/dependencies.md`).
   - `claude.py`: builds the `claude` argv, runs it, parses stream-json (`RunResult`).
   - `workspace.py`: git worktrees outside the repo; `proc.py`: subprocess helpers (process groups).
   - `prompts.py`: built-in prompts, the protocol prompt, the outcome schema.

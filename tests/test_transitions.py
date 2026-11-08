@@ -1,4 +1,4 @@
-"""Black-box tests for the transition table (SPEC §4.1). Must not import the samba package.
+"""Black-box tests for the transition table (spec: states). Must not import the samba package.
 
 The table is read from `samba dev transitions`. Every row has a scenario below, and a coverage test
 fails when a row is added without one.
@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 from conftest import Sandbox, stop, wait_for
 
-SPEC = Path(__file__).parent.parent / "SPEC.md"
+STATES_DOC = Path(__file__).parent.parent / "docs" / "spec" / "states.md"
 BLOCKER = ["no-such-task"]  # an unknown dependency keeps a todo task where it is
 
 # Live-orchestrator tests poll conditions with a generous deadline (polling returns as soon as the
@@ -262,7 +262,7 @@ def test_every_row_has_a_test(sb: Sandbox) -> None:
 
 
 def test_spec_table_matches_the_code(sb: Sandbox) -> None:
-    text = SPEC.read_text()
+    text = STATES_DOC.read_text()
     begin, end = "<!-- transitions:begin -->", "<!-- transitions:end -->"
     assert begin in text and end in text
     block = text.split(begin, 1)[1].split(end, 1)[0].strip()

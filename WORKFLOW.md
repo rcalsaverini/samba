@@ -47,7 +47,7 @@ Task: {{ task.title }}
 
 {{ task.body }}
 
-Start by reading CLAUDE.md (the repo map) and the parts of SPEC.md the task points to. Write the
-black-box tests for the new behavior first, then the implementation. Keep existing tests passing and
-pyright at 0 errors. Update SPEC.md in the same change if your implementation had to settle a detail
+Start by reading CLAUDE.md (the repo map) and the chapters of docs/spec/ the task points to
+(start at docs/spec/README.md). Write the black-box tests for the new behavior first, then the
+implementation. Keep existing tests passing and pyright at 0 errors. Update the spec in docs/spec/ in the same change if your implementation had to settle a detail
 the spec left open, and say so in your task file's `## Log`.

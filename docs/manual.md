@@ -2,7 +2,7 @@
 
 How to set Samba up in a repository and run tasks through it day to day. This manual explains
 what to do; for the exact rules (every state, event, flag and exit code) it links to
-[SPEC.md](../SPEC.md) by section.
+the [specification](spec/README.md) by chapter.
 
 ## 1. What Samba is
 
@@ -19,7 +19,7 @@ The mental model:
 - Everything lives in plain files, so you can steer with an editor and a file browser as well as
   with commands.
 
-Details: SPEC §1, §2, §4.1.
+Details: spec chapters overview, layout, states.
 
 ## 2. Prerequisites
 
@@ -38,13 +38,13 @@ $ samba task --help
 ```
 
 Every command is `samba run` or `samba <noun> <verb>`. There are no top-level shortcuts such as
-`samba new` or `samba status`. SPEC §11.
+`samba new` or `samba status`. Spec chapter cli.
 
 ## 3. Setting up a repository
 
 Samba reads one file from the root of the target repo: `WORKFLOW.md`. The front matter (YAML) is
 configuration, the body is the prompt sent to the agent on its first turn. Every key is optional.
-SPEC §6 has the full list with defaults.
+The spec chapter workflow-config has the full list with defaults.
 
 A small, realistic example:
 
@@ -85,31 +85,31 @@ The settings that matter most:
   the output and tries again. `work accept` runs the same command again on the merged result.
   It runs in a non-login `bash -c` that inherits Samba's environment, so pin your tools
   (`uv run pytest`, `make check`, `./scripts/check`) instead of relying on `PATH`. Allow the
-  agent to run the exact same command. SPEC §7.3.
+  agent to run the exact same command. Spec chapter workspaces, Validation.
 - **`claude.allow`**: the tools the agent may use. Headless runs cannot answer permission
   prompts, so anything not allowed is denied. The list lives in `WORKFLOW.md` and not in
   `.claude/settings.json` because Claude Code ignores project allow rules in folders it has not
   seen, and every worktree is new. Allow commands as plain single commands: a rule matches the
   whole command line, so a pipe, `;` or `&&` is denied. Optionally `claude.permission_mode`
-  (`dontAsk` by default; `bypassPermissions` only for throwaway repos). SPEC §6.2.
+  (`dontAsk` by default; `bypassPermissions` only for throwaway repos). Spec chapter workflow-config, Permissions.
 - **`max_cost_usd_per_task`**, **`max_turns`**, **`max_attempts`**: the budgets, see section 11.
 - **`hooks.after_create`**: a shell script run once in each new worktree (for example
-  `uv sync -q`). If it fails, the attempt fails. SPEC §7.1.
+  `uv sync -q`). If it fails, the attempt fails. Spec chapter workspaces, Creation.
 - **`planning.require_plan`**: when `true`, every task is planned and reviewed before any code is
-  written, even if it was created with `--skip-plan` or by hand. SPEC §14.
+  written, even if it was created with `--skip-plan` or by hand. Spec chapter planning.
 - **`base_branch`** (default `main`) and **`workspaces_root`** (default `~/.samba/workspaces`,
   must be outside the repo).
 - The body: state the task with `{{ task.title }}` and `{{ task.body }}`, point to the repo's own
   `CLAUDE.md` and docs, and say how your repo wants work done (commit size, tests, when to ask).
   You do not need to explain the outcome format or the task-file rules: Samba injects those
-  itself. SPEC §8.4.
+  itself. Spec chapter prompts, What the WORKFLOW.md body should tell the agent.
 
 `WORKFLOW.md` is read once at startup. After editing it, stop `samba run` (Ctrl-C) and start it
 again.
 
 On first start Samba creates `.samba/` in the repo and adds it to `.git/info/exclude` (it never
 touches your `.gitignore`). `.samba/` holds the task folders, the sidecar state, the run logs and
-`samba.log`. SPEC §2.
+`samba.log`. Spec chapter layout.
 
 ## 4. Writing a good task
 
@@ -122,7 +122,7 @@ $ samba task new "Wire the export button" --depends-on add-csv-export-to-the-rep
 
 It prints the path of the new file. On a terminal, any field you did not give as a flag is
 prompted (title, description, dependencies, plan first or not). With no terminal and no title it
-is a usage error. SPEC §11.
+is a usage error. Spec chapter cli.
 
 A task file is markdown with optional front matter:
 
@@ -147,13 +147,13 @@ Tips for the text:
   unless you pass `--priority`.
 - **`depends_on`**: ids of tasks that must be `done` (merged) first. The dependent task waits in
   its todo folder, and its worktree branches from a base branch that already has the
-  dependency's work. A dependency that was discarded sends the dependent task to `stuck`. SPEC
-  §15.
+  dependency's work. A dependency that was discarded sends the dependent task to `stuck`. Spec
+  chapter dependencies.
 - **Plan first or not**: by default a task starts in `plan-todo`: the agent reads the repo,
   cannot change anything, and returns a plan you approve or reject before any code is written.
   `--skip-plan` creates the task in `work-todo` and goes straight to work (unless
   `planning.require_plan` is set). Use planning for anything non-trivial, where a wrong approach
-  would be expensive to find in review. SPEC §14.
+  would be expensive to find in review. Spec chapter planning.
 
 You can also create the file by hand in `.samba/tasks/plan-todo/` or `.samba/tasks/work-todo/`.
 
@@ -209,7 +209,7 @@ In words:
 
 `question` and `stuck` hold tasks from either stage. Samba remembers which stage a task came from
 and why it stopped (the `blocked_cause`, section 7) and sends it back to the right todo folder.
-The full table of events, guards and effects is SPEC §4.1.
+The full table of events, guards and effects is in the spec chapter states.
 
 Moving files by hand is observed: if you drag a task between folders while it is a legal move
 (for example `plan-review` to `work-todo`, which is the same as `plan accept`), Samba applies
@@ -277,7 +277,7 @@ people working on Samba itself, not part of the daily loop; you can ignore it.
    $ samba work accept <id>
    ```
 
-   What it does (SPEC §11):
+   What it does (spec chapter cli):
 
    - Preflight, changing nothing if it fails: the task is in `work-review`, your main checkout
      is on `base_branch` with no uncommitted changes to tracked files, and branch `samba/<id>`
@@ -321,7 +321,7 @@ $ samba question answer <id> --edit
   Answers cannot be empty; `--edit` opens `$EDITOR` with the question as comment lines.
 
 If you move a task out of `question/` by hand instead, its open questions are marked dismissed
-and the agent is told so. SPEC §4.3, §11.
+and the agent is told so. Spec chapters states (Questions), cli.
 
 ### Stuck tasks
 
@@ -359,7 +359,7 @@ cause for tasks in the `question` folder.
 - **Stop everything**: Ctrl-C on `samba run`.
 
 A discarded task keeps its file in `discarded/` and its branch; the worktree is removed. Samba
-never deletes branches or task files. SPEC §5.2, §11.
+never deletes branches or task files. Spec chapters orchestrator (Tick), cli.
 
 ## 9. Reading state
 
@@ -421,7 +421,7 @@ Where to look when you want more:
 - `.samba/runs/<id>/validate-<n>.log`: the output of the validate command after turn `n`.
 - `.samba/runs/<id>/accept-validate.log`: validation output from `work accept`.
 
-SPEC §10.
+Spec chapter observability.
 
 ## 10. Worktrees and branches
 
@@ -451,7 +451,7 @@ $ cd ~/.samba/workspaces/<repo-key>/<id>
 $ uv run pytest -q
 ```
 
-Do not commit in a worktree while an agent is running in it. SPEC §2, §7.
+Do not commit in a worktree while an agent is running in it. Spec chapters layout, workspaces.
 
 ## 11. Costs and budgets
 
@@ -467,26 +467,26 @@ Three settings in `WORKFLOW.md` bound a task; all are checked per task:
 
 `max_concurrent` (default 2) limits how many agents run at once, which also limits how fast you
 spend. See the cost of a task in `COST` in `samba task list` or `cost` in `samba task show`.
-Planning and work runs both count. SPEC §5.3, §5.4, §6.1.
+Planning and work runs both count. Spec chapters orchestrator (Worker, Failures and retries), workflow-config (Config).
 
 ## 12. Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|
-| `samba run` exits at startup mentioning old folders and an `mv` recipe | Your repo has task files in the pre-rename folders (`plan`, `todo`, `running`, `review`, `blocked`). Samba never migrates them. Run the printed `mv` commands (for example `mv .samba/tasks/todo/*.md .samba/tasks/work-todo/`), then start again. SPEC §5.1. |
-| Samba refuses to start and mentions logged out | Claude Code is not logged in. Run `claude` and log in. An expired login mid-run shows up as a failed attempt with exit code 1 (Claude reports `is_error` even though it says "success"); log in and `task retry`. SPEC §9.2. |
-| The task moved to `question` with a strange question mentioning denied tools | The agent hit a permission denial and could not continue. The `## Log` lists each denied command. Add it to `claude.allow` (as a plain command, no pipes or `&&`), restart `samba run`, and answer the question. SPEC §4.3, §6.2. |
-| Validation passes for the agent but fails in Samba | Samba runs `validate.command` in a non-login `bash -c`, so tools can resolve differently than in the agent's shell. Pin them: `uv run pytest`, `make check`, a script. Read `.samba/runs/<id>/validate-<n>.log`. SPEC §7.3. |
-| I moved a file and it jumped back, with `illegal move` in its `## Log` | That move is not in the transition table (for example `work-todo` to `done`, or `plan-todo` to `work-todo` after a rejected plan). Use the command, or `samba task show <id>` and read its `events:` list. SPEC §4.1. |
+| `samba run` exits at startup mentioning old folders and an `mv` recipe | Your repo has task files in the pre-rename folders (`plan`, `todo`, `running`, `review`, `blocked`). Samba never migrates them. Run the printed `mv` commands (for example `mv .samba/tasks/todo/*.md .samba/tasks/work-todo/`), then start again. Spec chapter orchestrator, Startup. |
+| Samba refuses to start and mentions logged out | Claude Code is not logged in. Run `claude` and log in. An expired login mid-run shows up as a failed attempt with exit code 1 (Claude reports `is_error` even though it says "success"); log in and `task retry`. Spec chapter running-claude, Reading the stream. |
+| The task moved to `question` with a strange question mentioning denied tools | The agent hit a permission denial and could not continue. The `## Log` lists each denied command. Add it to `claude.allow` (as a plain command, no pipes or `&&`), restart `samba run`, and answer the question. Spec chapters states (Questions), workflow-config (Permissions). |
+| Validation passes for the agent but fails in Samba | Samba runs `validate.command` in a non-login `bash -c`, so tools can resolve differently than in the agent's shell. Pin them: `uv run pytest`, `make check`, a script. Read `.samba/runs/<id>/validate-<n>.log`. Spec chapter workspaces, Validation. |
+| I moved a file and it jumped back, with `illegal move` in its `## Log` | That move is not in the transition table (for example `work-todo` to `done`, or `plan-todo` to `work-todo` after a rejected plan). Use the command, or `samba task show <id>` and read its `events:` list. Spec chapter states. |
 | A command says `<id> is in <state>; <event> not allowed. Legal events: ...` | The task is in the wrong folder for that command. Nothing changed. Use one of the listed events. |
-| A command fails with a lock message after waiting about 10 seconds | Another command or an orchestrator tick holds `.samba/lock`. Note that `work accept` holds it while validation runs. Wait and retry. SPEC §3.3. |
-| `work accept` refuses before doing anything | Preflight failed: the main checkout is not on `base_branch`, has uncommitted changes to tracked files, or branch `samba/<id>` is missing. Fix that and retry. SPEC §11. |
+| A command fails with a lock message after waiting about 10 seconds | Another command or an orchestrator tick holds `.samba/lock`. Note that `work accept` holds it while validation runs. Wait and retry. Spec chapter task-files, Write discipline. |
+| `work accept` refuses before doing anything | Preflight failed: the main checkout is not on `base_branch`, has uncommitted changes to tracked files, or branch `samba/<id>` is missing. Fix that and retry. Spec chapter cli. |
 | `work accept` fails with conflicts or `validation failed after merge` | The merge was aborted and the task is still in `work-review`. The `## Log` line names the conflicting files or the last output lines; the full output is in `.samba/runs/<id>/accept-validate.log`. Rebase or merge `main` into the branch (or reject with feedback), then accept again. |
 | `work accept` or `task discard` exits 2 | No terminal and no `--yes`. Add `--yes`. |
 | Task in `stuck (budget)` | Cap reached. See the table in section 7. |
 | Task in `stuck (gave_up)` | Read `task show` `last_error` and `## Harness gaps`. A worktree `after_create` failure (for example `uv sync` failing) is one common cause: run the hook command by hand in a fresh checkout to see the error. |
 | A task never starts | Run `samba task list`: `waiting on <id>` means unmet `depends_on` (all must be `done`; an unknown id never unblocks); `(retry in Ns)` means a retry delay; `max_concurrent` agents may already be running. Also check that `samba run` is actually running and that the file name matches `[A-Za-z0-9._-]+` (other names are skipped with a warning in `.samba/samba.log`). |
-| My personal Claude rules or plugins affect the agent | Keep `claude.isolate_user_config: true` (the default); it loads only the repo's config and excludes your `~/.claude` files. SPEC §9.4. |
+| My personal Claude rules or plugins affect the agent | Keep `claude.isolate_user_config: true` (the default); it loads only the repo's config and excludes your `~/.claude` files. Spec chapter running-claude, User config isolation. |
 | Changes to `WORKFLOW.md` have no effect | It is read at startup only. Restart `samba run`. |
 
 For anything else, start with the task's `## Log`, then `.samba/samba.log`, then the raw stream

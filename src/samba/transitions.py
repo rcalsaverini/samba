@@ -1,4 +1,4 @@
-"""The transition table and the single `fire` path (SPEC §4.1).
+"""The transition table and the single `fire` path (spec: states).
 
 The table is plain data so a rewrite in another language can reuse it. Rows only change Samba's
 own state: the folder, the sidecar and the task's `## Log`. Effects outside Samba (a git merge,
@@ -32,7 +32,7 @@ from samba.tasks import (
 
 log = logging.getLogger("samba")
 
-# Test-only knob (SPEC §12): seconds `fire` sleeps between the rename and the sidecar save.
+# Test-only knob (spec: implementation-notes): seconds `fire` sleeps between the rename and the sidecar save.
 DEBUG_FIRE_DELAY = float(os.environ.get("SAMBA_DEBUG_FIRE_DELAY") or 0)
 
 Actor = Literal["samba", "human"]
@@ -297,7 +297,7 @@ class Machine:
             time.sleep(DEBUG_FIRE_DELAY)  # test-only: widens the window the repo lock covers
         changed = _apply(row, side, ctx)
         self.sidecars.save(task_id, side)
-        if changed:  # `## Questions` is a view of the records (SPEC §3.3)
+        if changed:  # `## Questions` is a view of the records (spec: task-files, Write discipline)
             self.tasks.render_questions(task_id, side.questions)
         self.tasks.append_log(task_id, entry_line(row, message))
         log.info(kv("transition", task=task_id, transition=row.event, src=row.src, dst=row.dst,
@@ -306,7 +306,7 @@ class Machine:
 
     def observe(self, task_id: str, row: Transition, side: Sidecar) -> str:
         """Apply a human row for a move already made by hand. Returns the `## Log` line, which
-        the caller writes (or defers while an agent runs, SPEC §3.3)."""
+        the caller writes (or defers while an agent runs, spec: task-files, Write discipline)."""
         changed = _apply(row, side, {})
         self.sidecars.save(task_id, side)
         if changed:  # the task came from question/, where no agent runs

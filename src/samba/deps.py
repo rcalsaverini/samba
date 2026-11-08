@@ -1,4 +1,4 @@
-"""Task dependencies: the guard behind `dispatch_plan` and `dispatch_work` (SPEC §15)."""
+"""Task dependencies: the guard behind `dispatch_plan` and `dispatch_work` (spec: dependencies)."""
 
 from __future__ import annotations
 

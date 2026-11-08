@@ -1,4 +1,4 @@
-"""Black-box tests for `task new` (SPEC §11). Must not import samba."""
+"""Black-box tests for `task new` (spec: cli). Must not import samba."""
 
 from __future__ import annotations
 

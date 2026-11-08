@@ -1,4 +1,4 @@
-"""Load and validate WORKFLOW.md (SPEC §6)."""
+"""Load and validate WORKFLOW.md (spec: workflow-config)."""
 
 from __future__ import annotations
 
