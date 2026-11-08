@@ -71,7 +71,7 @@ def test_validation_failure_is_fed_back_then_passes(sb: Sandbox) -> None:
 def test_blocked_moves_to_question(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "blocked", "summary": "which db?",
-                    "task_log": "## Questions\nWhich database?"})
+                    "questions": [{"text": "Which database?", "context": "storage"}]})
     sb.run_idle()
 
     assert sb.state_of("t1") == "question"

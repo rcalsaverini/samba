@@ -131,8 +131,24 @@ class RunResult:
         return self._structured_text("plan").strip()
 
     @property
-    def questions(self) -> str:
-        return self._structured_text("questions").strip()
+    def assumptions(self) -> str:
+        return self._structured_text("assumptions").strip()
+
+    @property
+    def question_items(self) -> list[tuple[str, str]]:
+        """The `questions` of the outcome as (text, context). Malformed entries are dropped."""
+        structured = (self.result or {}).get("structured_output")
+        raw = cast(dict[str, Any], structured).get("questions") if isinstance(structured, dict) else None
+        items: list[tuple[str, str]] = []
+        if isinstance(raw, list):
+            for item in cast(list[object], raw):
+                if not isinstance(item, dict):
+                    continue
+                d = cast(dict[str, Any], item)
+                text, context = d.get("text"), d.get("context")
+                if isinstance(text, str) and text.strip():
+                    items.append((text.strip(), context.strip() if isinstance(context, str) else ""))
+        return items
 
     @property
     def summary(self) -> str:

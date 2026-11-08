@@ -17,14 +17,16 @@ from conftest import Sandbox, stop, symphony_cmd, wait_for
 
 def seed(sb: Sandbox, task_id: str, state: str, **side: object) -> Path:
     path = sb.add_task(task_id, state=state)
+    if state == "question" and "questions" not in side:
+        side["questions"] = [question("q1")]
     sb.write_sidecar(task_id, {"state": state, **side})
     return path
 
 
-def feedback_section(sb: Sandbox, task_id: str) -> str:
-    text = sb.task_text(task_id)
-    assert "## Feedback" in text, text
-    return text.split("## Feedback", 1)[1].split("\n## ", 1)[0]
+def question(qid: str, status: str = "open", rnd: int = 1) -> dict[str, object]:
+    return {"id": qid, "round": rnd, "stage": "work", "status": status, "text": f"text {qid}",
+            "context": "why", "asked_at": "2026-11-07T10:00:00-03:00", "answer": None,
+            "answered_at": None}
 
 
 def fake_editor(tmp_path: Path, text: str) -> str:
@@ -60,27 +62,38 @@ def test_question_answer(sb: Sandbox, stage: str | None, dst: str) -> None:
     assert sb.state_of("t1") == dst
     side = sb.sidecar("t1")
     assert side["state"] == dst and side["attempts"] == 0 and side["blocked_cause"] is None
-    fb = feedback_section(sb, "t1")
-    assert "### Round 1" in fb and "Use SQLite." in fb
-    assert f"question.answer: question -> {dst}: feedback round 1" in sb.log_section("t1")
+    text = sb.task_text("t1")
+    assert "## Feedback" not in text
+    assert "Answer: Use SQLite." in text
+    log = sb.log_section("t1")
+    assert "question.answer: t1/q1 answered" in log
+    assert f"question.answer: question -> {dst}" in log
 
 
-def test_question_answer_second_round_demotes_headings(sb: Sandbox) -> None:
+def test_question_answer_heading_in_answer_is_demoted(sb: Sandbox) -> None:
     seed(sb, "t1", "question", last_stage="work")
-    assert sb.run("question", "answer", "t1", "first").returncode == 0
-    sb.move("t1", "work-todo", "question")
     assert sb.run("question", "answer", "t1", "# Big heading\nsecond").returncode == 0
-    fb = feedback_section(sb, "t1")
-    assert "### Round 1" in fb and "### Round 2" in fb
-    assert "\n# Big heading" not in fb
+    assert "\n# Big heading" not in sb.task_text("t1")
 
 
 def test_question_answer_edit(sb: Sandbox, tmp_path: Path) -> None:
     seed(sb, "t1", "question", last_stage="work")
     res = sb.run("question", "answer", "t1", "--edit", EDITOR=fake_editor(tmp_path, "From editor.\n"))
     assert res.returncode == 0, res.stderr
-    assert "From editor." in feedback_section(sb, "t1")
+    assert sb.sidecar("t1")["questions"][0]["answer"] == "From editor."
     assert sb.state_of("t1") == "work-todo"
+
+
+def test_question_answer_edit_quotes_question_and_strips_comments(sb: Sandbox,
+                                                                  tmp_path: Path) -> None:
+    seed(sb, "t1", "question", last_stage="work")
+    script = tmp_path / "ed.py"
+    script.write_text("import sys\np = sys.argv[1]\nt = open(p).read()\n"
+                      "assert '# q1: text q1' in t and '# Context: why' in t, t\n"
+                      "open(p, 'w').write(t + 'My answer\\n')\n")
+    res = sb.run("question", "answer", "t1", "--edit", EDITOR=f"{sys.executable} {script}")
+    assert res.returncode == 0, res.stderr
+    assert sb.sidecar("t1")["questions"][0]["answer"] == "My answer"
 
 
 @pytest.mark.parametrize("args", [[], ["--edit", "text"], [""], ["   "]],
@@ -310,5 +323,5 @@ def test_command_while_orchestrator_runs(sb: Sandbox, cmd: list[str], state: str
     finally:
         stop(proc)
     log = sb.log_section("t1")
-    assert log.count(f"{event}:") == 1, log
+    assert log.count(f"{event}: {state} ->") == 1, log
     assert "observed hand move" not in log and "illegal move" not in log, log

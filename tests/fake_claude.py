@@ -24,7 +24,9 @@ Step fields (all optional):
     denials         list of tool names to report in permission_denials
     missing_session bool, when called with --resume, fail like an unknown session id
     plan            string, put in structured_output.plan (planning runs)
-    questions       string, put in structured_output.questions
+    questions       list of {"text": ..., "context": ...}, put in structured_output.questions
+                    (work and planning runs; anything else is emitted as given)
+    assumptions     string, put in structured_output.assumptions (planning runs)
     (for planning runs "outcome" is "planned" or "blocked"; the default there is "planned")
 
 `claude auth status` prints {"loggedIn": true} unless FAKE_CLAUDE_LOGGED_OUT is set.
@@ -130,8 +132,10 @@ def main() -> int:
         structured = {"outcome": outcome, "summary": step.get("summary", f"step {n + 1}")}
         if planning:
             structured["plan"] = step.get("plan", f"plan {n + 1}")
-            if "questions" in step:
-                structured["questions"] = step["questions"]
+            if "assumptions" in step:
+                structured["assumptions"] = step["assumptions"]
+        if "questions" in step:
+            structured["questions"] = step["questions"]
     is_error = bool(step.get("is_error", False))
     emit({"type": "result", "subtype": "success", "is_error": is_error,
           "result": json.dumps(structured) if structured else "no structured output",

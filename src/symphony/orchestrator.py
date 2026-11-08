@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import functools
 import logging
+import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -33,6 +34,9 @@ from symphony.tasks import (
     State,
     Task,
     TaskStore,
+    add_questions,
+    open_questions,
+    round_pairs,
     running_of,
     todo_of,
 )
@@ -400,6 +404,7 @@ class Orchestrator:
                     return
                 prompt = self._prompt("validate_failed", variables) + "\n\n```\n" + tail + "\n```"
             elif outcome == "blocked":
+                self._ask(task_id, side, "work", res)
                 await self._finish(task_id, side, "work_blocked", "blocked", res.summary)
                 return
             else:
@@ -457,11 +462,12 @@ class Orchestrator:
             await self._fail(task_id, side, "planning run returned no valid outcome and plan")
             return
         self.tasks.set_section(task_id, "Plan", res.plan_text)
-        if res.questions:
-            self.tasks.set_section(task_id, "Questions", res.questions)
+        if res.assumptions:
+            self.tasks.set_section(task_id, "Assumptions", res.assumptions)
         if outcome == "planned":
             await self._finish(task_id, side, "planned", "planned", res.summary)
         else:
+            self._ask(task_id, side, "plan", res)
             await self._finish(task_id, side, "plan_blocked", "blocked", res.summary)
 
     def _first_plan_prompt(self, variables: dict[str, str]) -> str:
@@ -572,6 +578,10 @@ class Orchestrator:
             "base_branch": self.config.base_branch,
             "attempt": str(side.attempts),
             "validate_command": self.config.validate_command or "",
+            # The answered round, for the first run after a question (SPEC §8.2).
+            "questions": (round_pairs(side.questions)
+                          if side.last_outcome == "blocked" and not open_questions(side.questions)
+                          else ""),
         }
 
     def _system_prompt(self, variables: dict[str, str], side: Sidecar) -> str:
@@ -586,7 +596,26 @@ class Orchestrator:
         return text
 
     def _prompt(self, key: str, variables: dict[str, str]) -> str:
-        return render(self.config.prompts.get(key) or DEFAULT_PROMPTS[key], variables)
+        template = self.config.prompts.get(key) or DEFAULT_PROMPTS[key]
+        text = render(template, variables).rstrip()
+        questions = variables.get("questions", "")
+        # A custom prompt without {{ questions }} must not lose the answers.
+        if key in ("resume", "plan_revise") and questions and "questions" not in re.findall(
+                r"\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\}\}", template):
+            text += "\n\n" + questions
+        return text
+
+    def _ask(self, task_id: str, side: Sidecar, stage: str, res: RunResult) -> None:
+        """Record the questions of a blocked run (SPEC §4.3). A blocked run without a valid
+        question (for example a permission denial) gets one synthesized from its summary."""
+        items = res.question_items
+        if not items:
+            context = "Symphony synthesized this question: the agent reported blocked without one."
+            if res.denials:
+                context += " Permission denied: " + ", ".join(res.denials) + "."
+            items = [(res.summary or "The agent reported blocked without a question", context)]
+        add_questions(side.questions, stage, items)
+        self.tasks.render_questions(task_id, side.questions)
 
     def _budget_left(self, side: Sidecar) -> float | None:
         cap = self.config.max_cost_usd_per_task

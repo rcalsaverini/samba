@@ -123,7 +123,8 @@ def test_default_config_executes_todo_directly(sb: Sandbox) -> None:
 
 def test_planner_blocked_with_questions_then_replan(sb: Sandbox) -> None:
     sb.add_task("t1", state="plan-todo")
-    sb.steps("t1", {"outcome": "blocked", "plan": "partial", "questions": "Which database?"},
+    sb.steps("t1", {"outcome": "blocked", "plan": "partial",
+                    "questions": [{"text": "Which database?", "context": "storage"}]},
              {"plan": "full plan"})
     sb.run_idle()
     assert sb.state_of("t1") == "question"

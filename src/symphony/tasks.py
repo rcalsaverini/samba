@@ -6,7 +6,8 @@ import json
 import os
 import re
 import time
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -158,6 +159,11 @@ class TaskStore:
         p.write_text(new_text)
         return n
 
+    def render_questions(self, task_id: str, questions: list[dict[str, object]]) -> None:
+        """Regenerate `## Questions` from the records (SPEC §3.3). No records: no section."""
+        if questions:
+            self.set_section(task_id, "Questions", render_questions(questions))
+
     def set_section(self, task_id: str, heading: str, content: str) -> None:
         state = self.state_of(task_id)
         if state is None:
@@ -254,6 +260,92 @@ def append_to_log_section(text: str, line: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+# ---- question records (SPEC §4.2, §4.3) -----------------------------------------------------
+
+Question = dict[str, object]
+
+
+def now_iso() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def qint(q: Question, key: str) -> int:
+    v = q.get(key)
+    return v if isinstance(v, int) else 0
+
+
+def qstr(q: Question, key: str) -> str:
+    v = q.get(key)
+    return v if isinstance(v, str) else ""
+
+
+def question_number(q: Question) -> int:
+    qid = qstr(q, "id")
+    return int(qid[1:]) if qid[1:].isdigit() else 0
+
+
+def latest_round(questions: list[Question]) -> int:
+    return max((qint(q, "round") for q in questions), default=0)
+
+
+def round_questions(questions: list[Question]) -> list[Question]:
+    """The questions of the latest blocking round."""
+    n = latest_round(questions)
+    return [q for q in questions if qint(q, "round") == n] if n else []
+
+
+def open_questions(questions: list[Question]) -> list[Question]:
+    return [q for q in questions if q.get("status") == "open"]
+
+
+def add_questions(questions: list[Question], stage: str, items: list[tuple[str, str]]) -> None:
+    """Append open records for one blocking event: ids continue after the highest ever used,
+    the round is one more than the latest."""
+    n = max((question_number(q) for q in questions), default=0)
+    rnd = latest_round(questions) + 1
+    for text, context in items:
+        n += 1
+        questions.append({"id": f"q{n}", "round": rnd, "stage": stage, "status": "open",
+                          "text": text, "context": context, "asked_at": now_iso(),
+                          "answer": None, "answered_at": None})
+
+
+def answer_question(q: Question, text: str) -> None:
+    q["status"], q["answer"], q["answered_at"] = "answered", text, now_iso()
+
+
+def dismiss_open(questions: list[Question]) -> None:
+    for q in open_questions(questions):
+        q["status"], q["answered_at"] = "dismissed", now_iso()
+
+
+def render_questions(questions: list[Question]) -> str:
+    blocks: list[str] = []
+    for q in questions:
+        parts = [f"### {qstr(q, 'id')} (round {qint(q, 'round')}, {qstr(q, 'status')})",
+                 qstr(q, "text").strip()]
+        if qstr(q, "context").strip():
+            parts.append("Context: " + qstr(q, "context").strip())
+        if q.get("status") == "answered":
+            parts.append("Answer: " + qstr(q, "answer").strip())
+        blocks.append("\n\n".join(parts))
+    return "\n\n".join(blocks)
+
+
+def round_pairs(questions: list[Question]) -> str:
+    """The latest round as question and answer pairs, for the resume prompt (SPEC §8.2)."""
+    out: list[str] = []
+    for q in round_questions(questions):
+        status = qstr(q, "status")
+        out.append(f"{qstr(q, 'id')} ({status}): {qstr(q, 'text').strip()}")
+        if status == "answered":
+            out.append(f"Answer: {qstr(q, 'answer').strip()}")
+        elif status == "dismissed":
+            out.append("The human dismissed this question without answering.")
+        out.append("")
+    return "\n".join(out).strip()
+
+
 @dataclass
 class Sidecar:
     state: str | None = None  # last known folder, for observed hand moves (SPEC §4.1)
@@ -274,6 +366,7 @@ class Sidecar:
     workspace: str | None = None
     first_dispatched_at: float | None = None
     updated_at: float | None = None
+    questions: list[dict[str, object]] = field(default_factory=lambda: [])  # SPEC §4.2
 
 
 class SidecarStore:
@@ -290,6 +383,8 @@ class SidecarStore:
             return Sidecar()
         data = cast(dict[str, Any], raw)
         known = {f.name for f in fields(Sidecar)}
+        if not isinstance(data.get("questions", []), list):
+            data.pop("questions")
         try:
             return Sidecar(**{k: v for k, v in data.items() if k in known})
         except TypeError:

@@ -7,6 +7,7 @@ appending an answer) belong to the commands that fire an event, never to a row.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -26,6 +27,7 @@ from symphony.tasks import (
     SidecarStore,
     State,
     TaskStore,
+    dismiss_open,
 )
 
 log = logging.getLogger("symphony")
@@ -100,13 +102,13 @@ TRANSITIONS: tuple[Transition, ...] = (
     # for an observed hand move (a hand move never resets the session).
     _t("work-review", "work.reject_fresh", H, "work-todo", "", "session_id=None"),
     _t("question", "question.answer", H, "plan-todo", "last_stage=plan", "attempts=0",
-       "blocked_cause=None"),
+       "blocked_cause=None", "questions=dismiss_open"),
     _t("question", "question.answer", H, "work-todo", "last_stage=work", "attempts=0",
-       "blocked_cause=None"),
+       "blocked_cause=None", "questions=dismiss_open"),
     _t("question", "question.answer", H, "plan-todo", "last_stage=unset", "attempts=0",
-       "blocked_cause=None", "last_stage=plan"),
+       "blocked_cause=None", "last_stage=plan", "questions=dismiss_open"),
     _t("question", "question.answer", H, "work-todo", "last_stage=unset", "attempts=0",
-       "blocked_cause=None", "last_stage=work"),
+       "blocked_cause=None", "last_stage=work", "questions=dismiss_open"),
     _t("stuck", "task.retry", H, "plan-todo", "last_stage=plan", "attempts=0",
        "blocked_cause=None"),
     _t("stuck", "task.retry", H, "work-todo", "last_stage=work", "attempts=0",
@@ -151,7 +153,12 @@ def _first_dispatch(side: Sidecar, _ctx: Ctx) -> None:
         side.first_dispatched_at = time.time()
 
 
+def _dismiss_open(side: Sidecar, _ctx: Ctx) -> None:
+    dismiss_open(side.questions)
+
+
 EFFECTS: dict[str, Effect] = {
+    "questions=dismiss_open": _dismiss_open,
     "attempts=0": _set(attempts=0),
     "attempts+=1": _attempts_inc,
     "not_before=None": _set(not_before=None),
@@ -237,10 +244,13 @@ def _own_guards_ok(row: Transition, side: Sidecar) -> bool:
                if g.startswith("last_stage="))
 
 
-def _apply(row: Transition, side: Sidecar, ctx: Ctx) -> None:
+def _apply(row: Transition, side: Sidecar, ctx: Ctx) -> bool:
+    """Apply the row's effects. True if the question records changed."""
+    before = json.dumps(side.questions)
     for name in row.effects:
         EFFECTS[name](side, ctx)
     side.state = row.dst
+    return json.dumps(side.questions) != before
 
 
 def entry_line(row: Transition, message: str = "") -> str:
@@ -285,8 +295,10 @@ class Machine:
             return False
         if DEBUG_FIRE_DELAY:
             time.sleep(DEBUG_FIRE_DELAY)  # test-only: widens the window the repo lock covers
-        _apply(row, side, ctx)
+        changed = _apply(row, side, ctx)
         self.sidecars.save(task_id, side)
+        if changed:  # `## Questions` is a view of the records (SPEC §3.3)
+            self.tasks.render_questions(task_id, side.questions)
         self.tasks.append_log(task_id, entry_line(row, message))
         log.info(kv("transition", task=task_id, transition=row.event, src=row.src, dst=row.dst,
                     actor=row.actor))
@@ -295,8 +307,10 @@ class Machine:
     def observe(self, task_id: str, row: Transition, side: Sidecar) -> str:
         """Apply a human row for a move already made by hand. Returns the `## Log` line, which
         the caller writes (or defers while an agent runs, SPEC §3.3)."""
-        _apply(row, side, {})
+        changed = _apply(row, side, {})
         self.sidecars.save(task_id, side)
+        if changed:  # the task came from question/, where no agent runs
+            self.tasks.render_questions(task_id, side.questions)
         log.info(kv("transition", task=task_id, transition=row.event, src=row.src, dst=row.dst,
                     actor=row.actor, observed=True))
         return entry_line(row, "observed hand move")

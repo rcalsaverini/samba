@@ -35,7 +35,7 @@ Principles taken from harness engineering:
 
 ### 1.1 Non-goals (v0)
 
-- Remote trackers (Jira, Linear, GitHub Issues). The task store sits behind a small interface (§4.4)
+- Remote trackers (Jira, Linear, GitHub Issues). The task store sits behind a small interface (§4.6)
   so one can be added later.
 - Multi-user use, web UI, HTTP API, remote/SSH workers.
 - Live reload of `WORKFLOW.md`. Restart to apply changes.
@@ -113,13 +113,20 @@ Free-form description written by the human: goal, context, acceptance criteria.
 (Appended by the agent and by Symphony: decisions, progress, validation results.)
 
 ## Questions
-(Written by the agent when it is blocked and needs the human.)
+(Rendered by Symphony from the question records (§4.3). Nobody edits it.)
 ```
 
 - Title = first `# ` heading, else the id.
 - Front matter is optional and human-owned. Unknown keys are ignored. A `depends_on` that is not a
   list of strings is ignored like an unknown key.
 - Ownership of sections is a convention stated in the prompt, not enforced by code.
+- `## Questions` is the exception: it is a rendered view of the question records in the sidecar
+  (§4.3). Symphony regenerates the whole section each time the records change; neither the agent
+  nor the human edits it (an edit is overwritten). The agent reports questions in its outcome
+  (§9.3). Each question renders as `### qN (round R, STATUS)`, its text, `Context: ...` and, once
+  answered, `Answer: ...`. Without records the section is not created. Old free-text
+  `## Questions` sections are not migrated: such a task has no records, and the human moves it out
+  of `question/` by hand.
 
 ### 3.3 Write discipline
 
@@ -129,7 +136,8 @@ Free-form description written by the human: goal, context, acceptance criteria.
   `## Log` (creating the section if missing).
 - Orchestrator bookkeeping goes to the sidecar (§4.2), not to the markdown.
 - A command (§11) may also write a task file, only to append feedback to `## Feedback` of a task in
-  a review or `question` folder, where no agent runs. The exception is `task stop` and
+  a review folder, or to rewrite `## Questions` and append to `## Log` of a task in `question/`
+  (`question answer`), where no agent runs. The exception is `task stop` and
   `task discard` on a running task: `fire` moves the file first, so the command writes its `## Log`
   line to the new path (`stuck/` or `discarded/`), which the agent does not hold, and the
   orchestrator's next tick cancels the worker. A read-modify-write race with an agent that has
@@ -190,8 +198,9 @@ named sidecar changes: `last_error=ctx` takes the error text of the event, `not_
 retry delay. `task new` has no source folder and is not a row.
 
 **Rows change only Symphony's own state** (folder, sidecar, `## Log`). Effects outside Symphony are
-not row effects: a git merge for `work.accept` or appending the answer text for `question.answer`
-is done by the command, which then fires the event. An observed hand move only fires the event, so
+not row effects: a git merge for `work.accept` or recording an answer for `question.answer`
+is done by the command, which then fires the event. (`questions=dismiss_open` only edits the
+sidecar, so it is a row effect.) An observed hand move only fires the event, so
 dragging a task from `work-review` to `done` never merges anything.
 
 <!-- transitions:begin -->
@@ -221,10 +230,10 @@ dragging a task from `work-review` to `done` never merges anything.
 | `work.accept` | `work-review` | `done` | human | | |
 | `work.reject` | `work-review` | `work-todo` | human | | |
 | `work.reject_fresh` | `work-review` | `work-todo` | human | | `session_id=None` |
-| `question.answer` | `question` | `plan-todo` | human | `last_stage=plan` | `attempts=0`, `blocked_cause=None` |
-| `question.answer` | `question` | `work-todo` | human | `last_stage=work` | `attempts=0`, `blocked_cause=None` |
-| `question.answer` | `question` | `plan-todo` | human | `last_stage=unset` | `attempts=0`, `blocked_cause=None`, `last_stage=plan` |
-| `question.answer` | `question` | `work-todo` | human | `last_stage=unset` | `attempts=0`, `blocked_cause=None`, `last_stage=work` |
+| `question.answer` | `question` | `plan-todo` | human | `last_stage=plan` | `attempts=0`, `blocked_cause=None`, `questions=dismiss_open` |
+| `question.answer` | `question` | `work-todo` | human | `last_stage=work` | `attempts=0`, `blocked_cause=None`, `questions=dismiss_open` |
+| `question.answer` | `question` | `plan-todo` | human | `last_stage=unset` | `attempts=0`, `blocked_cause=None`, `last_stage=plan`, `questions=dismiss_open` |
+| `question.answer` | `question` | `work-todo` | human | `last_stage=unset` | `attempts=0`, `blocked_cause=None`, `last_stage=work`, `questions=dismiss_open` |
 | `task.retry` | `stuck` | `plan-todo` | human | `last_stage=plan` | `attempts=0`, `blocked_cause=None` |
 | `task.retry` | `stuck` | `work-todo` | human | `last_stage=work` | `attempts=0`, `blocked_cause=None` |
 | `task.retry` | `stuck` | `plan-todo` | human | `last_stage=unset` | `attempts=0`, `blocked_cause=None`, `last_stage=plan` |
@@ -306,6 +315,7 @@ Owned by Symphony. Fields:
   (§15), `stopped` (a human ran `task stop`). It is an open string, not a closed set: later versions add values. Cleared at dispatch
   and by the rows that send a task back to a todo folder.
 - `plan_session_id`, `plan_approved` (planning, §14.8)
+- `questions` (list of question records, §4.3). A missing field means an empty list.
 - `turns_total` (int)
 - `cost_usd_total` (float), `input_tokens_total`, `output_tokens_total` (ints)
 - `branch` (string), `workspace` (absolute path)
@@ -315,12 +325,57 @@ If the sidecar is missing or unreadable it is recreated empty (attempts 0, no se
 fields (for example the removed `phase` of older versions) are ignored on load and dropped on the
 next save.
 
-### 4.3 In-memory orchestrator state
+### 4.3 Questions
+
+A question is a record owned by Symphony, stored in the sidecar `questions` list:
+
+| Field | Meaning |
+|---|---|
+| `id` | `q1`, `q2`, ...: per task, increasing, never reused (next = highest ever used + 1). The full name is `<task>/<qid>`. |
+| `round` | number of the blocking event that asked it: 1 for the first, one more than the highest existing round after that. The latest round is the highest. |
+| `stage` | `plan` or `work`: the stage of the run that asked |
+| `status` | `open`, `answered` or `dismissed` |
+| `text`, `context` | from the agent's outcome (`context` says why it matters) |
+| `asked_at` | ISO-8601 local time |
+| `answer`, `answered_at` | null until answered. A dismissed question keeps `answer` null and gets `answered_at` set. |
+
+- **Asking.** A `blocked` outcome (work or planning, §9.3) carries `questions: [{text, context}]`.
+  The orchestrator assigns ids and the round, saves the records and renders `## Questions` (§3.3)
+  before firing `work_blocked` or `plan_blocked`. Malformed entries are dropped. A `blocked` outcome
+  without a valid question (for example an agent stopped by a permission denial) still goes to
+  `question/`: Symphony records one open question whose `text` is the run summary (or "The agent
+  reported blocked without a question") and whose `context` says it was synthesized and lists the
+  run's permission denials. A blocked run is never retried.
+- **Answering.** `question answer` (§11) records each answer at once, under the repo lock. It fires
+  `question.answer` (moving the task to its todo folder) only when no question of the latest round
+  is still open.
+- **Dismissing.** Moving the task out of `question/` by hand is the observed `question.answer`
+  event (§4.1). Its `questions=dismiss_open` effect marks the open questions of the task
+  `dismissed`, and the section is re-rendered.
+- **Resuming.** The first run after a question round gets the latest round's questions and answers
+  in its prompt (`{{ questions }}`, §8.2), with dismissed ones marked as such.
+
+### 4.4 In-memory orchestrator state
 
 - `running`: map `id -> {process handle, started_at, last_event_at, turn}`
 - Everything else is derived from folders and sidecars on each tick.
 
-### 4.4 Task store interface
+### 4.5 Data model
+
+Every kind of record Symphony deals with. The store is files (task files, sidecars, run logs); a
+database would replace the storage, not the model.
+
+| Record | Identifier | Written by | Stored in | Lifecycle |
+|---|---|---|---|---|
+| Task | the file name without `.md` (§3.1) | the human creates it (`task new` or by hand); Symphony moves it and appends to `## Log`; the agent edits its own file while it runs | `tasks/<state>/<id>.md`; bookkeeping in `state/<id>.json` (§4.2) | created in a todo folder, moves through the states (§4.1), ends in `done` or `discarded`; files are never deleted by Symphony |
+| Run | `runs/<task>/NNN.jsonl`, `NNN` = the task's turn number (`turns_total`) | Symphony, from the agent's stream (§9.2) | `runs/<task>/NNN.jsonl` (and `validate-NNN.log`) | one per agent invocation, append-only, kept after the task ends |
+| Feedback round | `### Round N` under `## Feedback`, N = highest existing + 1 | the human, through `plan reject` and `work reject` | the task file | appended, never rewritten |
+| Question | `qN` per task, full name `<task>/qN` (§4.3) | the agent asks (in its outcome), Symphony records it; the human answers through `question answer` | the sidecar `questions` list; `## Questions` in the task file is a rendered view | `open`, then `answered` or `dismissed`; never deleted, ids never reused |
+| Log line | none (a timestamped bullet) | Symphony and the agent | `## Log` of the task file | appended, never rewritten |
+
+Questions are the first record with real ids; the others are documented as they are.
+
+### 4.6 Task store interface
 
 The rest of the system only uses these operations, so another tracker can replace the folder store
 later:
@@ -549,6 +604,10 @@ Symphony never deletes branches.
 - `workspace`, `branch`, `base_branch`
 - `attempt` (0 on first run, otherwise number of previous failures)
 - `validate_command` (empty string if none)
+- `questions`: the latest question round as pairs (`q1 (answered): text` then `Answer: ...`;
+  dismissed ones say so), filled only for the first run after a `blocked` outcome whose questions
+  are all closed; empty otherwise. A custom `prompts.resume` or `prompts.plan_revise` that does not
+  mention `{{ questions }}` gets the block appended, so answers are never lost.
 
 ### 8.2 Which prompt is sent
 
@@ -570,7 +629,8 @@ Symphony never deletes branches.
 - `validate_failed`: "You reported done, but `{{ validate_command }}` failed. Last lines of output
   are below. Fix the problem, then report done again.\n\n{output}"
 - `resume`: "You are resuming work on this task. Re-read your task file at {{ task.path }}, especially
-  `## Feedback`, `## Questions` and anything the human added, then continue."
+  `## Feedback` and anything the human added, then continue.\n\n{{ questions }}"
+- `plan_revise` ends with the same `{{ questions }}`.
 - `give_up`: "This task is being stopped after repeated failures. Do not try to fix it. Under a new
   `## Harness gaps` section in {{ task.path }}, write what was missing that would have let you
   succeed: tools, docs, test fixtures, permissions, unclear requirements. Be specific."
@@ -601,8 +661,9 @@ workflow. Content (rendered with the same variables as §8.1):
   branches, or delete branches. (The explicit authorization is required: Claude Code's built-in
   system prompt tells the agent to commit only when the user asks, verified in §12.1.)
 - These rules take precedence over any instruction to ask the user for confirmation before acting.
-- If you need a decision from the human, write the question under `## Questions` and report outcome
-  `blocked`. Do not guess on important ambiguity.
+- If you need a decision from the human, report outcome `blocked` and put each question in
+  `questions` of the final answer (`text` and `context`). Never write `## Questions` yourself:
+  Symphony renders it (§3.3). Do not guess on important ambiguity.
 - The tools you may use (rendered from `claude.allow`). Run allowed shell commands as plain single
   commands, without pipes, `;`, `&&`, `||` or redirections: allow rules match the whole command
   line, so a combined command is denied. (Smoke test: the agent piped the allowed test command into
@@ -690,7 +751,12 @@ Every run passes `--json-schema` with:
 ```json
 {"type": "object",
  "properties": {"outcome": {"type": "string", "enum": ["done", "blocked", "continue"]},
-                "summary": {"type": "string"}},
+                "summary": {"type": "string"},
+                "questions": {"type": "array", "minItems": 1,
+                              "items": {"type": "object",
+                                        "properties": {"text": {"type": "string"},
+                                                       "context": {"type": "string"}},
+                                        "required": ["text", "context"]}}},
  "required": ["outcome", "summary"]}
 ```
 
@@ -698,7 +764,7 @@ Claude Code returns the parsed object in `result.structured_output` (verified). 
 `outcome` from there:
 
 - `done`: work complete, ready for validation.
-- `blocked`: needs the human; questions are in the task file.
+- `blocked`: needs the human; the questions are in `questions` (§4.3).
 - `continue`: more work left.
 
 If `structured_output` is missing or invalid, treat as `continue` and log a warning. `summary` is
@@ -779,7 +845,9 @@ symphony plan accept ID [--repo PATH]
 symphony plan reject ID [--feedback TEXT | --edit] [--repo PATH]
 symphony work reject ID [--feedback TEXT | --edit] [--fresh] [--repo PATH]
 symphony work accept ID [--no-merge] [--no-validate] [--yes] [--dry-run] [--repo PATH]
-symphony question answer ID (TEXT | --edit) [--repo PATH]
+symphony question list [--repo PATH]
+symphony question show TASK[/QID] [--repo PATH]
+symphony question answer TASK[/QID] (TEXT | --edit) [--repo PATH]
 symphony task retry ID   [--repo PATH]
 symphony task stop ID    [--repo PATH]
 symphony task discard ID [--yes] [--repo PATH]
@@ -835,11 +903,27 @@ command moves a task or writes the sidecar except through `fire`. Later commands
 - `plan accept` fires `plan.accept` (§14). `plan reject` fires `plan.reject` and leaves
   `plan_session_id` alone. `work reject` fires `work.reject`; with `--fresh` it fires
   `work.reject_fresh`, which also clears `session_id`.
-- `question answer` fires `question.answer`. The answer is a positional TEXT or `--edit` (exactly
-  one; both or neither is a usage error, and so is empty text, exit 2, nothing changed). It is
-  written with the feedback rules above (`feedback round N` in the `## Log` line). The task goes
-  to the todo folder of `last_stage`; with `last_stage` unset the table's first row applies, so it
-  goes to `plan-todo/` (move by hand to choose `work-todo/`).
+- `question list` prints every open question of every task (tasks in `question/`) as a table with
+  columns TASK, QID, STAGE, ASKED, QUESTION. QID is the full name `<task>/<qid>`, ready to paste
+  into `question answer`. QUESTION is the text on one line, truncated with `...` to fit the
+  terminal width (`COLUMNS`, minimum 20 characters).
+- `question show TASK[/QID]` prints the full text, context and answer of one question. Without
+  `/QID` it prints every question of the task's latest round with its status. It changes nothing.
+- A question is named `TASK/QID`; `TASK` takes a unique prefix as everywhere. An unknown task or
+  question is exit 2.
+- `question answer TASK[/QID]` records one answer and fires `question.answer` only when it leaves
+  no question of the latest round open. The answer is a positional TEXT or `--edit` (exactly one;
+  both or neither is a usage error, and so is empty text, exit 2, nothing changed). `--edit` opens
+  `$EDITOR` on a file that starts with the question and its context as `# ` comment lines; lines
+  starting with `# ` (and bare `#`) are stripped. `/QID` may be left out only when exactly one
+  question is open: with several, exit 2 and stderr lists the open `task/qid` names; with none,
+  exit 1. Answering a question that is not open (answered or dismissed) is exit 1.
+  Under the repo lock the command saves the answer in the sidecar, re-renders `## Questions` (§3.3)
+  and appends `question.answer: <task>/<qid> answered` to `## Log`; it writes nothing under
+  `## Feedback`. When it fires the event, the usual transition line follows and the task goes to
+  the todo folder of `last_stage`; with `last_stage` unset the table's first row applies, so it
+  goes to `plan-todo/` (move by hand to choose `work-todo/`). stdout is the task file's path.
+  When questions remain open, stderr lists them and the task stays in `question/`.
 - `task retry` fires `task.retry` (`stuck` only), same destinations as `question answer`. After
   the move, a hint goes to stderr (stdout stays the path; exit 0) according to the
   `blocked_cause` it had: `budget` says to raise the cap in `WORKFLOW.md` first
@@ -981,7 +1065,7 @@ Tested with throwaway repos and `--model haiku`:
 
 - Reviewer pass: a second Claude run with a review prompt before moving to `work-review/`.
 - Gardening: scheduled tasks that drop cleanup tickets into `work-todo/` (stale docs, drift, tech debt).
-- Other task stores behind §4.4 (GitHub Issues, Jira, Linear).
+- Other task stores behind §4.6 (GitHub Issues, Jira, Linear).
 - PR creation on `work-review` and feeding PR comments or CI results back as `## Feedback`.
 - Claude Agent SDK runner, if in-process permission callbacks become useful.
 - Live reload of `WORKFLOW.md`.
@@ -996,7 +1080,7 @@ Status: implemented. Details settled during implementation:
   like `work-review/`).
 - On approval (`plan.accept`) Symphony sets `plan_approved = true`, so a later stop or retry does
   not route the task to planning again.
-- Headings `#` and `##` inside `plan` and `questions` are written as `###`, so they cannot be
+- Headings `#` and `##` inside `plan`, `assumptions` and the question text are written as `###`, so they cannot be
   mistaken for task sections when the `## Plan` section is replaced.
 - A configured `prompts.plan` replaces the default whole (the default is the `WORKFLOW.md` body
   rendered, then the sentence in §14.5); `prompts.plan_revise` replaces the revise prompt.
@@ -1073,7 +1157,12 @@ logged), with these differences:
   {"type": "object",
    "properties": {"outcome": {"type": "string", "enum": ["planned", "blocked"]},
                   "plan": {"type": "string"},
-                  "questions": {"type": "string"},
+                  "assumptions": {"type": "string"},
+                  "questions": {"type": "array", "minItems": 1,
+                                "items": {"type": "object",
+                                          "properties": {"text": {"type": "string"},
+                                                         "context": {"type": "string"}},
+                                          "required": ["text", "context"]}},
                   "summary": {"type": "string"}},
    "required": ["outcome", "plan", "summary"]}
   ```
@@ -1082,12 +1171,15 @@ logged), with these differences:
   `--append-system-prompt`): you are planning unattended under Symphony; you cannot edit files and
   must not try; read whatever you need; return the plan in `plan` as Markdown with the sections
   *Approach*, *Steps* (checkboxes), *Files to change*, *Risks*, *How to verify*, and, if useful,
-  *Suggested subtasks*; put questions for the human in `questions` and use outcome `blocked` only
-  when the plan cannot be written without the answers.
+  *Suggested subtasks*; put non-blocking assumptions in `assumptions` (the human checks them in
+  plan review, through `plan accept` or `plan reject`, not through `question`); use outcome
+  `blocked` only when the plan cannot be written without answers, and then put the questions in
+  the structured `questions` list, as the work agent does (§4.3).
 - **Writing the result** (no agent running at that point, per §3.3):
   - Replace the whole `## Plan` section of the task file with `## Plan` followed by `plan`
     (create it if missing, before `## Log` if present, else at the end). Never duplicate it.
-  - If `questions` is non-empty, replace the `## Questions` section the same way.
+  - If `assumptions` is non-empty, replace the `## Assumptions` section the same way.
+  - With outcome `blocked`, record the questions and render `## Questions` as in §4.3.
   - Append a `## Log` line as in §5.3, including `summary`.
 - **Transitions:** `planned` → `plan-review/`, `last_outcome = "planned"`. `blocked` →
   `question/`, `last_outcome = "blocked"`, `blocked_cause = "question"`, `last_stage` stays
@@ -1137,7 +1229,8 @@ planning:
 ### 14.9 Fake claude additions
 
 `tests/fake_claude.py` step fields: `plan` (string, put in `structured_output.plan`),
-`questions` (string). For planning runs the fake emits `outcome` as given (`planned` or
+`assumptions` (string, planning runs). For work and planning runs `questions` is a list of
+`{text, context}` put in `structured_output.questions`. For planning runs the fake emits `outcome` as given (`planned` or
 `blocked`). Keep it standard-library only.
 
 ### 14.10 Black-box tests to add
@@ -1156,8 +1249,10 @@ All in the style of `tests/test_blackbox.py` (CLI subprocess, assert on files an
 4. `planning.require_plan: true`: a task in `work-todo/` goes to `plan-review/` first, then
    executes after approval.
 5. Default config: a task in `work-todo/` executes directly (no planning call).
-6. Planner `blocked` with `questions`: task in `question/` with `last_stage: "plan"`,
-   `## Questions` contains them; moving it back to `plan-todo/` replans with attempts reset.
+6. Planner `blocked` with `questions`: task in `question/` with `last_stage: "plan"`, open
+   question records with `stage: "plan"`, `## Questions` renders them; answering them with
+   `question answer` (or moving the task back to `plan-todo/`) replans with attempts reset. A plan
+   with `assumptions` renders `## Assumptions` and no `## Questions`.
 7. Planner failure then success: retried from `plan-todo/`, ends in `plan-review/`; with
    `max_attempts: 1` it ends in `stuck/` and no give-up reflection call is made.
 8. `planning.model` is passed as `--model` for planning and `claude.model` for execution.

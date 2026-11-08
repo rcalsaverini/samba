@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -20,9 +21,28 @@ from symphony import merge, workspace
 from symphony.config import Config, ConfigError, load_config
 from symphony.lock import repo_lock
 from symphony.orchestrator import Orchestrator, StartupError
-from symphony.tasks import STATES, SidecarStore, State, TaskStore
-from symphony.transitions import Machine, human_events, render_markdown_table
-from symphony.views import ResolveError, print_table, render_show, resolve_states, resolve_task_id, task_rows
+from symphony.tasks import (
+    STATES,
+    Question,
+    SidecarStore,
+    State,
+    TaskStore,
+    answer_question,
+    open_questions,
+    qint,
+    qstr,
+    round_questions,
+)
+from symphony.transitions import Machine, human_events, log_line, render_markdown_table
+from symphony.views import (
+    ResolveError,
+    print_table,
+    question_rows,
+    render_show,
+    resolve_states,
+    resolve_task_id,
+    task_rows,
+)
 
 
 def _setup_logging(config: Config) -> None:
@@ -206,6 +226,160 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
     hint = _retry_hint(cause) if hints else None
     if hint:
         print(hint, file=sys.stderr)
+    return 0
+
+
+def _err(msg: str) -> None:
+    print(f"symphony: {msg}", file=sys.stderr)
+
+
+def _split_target(target: str) -> tuple[str, str | None]:
+    """`TASK` or `TASK/QID`. Task ids never contain a slash."""
+    task, sep, qid = target.rpartition("/")
+    return (task, qid) if sep else (target, None)
+
+
+def cmd_question_list(config: Config) -> int:
+    tasks = TaskStore(config.symphony_dir / "tasks")
+    sidecars = SidecarStore(config.symphony_dir / "state")
+    print_table(question_rows(tasks, sidecars, shutil.get_terminal_size().columns))
+    return 0
+
+
+def cmd_question_show(config: Config, target: str) -> int:
+    tasks = TaskStore(config.symphony_dir / "tasks")
+    sidecars = SidecarStore(config.symphony_dir / "state")
+    name, qid = _split_target(target)
+    try:
+        task_id = resolve_task_id(tasks, name)
+    except ResolveError as e:
+        _err(e.render())
+        return 2
+    questions = sidecars.load(task_id).questions
+    shown = [q for q in questions if qstr(q, "id") == qid] if qid else round_questions(questions)
+    if not shown:
+        _err(f"unknown question {task_id}/{qid}" if qid else f"{task_id} has no questions")
+        return 2
+    blocks: list[str] = []
+    for q in shown:
+        lines = [f"{task_id}/{qstr(q, 'id')}  stage: {qstr(q, 'stage')}  round: {qint(q, 'round')}"
+                 f"  status: {qstr(q, 'status')}  asked: {qstr(q, 'asked_at')}",
+                 "", qstr(q, "text")]
+        if qstr(q, "context"):
+            lines += ["", "Context: " + qstr(q, "context")]
+        if q.get("status") == "answered":
+            lines += ["", "Answer: " + qstr(q, "answer")]
+        blocks.append("\n".join(lines))
+    print("\n\n".join(blocks))
+    return 0
+
+
+def _edit_answer(q: Question) -> str | None:
+    """Collect an answer in `$EDITOR` with the question quoted as `# ` comment lines, which are
+    stripped. None if the editor failed."""
+    editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
+    shown = f"{qstr(q, 'id')}: {qstr(q, 'text')}"
+    if qstr(q, "context"):
+        shown += f"\n\nContext: {qstr(q, 'context')}"
+    head = "\n".join(f"# {ln}" if ln else "#" for ln in shown.splitlines())
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "answer.md"
+        path.write_text(head + "\n\n")
+        try:
+            res = subprocess.run([*shlex.split(editor), str(path)])
+        except OSError as e:
+            _err(f"cannot run editor {editor!r}: {e}")
+            return None
+        if res.returncode != 0:
+            _err(f"editor exited with {res.returncode}; nothing changed")
+            return None
+        kept = [ln for ln in path.read_text().splitlines() if ln != "#" and not ln.startswith("# ")]
+        return "\n".join(kept).strip()
+
+
+def cmd_question_answer(config: Config, target: str, text: str | None, edit: bool) -> int:
+    """`question answer` (SPEC §11): records the answer at once; fires `question.answer` only when
+    no question of the round is still open."""
+    tasks = TaskStore(config.symphony_dir / "tasks")
+    sidecars = SidecarStore(config.symphony_dir / "state")
+    event = "question.answer"
+    name, qid = _split_target(target)
+
+    def check(task_id: str) -> Question | int:
+        """The question to answer, or the exit code after reporting the problem."""
+        state = tasks.state_of(task_id)
+        if state is None:
+            _err(f"task {task_id!r} has no file")
+            return 1
+        side = sidecars.load(task_id)
+        events = [r.event for r in human_events(state, side)]
+        if event not in events:
+            _err(f"{task_id} is in {state}; question.answer not allowed. Legal events: "
+                 f"{', '.join(events) or 'none'}")
+            return 1
+        open_qs = open_questions(side.questions)
+        if qid is None:
+            if len(open_qs) == 1:
+                return open_qs[0]
+            if not open_qs:
+                _err(f"{task_id} has no open question; nothing changed")
+                return 1
+            _err(f"{task_id} has {len(open_qs)} open questions; name one as "
+                 f"{task_id}/QID. Open:\n" + "\n".join(f"  {task_id}/{qstr(q, 'id')}"
+                                                       for q in open_qs))
+            return 2
+        found = next((q for q in side.questions if qstr(q, "id") == qid), None)
+        if found is None:
+            _err(f"unknown question {task_id}/{qid}")
+            return 2
+        if found.get("status") != "open":
+            _err(f"{task_id}/{qid} is {qstr(found, 'status')}, not open; nothing changed")
+            return 1
+        return found
+
+    try:
+        task_id = resolve_task_id(tasks, name)
+    except ResolveError as e:
+        _err(e.render())
+        return 2
+    q = check(task_id)
+    if isinstance(q, int):
+        return q
+    answer = text
+    if edit:  # before the lock: editing can take long
+        answer = _edit_answer(q)
+        if answer is None:
+            return 1
+    answer = (answer or "").strip()
+    if not answer:
+        _err("question answer needs text (argument or --edit); nothing changed")
+        return 2
+
+    with repo_lock(config.symphony_dir) as held:
+        if not held:
+            _err("another command or the orchestrator holds .symphony/lock; try again")
+            return 1
+        q = check(task_id)  # re-check: a hand move or another answer may have raced in
+        if isinstance(q, int):
+            return q
+        side = sidecars.load(task_id)
+        record = next(r for r in side.questions if qstr(r, "id") == qstr(q, "id"))
+        answer_question(record, answer)
+        sidecars.save(task_id, side)
+        tasks.render_questions(task_id, side.questions)
+        tasks.append_log(task_id, log_line(f"{event}: {task_id}/{qstr(record, 'id')} answered"))
+        left = [r for r in open_questions(round_questions(side.questions))]
+        if not left:
+            tasks.ensure()
+            if not Machine(tasks, sidecars).fire(task_id, event):
+                _err(f"{event} did not apply to {task_id}; the answer was recorded")
+                return 1
+    state = tasks.state_of(task_id)
+    if state is not None:
+        print(tasks.path(task_id, state))
+    if left:
+        _err(f"{len(left)} question(s) still open: " + ", ".join(
+            f"{task_id}/{qstr(r, 'id')}" for r in left))
     return 0
 
 
@@ -475,10 +649,15 @@ def main(argv: list[str] | None = None) -> int:
     p_wacc.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     p_wacc.add_argument("--dry-run", action="store_true",
                         help="print what would happen, change nothing")
-    p_ques = sub.add_parser("question", help="question commands: answer")
+    p_ques = sub.add_parser("question", help="question commands: list, show, answer")
     ques_sub = p_ques.add_subparsers(dest="question_command", required=True)
-    p_qans = ques_sub.add_parser("answer", help="answer the agent's question; the task resumes")
-    p_qans.add_argument("id", help="task id or unique prefix")
+    p_qlist = ques_sub.add_parser("list", help="list the open questions of every task")
+    p_qshow = ques_sub.add_parser("show", help="show a question, or the latest round of a task")
+    p_qshow.add_argument("id", metavar="TASK[/QID]", help="task id or prefix, optionally /QID")
+    p_qans = ques_sub.add_parser(
+        "answer", help="answer a question; the task resumes when none of the round is open")
+    p_qans.add_argument("id", metavar="TASK[/QID]",
+                        help="task id or prefix; /QID may be left out with one open question")
     p_qans.add_argument("text", nargs="?", help="the answer (or use --edit)")
     p_qans.add_argument("--edit", action="store_true", help="write the answer in $EDITOR")
     p_tretry = task_sub.add_parser("retry", help="send a stuck task back to its todo folder")
@@ -489,11 +668,12 @@ def main(argv: list[str] | None = None) -> int:
     p_tdisc.add_argument("id", help="task id or unique prefix")
     p_tdisc.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     for p in (p_run, p_tnew, p_trans, p_tlist, p_tshow, p_pacc, p_prej,
-              p_wrej, p_wacc, p_qans, p_tretry, p_tstop, p_tdisc):
+              p_wrej, p_wacc, p_qlist, p_qshow, p_qans, p_tretry, p_tstop, p_tdisc):
         p.add_argument("--repo", type=Path, default=Path.cwd(),
                        help="repository root (default: current directory)")
     args = parser.parse_args(argv)
-    if args.command == "question" and args.text is not None and args.edit:
+    if args.command == "question" and args.question_command == "answer" \
+            and args.text is not None and args.edit:
         p_qans.error("give the answer text or --edit, not both")
 
     if args.command == "dev":  # only `transitions`; needs no repo or config
@@ -525,9 +705,12 @@ def main(argv: list[str] | None = None) -> int:
                               "work.reject", feedback=cast(str | None, args.feedback),
                               edit=bool(args.edit), feedback_mode="optional")
     if command == "question":
-        return cmd_transition(config, str(args.id), "question.answer", "question.answer",
-                              feedback=cast(str | None, args.text), edit=bool(args.edit),
-                              feedback_mode="required")
+        if args.question_command == "list":
+            return cmd_question_list(config)
+        if args.question_command == "show":
+            return cmd_question_show(config, str(args.id))
+        return cmd_question_answer(config, str(args.id), cast(str | None, args.text),
+                                   bool(args.edit))
     if command == "task":
         command = str(args.task_command)
     if command == "retry":

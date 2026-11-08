@@ -6,7 +6,16 @@ import time
 from collections.abc import Iterable
 
 from symphony.deps import evaluate
-from symphony.tasks import STATES, Sidecar, SidecarStore, State, Task, TaskStore
+from symphony.tasks import (
+    STATES,
+    Sidecar,
+    SidecarStore,
+    State,
+    Task,
+    TaskStore,
+    open_questions,
+    qstr,
+)
 from symphony.transitions import human_events
 
 HEADER = ["ID", "STATE", "ATTEMPTS", "TURNS", "COST", "LAST", "ERROR"]
@@ -75,6 +84,27 @@ def task_rows(tasks: TaskStore, sidecars: SidecarStore,
     return rows
 
 
+QUESTION_HEADER = ["TASK", "QID", "STAGE", "ASKED", "QUESTION"]
+
+
+def question_rows(tasks: TaskStore, sidecars: SidecarStore, width: int) -> list[list[str]]:
+    """Every open question of every task, QUESTION truncated so rows fit in `width` columns.
+    QID is the full name `<task>/<qid>`, ready to paste into `question answer`."""
+    rows: list[list[str]] = []
+    for task_id in tasks.ids("question"):
+        for q in open_questions(sidecars.load(task_id).questions):
+            rows.append([task_id, f"{task_id}/{qstr(q, 'id')}", qstr(q, "stage"),
+                         qstr(q, "asked_at")[:16].replace("T", " "),
+                         " ".join(qstr(q, "text").split())])
+    fixed = [QUESTION_HEADER, *rows]
+    used = sum(max(len(r[i]) for r in fixed) + 2 for i in range(4))
+    room = max(width - used, 20)
+    for r in rows:
+        if len(r[4]) > room:
+            r[4] = r[4][:room - 3] + "..."
+    return [QUESTION_HEADER, *rows]
+
+
 def print_table(rows: list[list[str]]) -> None:
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
     for r in rows:
@@ -108,6 +138,7 @@ def render_show(tasks: TaskStore, task: Task, side: Sidecar) -> list[str]:
         if dep.kind != "ready":
             held = f" on {', '.join(dep.waiting)}" if dep.waiting else ""
             lines.append(f"dependency_status: {dep.kind}{held}")
+    lines.append(f"open_questions: {len(open_questions(side.questions))}")
     lines += [
         f"branch: {v(side.branch)}",
         f"worktree: {v(side.workspace)}",

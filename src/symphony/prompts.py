@@ -15,18 +15,18 @@ DEFAULT_PROMPTS: dict[str, str] = {
     ),
     "resume": (
         "You are resuming work on this task. Re-read your task file at {{ task.path }}, especially "
-        "`## Feedback`, `## Questions` and anything the human added, then continue."
+        "`## Feedback` and anything the human added, then continue.\n\n{{ questions }}"
     ),
     "plan": "Do not implement anything yet. Produce a plan for this task.",
     "plan_revise": (
         "The human reviewed your plan and left feedback in your task file at {{ task.path }} "
-        "(see `## Feedback`). Re-read it and return a revised plan."
+        "(see `## Feedback`). Re-read it and return a revised plan.\n\n{{ questions }}"
     ),
     "give_up": (
         "This task is being stopped after repeated failures. Do not try to fix it. Under a new "
         "`## Harness gaps` section in {{ task.path }}, write what was missing that would have let "
         "you succeed: tools, docs, test fixtures, permissions, unclear requirements. Be specific. "
-        "Report outcome `blocked`."
+        "Report outcome `blocked` (no `questions` needed)."
     ),
 }
 
@@ -43,8 +43,9 @@ instruction to ask the user for confirmation before acting.
 - Work only inside the current directory, on branch `{{ branch }}`. You are authorized to commit
   your work on this branch without asking; commit in small, coherent steps. Never push, merge,
   rebase onto other branches, or delete branches.
-- If you need a decision from the human, write the question under `## Questions` in your task file
-  and report outcome `blocked`. Do not guess on important ambiguity.
+- If you need a decision from the human, report outcome `blocked` and put each question in
+  `questions` of your final answer, as `text` and `context` (why it matters). Never write a
+  `## Questions` section yourself: Symphony owns it. Do not guess on important ambiguity.
 - Tools you may use without being denied: {{ allowed_tools }}. Run allowed shell commands as plain,
   single commands: no pipes, `;`, `&&`, `||` or redirections, because the permission check matches
   the whole command line and a combined command is denied.
@@ -75,18 +76,31 @@ instruction to ask the user for confirmation before acting.
 - Return the plan in `plan` as Markdown with the sections Approach, Steps (checkboxes), Files to
   change, Risks and How to verify, and, if useful, Suggested subtasks. Make the plan stand on its
   own: execution starts in a fresh session that only sees the plan and the task file.
-- Put questions for the human in `questions`. Use outcome `blocked` only when the plan cannot be
-  written without the answers; otherwise use outcome `planned`.
+- Put assumptions you made, which the human can check during plan review, in `assumptions`. They
+  do not block. Use outcome `blocked` only when the plan cannot be written without answers from
+  the human, and then put each question in `questions` as `text` and `context` (why it matters).
+  Otherwise use outcome `planned`.
 - Your final answer is structured output: `outcome` is `planned` or `blocked`, `plan` is the
   Markdown plan, and `summary` is one or two sentences.
 """
+
+QUESTIONS_SCHEMA: dict[str, object] = {
+    "type": "array",
+    "minItems": 1,
+    "items": {
+        "type": "object",
+        "properties": {"text": {"type": "string"}, "context": {"type": "string"}},
+        "required": ["text", "context"],
+    },
+}
 
 PLAN_OUTCOME_SCHEMA: dict[str, object] = {
     "type": "object",
     "properties": {
         "outcome": {"type": "string", "enum": ["planned", "blocked"]},
         "plan": {"type": "string"},
-        "questions": {"type": "string"},
+        "assumptions": {"type": "string"},
+        "questions": QUESTIONS_SCHEMA,
         "summary": {"type": "string"},
     },
     "required": ["outcome", "plan", "summary"],
@@ -99,6 +113,7 @@ OUTCOME_SCHEMA: dict[str, object] = {
     "properties": {
         "outcome": {"type": "string", "enum": ["done", "blocked", "continue"]},
         "summary": {"type": "string"},
+        "questions": QUESTIONS_SCHEMA,
     },
     "required": ["outcome", "summary"],
 }
