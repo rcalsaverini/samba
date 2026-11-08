@@ -17,6 +17,13 @@ from conftest import Sandbox, stop, wait_for
 SPEC = Path(__file__).parent.parent / "SPEC.md"
 BLOCKER = ["no-such-task"]  # an unknown dependency keeps a todo task where it is
 
+# Live-orchestrator tests poll conditions with a generous deadline (polling returns as soon as the
+# condition holds, so this costs nothing). The fake agent hangs far longer than the deadline, and the
+# stall/turn timeouts are raised above it, so a slow machine never lets a timeout fire first.
+GENEROUS_S = 90
+HANG_S = 600
+LONG_AGENT = {"turn_timeout_s": 900, "stall_timeout_s": 900}
+
 
 def table(sb: Sandbox) -> dict[tuple[str, str, str, str], dict[str, str]]:
     """`samba dev transitions` parsed into {(src, event, guard, dst): row}."""
@@ -74,7 +81,8 @@ def retry_scenario(folder: str) -> Scenario:
         sb.steps("t1", {"is_error": True})
         proc = sb.popen("run", "--exit-when-idle")
         try:
-            wait_for(lambda: "retry_" in safe_text(sb, "t1") and sb.state_of("t1") == folder)
+            wait_for(lambda: "retry_" in safe_text(sb, "t1") and sb.state_of("t1") == folder,
+                     timeout=GENEROUS_S)
         finally:
             stop(proc)
         assert sb.sidecar("t1")["attempts"] == 1
@@ -220,12 +228,18 @@ LIVE_ROWS = [("plan-running", "stuck", "task.stop"), ("work-running", "stuck", "
 def test_human_row_out_of_running_stops_agent(sb: Sandbox, src: str, dst: str,
                                               event: str) -> None:
     stage_todo = src.replace("running", "todo")
+    sb.write_workflow(claude=LONG_AGENT)
     sb.add_task("t1", state=stage_todo)
-    sb.steps("t1", {"hang": 30})
+    sb.steps("t1", {"hang": HANG_S})
     proc = sb.popen("run", "--exit-when-idle")
-    wait_for(lambda: (sb.tasks_dir / src / "t1.md").exists() and bool(sb.calls("t1")))
-    sb.move("t1", src, dst)
-    assert proc.wait(timeout=30) == 0
+    try:
+        wait_for(lambda: (sb.tasks_dir / src / "t1.md").exists() and bool(sb.calls("t1")),
+                 timeout=GENEROUS_S)
+        sb.move("t1", src, dst)
+        # Only stopping the agent can end the run: the hang outlasts every deadline here.
+        assert proc.wait(timeout=GENEROUS_S) == 0
+    finally:
+        stop(proc)
     assert f"{event}: {src} -> {dst}: observed hand move" in sb.log_section("t1")
     if dst == "discarded":
         assert sb.state_of("t1") == "discarded"
@@ -290,15 +304,16 @@ def test_question_answer_to_the_other_stage_is_illegal(sb: Sandbox) -> None:
 
 
 def test_illegal_move_of_running_task_keeps_agent_and_defers_log(sb: Sandbox) -> None:
+    sb.write_workflow(claude=LONG_AGENT)
     sb.add_task("t1")
-    sb.steps("t1", {"hang": 30})
+    sb.steps("t1", {"hang": HANG_S})
     proc = sb.popen("run", "--exit-when-idle")
     running = sb.tasks_dir / "work-running" / "t1.md"
     try:
-        wait_for(lambda: running.exists() and bool(sb.calls("t1")))
+        wait_for(lambda: running.exists() and bool(sb.calls("t1")), timeout=GENEROUS_S)
         sb.move("t1", "work-running", "work-review")
-        wait_for(lambda: "event=illegal_move" in sb.log_text())
-        wait_for(running.exists)
+        wait_for(lambda: "event=illegal_move" in sb.log_text(), timeout=GENEROUS_S)
+        wait_for(running.exists, timeout=GENEROUS_S)
         assert proc.poll() is None
         assert len(sb.calls("t1")) == 1
         assert "illegal move" not in running.read_text()  # not written while the agent runs
