@@ -95,10 +95,18 @@ TRANSITIONS: tuple[Transition, ...] = (
        "blocked_cause=None"),
     _t("question", "question.answer", H, "work-todo", "last_stage=work", "attempts=0",
        "blocked_cause=None"),
+    _t("question", "question.answer", H, "plan-todo", "last_stage=unset", "attempts=0",
+       "blocked_cause=None", "last_stage=plan"),
+    _t("question", "question.answer", H, "work-todo", "last_stage=unset", "attempts=0",
+       "blocked_cause=None", "last_stage=work"),
     _t("stuck", "task.retry", H, "plan-todo", "last_stage=plan", "attempts=0",
        "blocked_cause=None"),
     _t("stuck", "task.retry", H, "work-todo", "last_stage=work", "attempts=0",
        "blocked_cause=None"),
+    _t("stuck", "task.retry", H, "plan-todo", "last_stage=unset", "attempts=0",
+       "blocked_cause=None", "last_stage=plan"),
+    _t("stuck", "task.retry", H, "work-todo", "last_stage=unset", "attempts=0",
+       "blocked_cause=None", "last_stage=work"),
     _t("plan-running", "task.stop", H, "plan-todo"),
     _t("work-running", "task.stop", H, "work-todo"),
     *(_t(s, "task.discard", H, "discarded") for s in DISCARDABLE),
@@ -160,7 +168,8 @@ EFFECTS: dict[str, Effect] = {
     "first_dispatched_at=now": _first_dispatch,
 }
 
-KNOWN_GUARDS = ("deps_met", "plan_required", "last_stage=plan", "last_stage=work")
+KNOWN_GUARDS = ("deps_met", "plan_required", "last_stage=plan", "last_stage=work",
+                "last_stage=unset")
 
 for _row in TRANSITIONS:
     for _e in _row.effects:
@@ -198,11 +207,14 @@ def human_row(src: State, dst: State, side: Sidecar) -> Transition | None:
     return None
 
 
+def _stage_guard_ok(guard: str, side: Sidecar) -> bool:
+    """`last_stage=plan|work|unset` against the sidecar (unset: no stage recorded)."""
+    return guard == f"last_stage={side.last_stage or 'unset'}"
+
+
 def _own_guards_ok(row: Transition, side: Sidecar) -> bool:
-    for g in filter(None, row.guard.split(",")):
-        if g.startswith("last_stage=") and g != f"last_stage={side.last_stage or 'work'}":
-            return False
-    return True
+    return all(_stage_guard_ok(g, side) for g in filter(None, row.guard.split(","))
+               if g.startswith("last_stage="))
 
 
 def _apply(row: Transition, side: Sidecar, ctx: Ctx) -> None:
@@ -228,7 +240,7 @@ class Machine:
     def _guards_ok(self, row: Transition, task_id: str, side: Sidecar) -> bool:
         for g in filter(None, row.guard.split(",")):
             if g.startswith("last_stage="):
-                if g != f"last_stage={side.last_stage or 'work'}":
+                if not _stage_guard_ok(g, side):
                     return False
             elif self.guard is None or not self.guard(g, task_id, side):
                 return False

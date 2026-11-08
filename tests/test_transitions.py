@@ -18,17 +18,17 @@ SPEC = Path(__file__).parent.parent / "SPEC.md"
 BLOCKER = ["no-such-task"]  # an unknown dependency keeps a todo task where it is
 
 
-def table(sb: Sandbox) -> dict[tuple[str, str, str], dict[str, str]]:
-    """`symphony transitions` parsed into {(src, event, guard): row}."""
+def table(sb: Sandbox) -> dict[tuple[str, str, str, str], dict[str, str]]:
+    """`symphony transitions` parsed into {(src, event, guard, dst): row}."""
     res = sb.run("transitions")
     assert res.returncode == 0, res.stderr
-    rows: dict[tuple[str, str, str], dict[str, str]] = {}
+    rows: dict[tuple[str, str, str, str], dict[str, str]] = {}
     for line in res.stdout.splitlines():
         if not line.startswith("| `"):
             continue
         cells = [c.strip().replace("`", "") for c in line.strip().strip("|").split("|")]
         event, src, dst, who, guard, effects = cells
-        rows[(src, event, guard)] = {"dst": dst, "who": who, "effects": effects}
+        rows[(src, event, guard, dst)] = {"who": who, "effects": effects}
     return rows
 
 
@@ -153,7 +153,7 @@ SYMPHONY_ROWS: dict[tuple[str, str, str], Scenario] = {
 @pytest.mark.parametrize("key", list(SYMPHONY_ROWS), ids=lambda k: f"{k[1]}:{k[0]}")
 def test_symphony_row(sb: Sandbox, key: tuple[str, str, str]) -> None:
     src, event, _guard = key
-    dst = table(sb)[key]["dst"]
+    (dst,) = {r[3] for r in table(sb) if r[:3] == key}  # Symphony rows have one destination
     SYMPHONY_ROWS[key](sb)
     assert f"{event}: {src} -> {dst}" in sb.log_section("t1")
     assert f"event=transition task=t1 transition={event} src={src} dst={dst}" in sb.log_text()
@@ -163,35 +163,42 @@ def test_symphony_row(sb: Sandbox, key: tuple[str, str, str]) -> None:
 
 HumanCase = tuple[dict[str, object], dict[str, object]]  # (sidecar before, sidecar expected after)
 
-HUMAN_ROWS: dict[tuple[str, str, str], tuple[str, HumanCase]] = {
-    ("plan-review", "plan.accept", ""): (
-        "work-todo", ({"session_id": "s", "plan_session_id": "p"},
-                      {"plan_approved": True, "session_id": None, "state": "work-todo"})),
-    ("plan-review", "plan.reject", ""): ("plan-todo", ({}, {"state": "plan-todo"})),
-    ("work-review", "work.accept", ""): ("done", ({}, {"state": "done"})),
-    ("work-review", "work.reject", ""): ("work-todo", ({}, {"state": "work-todo"})),
-    ("question", "question.answer", "last_stage=plan"): (
-        "plan-todo", ({"last_stage": "plan", "attempts": 2, "blocked_cause": "question"},
-                      {"attempts": 0, "blocked_cause": None, "state": "plan-todo"})),
-    ("question", "question.answer", "last_stage=work"): (
-        "work-todo", ({"last_stage": "work", "attempts": 2, "blocked_cause": "question"},
-                      {"attempts": 0, "blocked_cause": None, "state": "work-todo"})),
-    ("stuck", "task.retry", "last_stage=plan"): (
-        "plan-todo", ({"last_stage": "plan", "attempts": 3, "blocked_cause": "gave_up"},
-                      {"attempts": 0, "blocked_cause": None, "state": "plan-todo"})),
-    ("stuck", "task.retry", "last_stage=work"): (
-        "work-todo", ({"last_stage": "work", "attempts": 3, "blocked_cause": "budget"},
-                      {"attempts": 0, "blocked_cause": None, "state": "work-todo"})),
-    **{(s, "task.discard", ""): ("discarded", ({}, {"state": "discarded"}))
+# Keys are (src, event, guard, dst): a guard can have two destinations.
+HUMAN_ROWS: dict[tuple[str, str, str, str], HumanCase] = {
+    ("plan-review", "plan.accept", "", "work-todo"):
+        ({"session_id": "s", "plan_session_id": "p"},
+         {"plan_approved": True, "session_id": None, "state": "work-todo"}),
+    ("plan-review", "plan.reject", "", "plan-todo"): ({}, {"state": "plan-todo"}),
+    ("work-review", "work.accept", "", "done"): ({}, {"state": "done"}),
+    ("work-review", "work.reject", "", "work-todo"): ({}, {"state": "work-todo"}),
+    ("question", "question.answer", "last_stage=plan", "plan-todo"):
+        ({"last_stage": "plan", "attempts": 2, "blocked_cause": "question"},
+         {"attempts": 0, "blocked_cause": None, "state": "plan-todo"}),
+    ("question", "question.answer", "last_stage=work", "work-todo"):
+        ({"last_stage": "work", "attempts": 2, "blocked_cause": "question"},
+         {"attempts": 0, "blocked_cause": None, "state": "work-todo"}),
+    ("stuck", "task.retry", "last_stage=plan", "plan-todo"):
+        ({"last_stage": "plan", "attempts": 3, "blocked_cause": "gave_up"},
+         {"attempts": 0, "blocked_cause": None, "state": "plan-todo"}),
+    ("stuck", "task.retry", "last_stage=work", "work-todo"):
+        ({"last_stage": "work", "attempts": 3, "blocked_cause": "budget"},
+         {"attempts": 0, "blocked_cause": None, "state": "work-todo"}),
+    # No last_stage recorded: the folder the human chose decides the stage.
+    **{(src, event, "last_stage=unset", dst):
+       ({"attempts": 2, "blocked_cause": "gave_up"},
+        {"attempts": 0, "blocked_cause": None, "state": dst, "last_stage": dst[:4]})
+       for src, event in (("question", "question.answer"), ("stuck", "task.retry"))
+       for dst in ("plan-todo", "work-todo")},
+    **{(s, "task.discard", "", "discarded"): ({}, {"state": "discarded"})
        for s in ("plan-todo", "plan-review", "work-todo", "work-review", "question", "stuck")},
 }
 
 
-@pytest.mark.parametrize("key", list(HUMAN_ROWS), ids=lambda k: f"{k[1]}:{k[0]}:{k[2]}")
-def test_human_row_is_observed(sb: Sandbox, key: tuple[str, str, str]) -> None:
-    src, event, _guard = key
-    dst, (before, after) = HUMAN_ROWS[key]
-    assert table(sb)[key]["dst"] == dst
+@pytest.mark.parametrize("key", list(HUMAN_ROWS), ids=lambda k: f"{k[1]}:{k[0]}:{k[2]}:{k[3]}")
+def test_human_row_is_observed(sb: Sandbox, key: tuple[str, str, str, str]) -> None:
+    src, event, _guard, dst = key
+    before, after = HUMAN_ROWS[key]
+    assert key in table(sb)
     sb.add_task("t1", state=dst, depends_on=BLOCKER)  # held in place: only the observed effects
     sb.write_sidecar("t1", {"state": src, **before})
     sb.run_idle()
@@ -229,9 +236,11 @@ def test_human_row_out_of_running_stops_agent(sb: Sandbox, src: str, dst: str,
 
 
 def test_every_row_has_a_test(sb: Sandbox) -> None:
-    covered = set(SYMPHONY_ROWS) | set(HUMAN_ROWS)
-    covered |= {(s, e, "") for s, _, e in LIVE_ROWS}
-    assert set(table(sb)) == covered
+    rows = table(sb)
+    covered = set(HUMAN_ROWS) | {(s, e, "", d) for s, d, e in LIVE_ROWS}
+    covered |= {(*k, rows_dst) for k in SYMPHONY_ROWS
+                for rows_dst in {r[3] for r in rows if r[:3] == k}}
+    assert set(rows) == covered
 
 
 def test_spec_table_matches_the_code(sb: Sandbox) -> None:
@@ -248,7 +257,7 @@ def test_spec_table_matches_the_code(sb: Sandbox) -> None:
 def test_actors_and_known_names(sb: Sandbox) -> None:
     rows = table(sb)
     assert {r["who"] for r in rows.values()} == {"symphony", "human"}
-    assert all(re.fullmatch(r"[a-z_.]+", e) for _, e, _ in rows)
+    assert all(re.fullmatch(r"[a-z_.]+", e) for _, e, _, _ in rows)
 
 
 # ---- illegal hand moves ---------------------------------------------------------------------

@@ -167,7 +167,11 @@ fails if it drifts from the code.
 Event names are the future command names (`plan.accept`, `work.reject`, ...). Actor `symphony`
 rows are fired by the orchestrator; actor `human` rows are fired by a command or observed as a hand
 move (below). Guards are names evaluated in code: `deps_met` (§15), `plan_required` (`require_plan`
-is set and the plan is not approved), `last_stage=plan|work` (the sidecar field, §4.2). Effects are
+is set and the plan is not approved), `last_stage=plan|work|unset` (the sidecar field, §4.2; `unset` means none is recorded: a task from
+before the stage layout, or put into `question` or `stuck` by hand). For `question.answer` and
+`task.retry` with `last_stage` unset, either todo folder is accepted: the folder the human chose
+decides the stage and the row sets `last_stage` from it. With `last_stage` set, only the todo
+folder of that stage is legal. Effects are
 named sidecar changes: `last_error=ctx` takes the error text of the event, `not_before=retry` the
 retry delay. `new` has no source folder and is not a row.
 
@@ -204,8 +208,12 @@ dragging a task from `work-review` to `done` never merges anything.
 | `work.reject` | `work-review` | `work-todo` | human | | |
 | `question.answer` | `question` | `plan-todo` | human | `last_stage=plan` | `attempts=0`, `blocked_cause=None` |
 | `question.answer` | `question` | `work-todo` | human | `last_stage=work` | `attempts=0`, `blocked_cause=None` |
+| `question.answer` | `question` | `plan-todo` | human | `last_stage=unset` | `attempts=0`, `blocked_cause=None`, `last_stage=plan` |
+| `question.answer` | `question` | `work-todo` | human | `last_stage=unset` | `attempts=0`, `blocked_cause=None`, `last_stage=work` |
 | `task.retry` | `stuck` | `plan-todo` | human | `last_stage=plan` | `attempts=0`, `blocked_cause=None` |
 | `task.retry` | `stuck` | `work-todo` | human | `last_stage=work` | `attempts=0`, `blocked_cause=None` |
+| `task.retry` | `stuck` | `plan-todo` | human | `last_stage=unset` | `attempts=0`, `blocked_cause=None`, `last_stage=plan` |
+| `task.retry` | `stuck` | `work-todo` | human | `last_stage=unset` | `attempts=0`, `blocked_cause=None`, `last_stage=work` |
 | `task.stop` | `plan-running` | `plan-todo` | human | | |
 | `task.stop` | `work-running` | `work-todo` | human | | |
 | `task.discard` | `plan-todo` | `discarded` | human | | |
@@ -238,7 +246,8 @@ folder differs from its sidecar `state` is looked up as `(state, folder)` among 
   changed, `illegal move: <src> -> <dst>, moved back to <src>` is appended to `## Log` and a
   warning goes to `symphony.log`. Examples: `work-todo -> done`, `done -> work-todo`,
   `plan-todo -> work-todo` (a rejected plan cannot be approved by skipping the review),
-  `question -> work-todo` for a task whose `last_stage` is `plan`.
+  `question -> work-todo` for a task whose `last_stage` is `plan` (but not when `last_stage` is
+  unset).
 - No `state` yet (first sight: a new task, an old sidecar, a missing sidecar): the current folder is
   recorded and nothing fires.
 
