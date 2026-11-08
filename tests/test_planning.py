@@ -204,9 +204,9 @@ def test_moving_task_out_of_running_stops_the_planner(sb: Sandbox) -> None:
     while not (running.exists() and sb.calls("t1")) and time.monotonic() < deadline:
         time.sleep(0.05)
     assert running.exists()
-    move(sb, "t1", "plan-running", "done")
+    move(sb, "t1", "plan-running", "discarded")
     assert proc.wait(timeout=15) == 0
-    assert sb.state_of("t1") == "done"
+    assert sb.state_of("t1") == "discarded"
     assert not sb.worktree("t1").exists()
 
 

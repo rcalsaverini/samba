@@ -25,6 +25,8 @@ LEGACY_STATES: tuple[str, ...] = ("plan", "todo", "running", "review", "blocked"
 CAUSE_QUESTION = "question"
 CAUSE_BUDGET = "budget"
 CAUSE_GAVE_UP = "gave_up"
+CAUSE_DEPENDENCY_DISCARDED = "dependency_discarded"
+CAUSE_DEPENDENCY_CYCLE = "dependency_cycle"
 
 
 def todo_of(stage: Stage) -> State:
@@ -45,6 +47,7 @@ class Task:
     body: str
     priority: int | None
     mtime: float
+    depends_on: tuple[str, ...] = ()
 
 
 def is_valid_id(task_id: str) -> bool:
@@ -59,13 +62,19 @@ def parse_task(task_id: str, state: State, path: Path) -> Task:
         front, body = {}, text
     priority_raw = front.get("priority")
     priority = priority_raw if isinstance(priority_raw, int) and not isinstance(priority_raw, bool) else None
+    deps_raw = front.get("depends_on")
+    depends_on: tuple[str, ...] = ()
+    if isinstance(deps_raw, list):
+        items = cast(list[object], deps_raw)
+        if all(isinstance(d, str) for d in items):
+            depends_on = tuple(cast(list[str], items))
     title = task_id
     for line in body.splitlines():
         if line.startswith("# "):
             title = line[2:].strip() or task_id
             break
     return Task(id=task_id, state=state, path=path, title=title, body=body.strip(),
-                priority=priority, mtime=path.stat().st_mtime)
+                priority=priority, mtime=path.stat().st_mtime, depends_on=depends_on)
 
 
 class TaskStore:
@@ -97,6 +106,11 @@ class TaskStore:
                 except OSError:
                     continue  # moved or deleted while listing
         return tasks
+
+    def ids(self, state: State) -> list[str]:
+        """Valid task ids in a state, without reading the files."""
+        d = self.root / state
+        return [p.stem for p in sorted(d.glob("*.md")) if is_valid_id(p.stem)] if d.is_dir() else []
 
     def invalid_names(self, state: State) -> list[str]:
         d = self.root / state
@@ -202,6 +216,7 @@ def append_to_log_section(text: str, line: str) -> str:
 
 @dataclass
 class Sidecar:
+    state: str | None = None  # last known folder, for observed hand moves (SPEC §4.1)
     session_id: str | None = None
     last_stage: str | None = None  # "plan" | "work", set at dispatch (SPEC §4.2)
     blocked_cause: str | None = None  # why the task is in question/stuck (CAUSE_*)

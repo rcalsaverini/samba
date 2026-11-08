@@ -10,9 +10,11 @@ import hashlib
 import json
 import os
 import shlex
+import signal
 import subprocess
 import sys
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -80,10 +82,16 @@ class Sandbox:
         (self.repo / "WORKFLOW.md").write_text(text)
 
     def add_task(self, task_id: str, body: str = "Do the thing.", state: str = "work-todo",
-                 priority: int | None = None, title: str | None = None) -> Path:
+                 priority: int | None = None, title: str | None = None,
+                 depends_on: list[str] | None = None) -> Path:
         d = self.tasks_dir / state
         d.mkdir(parents=True, exist_ok=True)
-        fm = f"---\npriority: {priority}\n---\n" if priority is not None else ""
+        front: dict[str, Any] = {}
+        if priority is not None:
+            front["priority"] = priority
+        if depends_on is not None:
+            front["depends_on"] = depends_on
+        fm = f"---\n{yaml.safe_dump(front)}---\n" if front else ""
         p = d / f"{task_id}.md"
         p.write_text(f"{fm}# {title or task_id}\n\n{body}\n")
         return p
@@ -144,6 +152,15 @@ class Sandbox:
     def sidecar(self, task_id: str) -> dict[str, Any]:
         return json.loads((self.repo / ".symphony" / "state" / f"{task_id}.json").read_text())
 
+    def move(self, task_id: str, src: str, dst: str) -> None:
+        """Move a task file by hand, like dragging it in the file browser."""
+        (self.tasks_dir / dst).mkdir(parents=True, exist_ok=True)
+        (self.tasks_dir / src / f"{task_id}.md").rename(self.tasks_dir / dst / f"{task_id}.md")
+
+    def log_text(self) -> str:
+        p = self.repo / ".symphony" / "symphony.log"
+        return p.read_text() if p.exists() else ""
+
     def calls(self, task_id: str) -> list[list[str]]:
         p = self.plan_dir / f"{task_id}.calls.jsonl"
         if not p.exists():
@@ -168,6 +185,18 @@ class Sandbox:
 @pytest.fixture
 def sb(tmp_path: Path) -> Iterator[Sandbox]:
     yield Sandbox(tmp_path)
+
+
+def wait_for(cond: Callable[[], bool], timeout: float = 15) -> None:
+    deadline = time.monotonic() + timeout
+    while not cond() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert cond()
+
+
+def stop(proc: subprocess.Popen[str]) -> None:
+    proc.send_signal(signal.SIGINT)
+    proc.wait(timeout=15)
 
 
 def flag(argv: list[str], name: str) -> str | None:

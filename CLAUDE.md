@@ -11,6 +11,9 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `config.py`: loads and validates `WORKFLOW.md` (front matter + prompt body).
   - `tasks.py`: folder-based task store, `## Log` editing, sidecar state (`Sidecar`).
   - `orchestrator.py`: poll loop, dispatch, workers, retries, transitions.
+  - `transitions.py`: the transition table (plain data) and `Machine.fire`, the only path that moves
+    a task (SPEC §4.1). `symphony transitions` prints it; SPEC embeds the output.
+  - `deps.py`: `depends_on` evaluation (SPEC §15).
   - `claude.py`: builds the `claude` argv, runs it, parses stream-json (`RunResult`).
   - `workspace.py`: git worktrees outside the repo; `proc.py`: subprocess helpers (process groups).
   - `prompts.py`: built-in prompts, the protocol prompt, the outcome schema.

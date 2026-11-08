@@ -12,9 +12,11 @@ import time
 from pathlib import Path
 
 from symphony.config import Config, ConfigError, load_config
+from symphony.deps import evaluate
 from symphony.orchestrator import Orchestrator, StartupError
 from symphony.prompts import TASK_TEMPLATE
 from symphony.tasks import STATES, SidecarStore, TaskStore
+from symphony.transitions import render_markdown_table
 
 
 def _setup_logging(config: Config) -> None:
@@ -63,8 +65,13 @@ def cmd_status(config: Config) -> int:
         for task in tasks.list(state):
             s = sidecars.load(task.id)
             last = s.last_outcome or "-"
-            if state in ("plan-todo", "work-todo") and s.not_before and s.not_before > now:
-                last += f" (retry in {s.not_before - now:.0f}s)"
+            if state in ("plan-todo", "work-todo"):
+                if s.not_before and s.not_before > now:
+                    last += f" (retry in {s.not_before - now:.0f}s)"
+                else:
+                    dep = evaluate(tasks, task)
+                    if dep.kind == "waiting":
+                        last = f"waiting on {', '.join(dep.waiting)}"
             shown = state
             if state in ("question", "stuck") and s.blocked_cause:
                 shown = f"{state} ({s.blocked_cause})"
@@ -106,10 +113,16 @@ def main(argv: list[str] | None = None) -> int:
     p_new.add_argument("title")
     p_new.add_argument("--priority", type=int)
     p_new.add_argument("--plan", action="store_true", help="create the task in plan-todo/ instead")
-    for p in (p_run, p_status, p_new):
+    p_trans = sub.add_parser("transitions",
+                             help="print the transition table as Markdown (SPEC §4.1)")
+    for p in (p_run, p_status, p_new, p_trans):
         p.add_argument("--repo", type=Path, default=Path.cwd(),
                        help="repository root (default: current directory)")
     args = parser.parse_args(argv)
+
+    if args.command == "transitions":
+        print(render_markdown_table())
+        return 0
 
     try:
         config = load_config(args.repo)

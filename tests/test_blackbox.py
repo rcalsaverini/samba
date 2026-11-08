@@ -336,7 +336,7 @@ def test_running_tasks_recovered_on_startup(sb: Sandbox) -> None:
     assert flag(sb.calls("t1")[0], "--resume") == "11111111-1111-1111-1111-111111111111"
 
 
-def test_human_moving_running_task_to_done_kills_agent_and_removes_worktree(sb: Sandbox) -> None:
+def test_human_discarding_running_task_kills_agent_and_removes_worktree(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "done", "hang": 30})
     proc = sb.popen("run", "--exit-when-idle")
@@ -345,10 +345,9 @@ def test_human_moving_running_task_to_done_kills_agent_and_removes_worktree(sb: 
     while not (running.exists() and sb.calls("t1")) and time.monotonic() < deadline:
         time.sleep(0.05)
     assert running.exists()
-    (sb.tasks_dir / "done").mkdir(exist_ok=True)
-    running.rename(sb.tasks_dir / "done" / "t1.md")
+    running.rename(sb.tasks_dir / "discarded" / "t1.md")
     assert proc.wait(timeout=15) == 0
-    assert sb.state_of("t1") == "done"
+    assert sb.state_of("t1") == "discarded"
     assert not sb.worktree("t1").exists()
     assert sb.branch_exists("symphony/t1")
 
