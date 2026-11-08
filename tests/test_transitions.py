@@ -1,6 +1,6 @@
 """Black-box tests for the transition table (SPEC §4.1). Must not import the symphony package.
 
-The table is read from `symphony transitions`. Every row has a scenario below, and a coverage test
+The table is read from `symphony dev transitions`. Every row has a scenario below, and a coverage test
 fails when a row is added without one.
 """
 
@@ -19,8 +19,8 @@ BLOCKER = ["no-such-task"]  # an unknown dependency keeps a todo task where it i
 
 
 def table(sb: Sandbox) -> dict[tuple[str, str, str, str], dict[str, str]]:
-    """`symphony transitions` parsed into {(src, event, guard, dst): row}."""
-    res = sb.run("transitions")
+    """`symphony dev transitions` parsed into {(src, event, guard, dst): row}."""
+    res = sb.run("dev", "transitions")
     assert res.returncode == 0, res.stderr
     rows: dict[tuple[str, str, str, str], dict[str, str]] = {}
     for line in res.stdout.splitlines():
@@ -255,7 +255,7 @@ def test_spec_table_matches_the_code(sb: Sandbox) -> None:
 
     def norm(s: str) -> list[str]:
         return [re.sub(r"\s+", " ", ln).strip() for ln in s.strip().splitlines()]
-    assert norm(block) == norm(sb.run("transitions").stdout)
+    assert norm(block) == norm(sb.run("dev", "transitions").stdout)
 
 
 def test_actors_and_known_names(sb: Sandbox) -> None:

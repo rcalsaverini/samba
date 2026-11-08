@@ -1,9 +1,10 @@
-"""Command line: `symphony run | status | new | task list|show | list | show` (SPEC §11)."""
+"""Command line: `symphony run`, and `<noun> <verb>` for task, plan, work, question, dev (SPEC §11)."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import re
@@ -19,7 +20,6 @@ from symphony import merge, workspace
 from symphony.config import Config, ConfigError, load_config
 from symphony.lock import repo_lock
 from symphony.orchestrator import Orchestrator, StartupError
-from symphony.prompts import TASK_TEMPLATE
 from symphony.tasks import STATES, SidecarStore, State, TaskStore
 from symphony.transitions import Machine, human_events, render_markdown_table
 from symphony.views import ResolveError, print_table, render_show, resolve_states, resolve_task_id, task_rows
@@ -63,7 +63,7 @@ def cmd_run(config: Config, exit_when_idle: bool) -> int:
 
 
 def cmd_task_list(config: Config, states: list[str]) -> int:
-    """`task list [STATE...]`; `status` is the same with no filter."""
+    """`task list [STATE...]`."""
     try:
         chosen = resolve_states(states) if states else STATES
     except ResolveError as e:
@@ -323,27 +323,102 @@ def slugify(title: str) -> str:
     return slug[:60].strip("-") or "task"
 
 
-def cmd_new(config: Config, title: str, priority: int | None, plan: bool = False) -> int:
+DEPENDS_PROMPT = "Depends on (ids or prefixes, comma separated, empty for none): "
+
+
+def _resolve_deps(tasks: TaskStore, text: str) -> list[str]:
+    """Comma separated ids or prefixes to full ids, in order, without repeats. Raises ResolveError."""
+    ids: list[str] = []
+    for part in text.split(","):
+        part = part.strip()
+        if part:
+            found = resolve_task_id(tasks, part)
+            if found not in ids:
+                ids.append(found)
+    return ids
+
+
+def _ask(prompt: str) -> str:
+    """One line from stdin after `prompt`. EOF ends the whole command (exit 1)."""
+    print(prompt, end="", flush=True)
+    line = sys.stdin.readline()
+    if not line:
+        raise EOFError
+    return line.rstrip("\r\n")
+
+
+def cmd_task_new(config: Config, title: str | None, body: str | None, depends: str | None,
+                 priority: int, skip_plan: bool) -> int:
+    """`task new` (SPEC §11): flags give every field; on a terminal the missing ones are asked."""
     tasks = TaskStore(config.symphony_dir / "tasks")
+    tty = sys.stdin.isatty() and sys.stdout.isatty()
+    if title is None and not tty:
+        print("symphony: task new needs a TITLE (or run it on a terminal to be asked); "
+              "usage: symphony task new TITLE [--body TEXT] [--depends-on IDS] [--priority N] "
+              "[--skip-plan]", file=sys.stderr)
+        return 2
+    dep_ids: list[str] = []
+    if depends is not None:  # by flag: errors are fatal
+        try:
+            dep_ids = _resolve_deps(tasks, depends)
+        except ResolveError as e:
+            print(f"symphony: {e.render()}", file=sys.stderr)
+            return 2
+    if tty:
+        try:
+            while not (title or "").strip():
+                title = _ask("Title: ").strip()
+            if body is None:
+                lines: list[str] = []
+                print("Description (end with an empty line):", flush=True)
+                while True:
+                    line = sys.stdin.readline().rstrip("\r\n")
+                    if not line:  # an empty line or EOF
+                        break
+                    lines.append(line)
+                body = "\n".join(lines)
+            if depends is None:
+                while True:
+                    try:
+                        dep_ids = _resolve_deps(tasks, _ask(DEPENDS_PROMPT))
+                        break
+                    except ResolveError as e:
+                        print(f"symphony: {e.render()}", file=sys.stderr)
+            if not skip_plan:
+                skip_plan = _ask("Plan first? [Y/n] ").strip().lower() in ("n", "no")
+        except EOFError:
+            print("symphony: input ended; nothing created", file=sys.stderr)
+            return 1
+    assert title is not None
+    title = title.strip()
     tasks.ensure()
     base = slugify(title)
     task_id, n = base, 2
     while tasks.state_of(task_id) is not None:
         task_id, n = f"{base}-{n}", n + 1
-    front = f"---\npriority: {priority}\n---\n" if priority is not None else ""
-    path = tasks.path(task_id, "plan-todo" if plan else "work-todo")
-    path.write_text(TASK_TEMPLATE.format(front=front, title=title))
+    front: dict[str, object] = {"priority": priority}
+    if dep_ids:
+        front["depends_on"] = dep_ids
+    text = "---\n" + "".join(f"{k}: {json.dumps(v)}\n" for k, v in front.items()) + "---\n"
+    text += f"# {title}\n\n"
+    if body and body.strip():
+        text += body.rstrip("\n") + "\n"
+    path = tasks.path(task_id, "work-todo" if skip_plan else "plan-todo")
+    path.write_text(text)
     print(path)
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="symphony")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser = argparse.ArgumentParser(
+        prog="symphony", formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="development commands:\n    dev    commands for working on Symphony itself "
+               "(dev transitions)")
+    sub = parser.add_subparsers(dest="command", required=True, title="commands",
+                                metavar="COMMAND")
     p_run = sub.add_parser("run", help="run the orchestrator loop")
     p_run.add_argument("--exit-when-idle", action="store_true",
                        help="exit once nothing is running and plan-todo/ and work-todo/ are empty")
-    p_status = sub.add_parser("status", help="show tasks and their state (task list, no filter)")
 
     def add_list_args(p: argparse.ArgumentParser) -> None:
         p.add_argument("states", nargs="*", metavar="STATE",
@@ -352,22 +427,25 @@ def main(argv: list[str] | None = None) -> int:
     def add_show_args(p: argparse.ArgumentParser) -> None:
         p.add_argument("id", help="task id or unique prefix")
 
-    p_list = sub.add_parser("list", help="alias of `task list`")
-    add_list_args(p_list)
-    p_show = sub.add_parser("show", help="alias of `task show`")
-    add_show_args(p_show)
-    p_task = sub.add_parser("task", help="task commands: list, show, retry, stop, discard")
+    p_task = sub.add_parser("task", help="task commands: new, list, show, retry, stop, discard")
     task_sub = p_task.add_subparsers(dest="task_command", required=True)
+    p_tnew = task_sub.add_parser("new", help="create a task (asks for missing fields on a terminal)")
+    p_tnew.add_argument("title", nargs="?", metavar="TITLE")
+    p_tnew.add_argument("--body", metavar="TEXT", help="the task description")
+    p_tnew.add_argument("--depends-on", metavar="IDS",
+                        help="comma separated task ids or unique prefixes")
+    p_tnew.add_argument("--priority", type=int, default=3, help="priority (default: 3)")
+    p_tnew.add_argument("--skip-plan", action="store_true",
+                        help="create the task in work-todo/ instead of plan-todo/")
     p_tlist = task_sub.add_parser("list", help="list tasks, optionally filtered by state")
     add_list_args(p_tlist)
     p_tshow = task_sub.add_parser("show", help="show one task in detail")
     add_show_args(p_tshow)
-    p_new = sub.add_parser("new", help="create a task in work-todo/")
-    p_new.add_argument("title")
-    p_new.add_argument("--priority", type=int)
-    p_new.add_argument("--plan", action="store_true", help="create the task in plan-todo/ instead")
-    p_trans = sub.add_parser("transitions",
-                             help="print the transition table as Markdown (SPEC §4.1)")
+    p_dev = sub.add_parser("dev",  # no help=: it is listed in the epilog, apart from the others
+                           description="Commands for working on Symphony itself.")
+    dev_sub = p_dev.add_subparsers(dest="dev_command", required=True)
+    p_trans = dev_sub.add_parser("transitions",
+                                 help="print the transition table as Markdown (SPEC §4.1)")
 
     def add_reject_args(p: argparse.ArgumentParser, fresh: bool = False) -> None:
         p.add_argument("id", help="task id or unique prefix")
@@ -410,7 +488,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tdisc = task_sub.add_parser("discard", help="discard a task (asks for confirmation)")
     p_tdisc.add_argument("id", help="task id or unique prefix")
     p_tdisc.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
-    for p in (p_run, p_status, p_new, p_trans, p_list, p_show, p_tlist, p_tshow, p_pacc, p_prej,
+    for p in (p_run, p_tnew, p_trans, p_tlist, p_tshow, p_pacc, p_prej,
               p_wrej, p_wacc, p_qans, p_tretry, p_tstop, p_tdisc):
         p.add_argument("--repo", type=Path, default=Path.cwd(),
                        help="repository root (default: current directory)")
@@ -418,7 +496,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "question" and args.text is not None and args.edit:
         p_qans.error("give the answer text or --edit, not both")
 
-    if args.command == "transitions":
+    if args.command == "dev":  # only `transitions`; needs no repo or config
         print(render_markdown_table())
         return 0
 
@@ -459,10 +537,10 @@ def main(argv: list[str] | None = None) -> int:
     if command == "discard":
         return cmd_transition(config, str(args.id), "task.discard", "task.discard",
                               confirm_plan="Discard task {id}", yes=bool(args.yes))
-    if command == "status":
-        return cmd_task_list(config, [])
     if command == "list":
         return cmd_task_list(config, cast(list[str], args.states))
     if command == "show":
         return cmd_task_show(config, str(args.id))
-    return cmd_new(config, args.title, args.priority, args.plan)
+    return cmd_task_new(config, cast(str | None, args.title), cast(str | None, args.body),
+                        cast(str | None, args.depends_on), int(args.priority),
+                        bool(args.skip_plan))

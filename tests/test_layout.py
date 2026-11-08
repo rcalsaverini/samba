@@ -77,7 +77,7 @@ def test_status_shows_cause_for_question_and_stuck(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "blocked"})
     sb.run_idle()
-    out = sb.run("status").stdout
+    out = sb.run("task", "list").stdout
     assert "question (question)" in out
 
 

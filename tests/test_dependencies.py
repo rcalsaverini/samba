@@ -121,7 +121,7 @@ def test_status_shows_waiting_on(sb: Sandbox) -> None:
     sb.add_task("a", state="question")
     sb.add_task("b", state="work-review")
     sb.add_task("t1", depends_on=["a", "b"])
-    out = sb.run("status").stdout
+    out = sb.run("task", "list").stdout
     line = next(ln for ln in out.splitlines() if ln.startswith("t1"))
     assert "waiting on a, b" in line
 

@@ -421,21 +421,22 @@ def test_symphony_dir_is_git_excluded(sb: Sandbox) -> None:
     assert git(sb.repo, "status", "--porcelain") == "?? WORKFLOW.md"
 
 
-def test_new_command_creates_todo_task(sb: Sandbox) -> None:
-    res = sb.run("new", "Add CSV export!", "--priority", "2")
+def test_task_new_creates_plan_todo_task(sb: Sandbox) -> None:
+    res = sb.run("task", "new", "Add CSV export!", "--priority", "2")
     assert res.returncode == 0, res.stderr
-    text = (sb.tasks_dir / "work-todo" / "add-csv-export.md").read_text()
+    text = (sb.tasks_dir / "plan-todo" / "add-csv-export.md").read_text()
     assert "# Add CSV export!" in text
     assert "priority: 2" in text
-    res = sb.run("new", "Add CSV export!")
-    assert (sb.tasks_dir / "work-todo" / "add-csv-export-2.md").exists()
+    assert "Describe the goal" not in text
+    res = sb.run("task", "new", "Add CSV export!")
+    assert (sb.tasks_dir / "plan-todo" / "add-csv-export-2.md").exists()
 
 
-def test_status_command_lists_tasks(sb: Sandbox) -> None:
+def test_task_list_shows_cause_and_cost(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "blocked", "cost": 0.5})
     sb.run_idle()
-    res = sb.run("status")
+    res = sb.run("task", "list")
     assert res.returncode == 0, res.stderr
     assert "t1" in res.stdout and "blocked" in res.stdout and "0.50" in res.stdout
 
@@ -460,12 +461,10 @@ def _populate(sb: Sandbox) -> None:
     sb.add_task("h-dis", state="discarded")
 
 
-def test_list_without_filter_equals_status(sb: Sandbox) -> None:
+def test_list_without_filter_shows_all_states(sb: Sandbox) -> None:
     _populate(sb)
-    status = sb.run("status")
     listed = sb.run("task", "list")
-    assert status.returncode == 0 and listed.returncode == 0
-    assert status.stdout == listed.stdout
+    assert listed.returncode == 0
     assert len(_ids(listed.stdout)) == 8
 
 
@@ -508,10 +507,10 @@ def test_list_empty_prints_header_only(sb: Sandbox) -> None:
 
 
 def _table_events(sb: Sandbox, state: str, last_stage: str | None) -> list[tuple[str, str]]:
-    """Human events for `state` read from the `symphony transitions` output (the table)."""
+    """Human events for `state` read from the `symphony dev transitions` output (the table)."""
     want = last_stage or "unset"
     seen: list[tuple[str, str]] = []
-    for line in sb.run("transitions").stdout.splitlines():
+    for line in sb.run("dev", "transitions").stdout.splitlines():
         cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
         if len(cells) < 5 or cells[3] != "human" or cells[1] != state:
             continue
@@ -621,14 +620,8 @@ def test_resolver_exact_prefix_ambiguous_unknown(sb: Sandbox) -> None:
     assert unk.returncode == 2 and "nope" in unk.stderr
 
 
-def test_aliases_match_canonical_forms(sb: Sandbox) -> None:
-    _populate(sb)
-    for canon, alias in [
-        (("task", "list"), ("list",)),
-        (("task", "list", "work"), ("list", "work")),
-        (("task", "list", "zzz"), ("list", "zzz")),
-        (("task", "show", "a-plan"), ("show", "a-plan")),
-        (("task", "show", "nope"), ("show", "nope")),
-    ]:
-        a, b = sb.run(*canon), sb.run(*alias)
-        assert (a.returncode, a.stdout, a.stderr) == (b.returncode, b.stdout, b.stderr), alias
+def test_removed_top_level_commands_are_usage_errors(sb: Sandbox) -> None:
+    for args in (("new", "x"), ("list",), ("show", "x"), ("status",), ("transitions",)):
+        res = sb.run(*args)
+        assert res.returncode == 2, args
+        assert "invalid choice" in res.stderr, args

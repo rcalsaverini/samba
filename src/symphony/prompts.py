@@ -121,10 +121,3 @@ def allowed_tools_note(allow: list[str], permission_mode: str) -> str:
     if not allow:
         return "read-only tools only"
     return ", ".join(f"`{a}`" for a in allow) + " (plus read-only tools)"
-
-
-TASK_TEMPLATE = """\
-{front}# {title}
-
-Describe the goal, the context and the acceptance criteria.
-"""

@@ -211,7 +211,7 @@ def test_moving_task_out_of_running_stops_the_planner(sb: Sandbox) -> None:
 
 
 def test_new_plan_creates_task_in_plan_folder(sb: Sandbox) -> None:
-    res = sb.run("new", "Design the thing", "--plan")
+    res = sb.run("task", "new", "Design the thing")
     assert res.returncode == 0, res.stderr
     assert (sb.tasks_dir / "plan-todo" / "design-the-thing.md").exists()
     assert not (sb.tasks_dir / "work-todo" / "design-the-thing.md").exists()
@@ -220,7 +220,7 @@ def test_new_plan_creates_task_in_plan_folder(sb: Sandbox) -> None:
 def test_status_shows_plan_states(sb: Sandbox) -> None:
     sb.add_task("t1", state="plan-todo")
     sb.run_idle()
-    res = sb.run("status")
+    res = sb.run("task", "list")
     assert "plan-review" in res.stdout
 
 
