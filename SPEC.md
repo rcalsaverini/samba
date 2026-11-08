@@ -131,7 +131,7 @@ Free-form description written by the human: goal, context, acceptance criteria.
 - A command (§11) may also write a task file, only to append feedback to `## Feedback` of a task in
   a review or `question` folder, where no agent runs. The exception is `task stop` and
   `task discard` on a running task: `fire` moves the file first, so the command writes its `## Log`
-  line to the new path (a todo folder or `discarded/`), which the agent does not hold, and the
+  line to the new path (`stuck/` or `discarded/`), which the agent does not hold, and the
   orchestrator's next tick cancels the worker. A read-modify-write race with an agent that has
   already rewritten its file is accepted.
 - **Repo lock.** `.symphony/lock` is an advisory `flock`. Every state-changing command holds it for
@@ -159,7 +159,7 @@ the status (`todo`, `running`, `review`) are both in the name. Moving a file is 
 | `work-running` | Claimed; an agent is (or is about to be) running     | Symphony only              |
 | `work-review`  | Validation passed; branch ready for the human        | Symphony                   |
 | `question`     | The agent needs an answer from the human             | Symphony                   |
-| `stuck`        | Budget exceeded or gave up; needs a human decision   | Symphony                   |
+| `stuck`        | Budget exceeded, gave up or stopped; needs a human decision | Symphony or human   |
 | `done`         | Terminal: accepted (merged)                          | Human                      |
 | `discarded`    | Terminal: abandoned                                  | Human                      |
 
@@ -229,8 +229,8 @@ dragging a task from `work-review` to `done` never merges anything.
 | `task.retry` | `stuck` | `work-todo` | human | `last_stage=work` | `attempts=0`, `blocked_cause=None` |
 | `task.retry` | `stuck` | `plan-todo` | human | `last_stage=unset` | `attempts=0`, `blocked_cause=None`, `last_stage=plan` |
 | `task.retry` | `stuck` | `work-todo` | human | `last_stage=unset` | `attempts=0`, `blocked_cause=None`, `last_stage=work` |
-| `task.stop` | `plan-running` | `plan-todo` | human | | |
-| `task.stop` | `work-running` | `work-todo` | human | | |
+| `task.stop` | `plan-running` | `stuck` | human | | `last_stage=plan`, `blocked_cause=stopped` |
+| `task.stop` | `work-running` | `stuck` | human | | `last_stage=work`, `blocked_cause=stopped` |
 | `task.discard` | `plan-todo` | `discarded` | human | | |
 | `task.discard` | `plan-running` | `discarded` | human | | |
 | `task.discard` | `plan-review` | `discarded` | human | | |
@@ -273,9 +273,10 @@ folder differs from its sidecar `state` is looked up as `(state, folder)` among 
 A hand move made while Symphony was stopped is interpreted in the first tick after it starts, after
 recovery (§5.1).
 
-Moving a task out of a `*-running` folder: the legal targets are the matching todo folder
-(`task.stop`) and `discarded` (`task.discard`). Both stop the agent (§5.2). Any other target
-(`done`, a review folder, `question`, `stuck`, the other stage's folders) is illegal: the file is
+Moving a task out of a `*-running` folder: the legal targets are `stuck`
+(`task.stop`, which sets `last_stage` and `blocked_cause=stopped`) and `discarded`
+(`task.discard`). Both stop the agent (§5.2). Any other target
+(`done`, a review folder, `question`, a todo folder, the other stage's folders) is illegal: the file is
 moved back **before** the agent is reconciled, so the agent keeps running. Because Symphony writes
 to a task file only while no agent runs (§3.3), the `## Log` line of an event observed on a task
 with a live agent is held in memory and appended when its worker ends.
@@ -302,7 +303,7 @@ Owned by Symphony. Fields:
   task in `question` or `stuck`, or one that is stopped or retried, which stage it belongs to.
 - `blocked_cause` (string or null): why the task is in `question` or `stuck`. Values now:
   `question` (the agent asked), `budget`, `gave_up`, `dependency_discarded`, `dependency_cycle`
-  (§15). It is an open string, not a closed set: later versions add values. Cleared at dispatch
+  (§15), `stopped` (a human ran `task stop`). It is an open string, not a closed set: later versions add values. Cleared at dispatch
   and by the rows that send a task back to a todo folder.
 - `plan_session_id`, `plan_approved` (planning, §14.8)
 - `turns_total` (int)
@@ -824,15 +825,16 @@ command moves a task or writes the sidecar except through `fire`. Later commands
   (`max_turns`, `max_attempts`, `max_cost_usd_per_task`) or the task goes straight back to
   `stuck`; `dependency_discarded` and `dependency_cycle` say to edit `depends_on` first. Other
   causes print nothing. The command never changes the config.
-- `task stop` fires `task.stop` (only `plan-running` and `work-running`): the task goes to the
-  todo folder of its stage, no attempt increment. With the orchestrator running, its next tick
-  sees the task left its running folder and cancels the agent, as for a hand move, and the task is
-  dispatched again like any todo task. Without an orchestrator the file and sidecar are moved and
-  nothing else happens: the next `symphony run` sees a normal todo task. An agent process left
-  behind by a crashed orchestrator is not killed.
+- `task stop` fires `task.stop` (only `plan-running` and `work-running`): the task goes to
+  `stuck/` with `last_stage` set to the stage it was running and `blocked_cause=stopped`, no
+  attempt increment. It is not dispatched again: it stays put until `task retry` sends it back to
+  the todo folder of its stage (no hint is printed for `stopped`). With the orchestrator running,
+  its next tick sees the task left its running folder and cancels the agent, as for a hand move.
+  Without an orchestrator the file and sidecar are moved and nothing else happens. An agent
+  process left behind by a crashed orchestrator is not killed.
 - `task discard` fires `task.discard` (every state but `done` and `discarded`) and is dangerous:
   it uses the confirmation policy of `work accept` (after the legality check and before the lock;
-  `--yes` skips it; prompt `Discard task <id>? [y/N]` on a TTY, anything but `y`/`yes` is exit 1;
+  `--yes` skips it; prompt `Discard task <id>? [y/N]` on a TTY, with the resolved task id, not the prefix typed, anything but `y`/`yes` is exit 1;
   no TTY and no `--yes` is exit 2; nothing changes in either case). Discarding a running task
   moves it at once and the orchestrator then stops the agent; the worktree is removed afterwards
   and the branch is kept (§5.2).

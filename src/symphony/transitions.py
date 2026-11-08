@@ -21,6 +21,7 @@ from symphony.tasks import (
     CAUSE_DEPENDENCY_DISCARDED,
     CAUSE_GAVE_UP,
     CAUSE_QUESTION,
+    CAUSE_STOPPED,
     Sidecar,
     SidecarStore,
     State,
@@ -114,8 +115,8 @@ TRANSITIONS: tuple[Transition, ...] = (
        "blocked_cause=None", "last_stage=plan"),
     _t("stuck", "task.retry", H, "work-todo", "last_stage=unset", "attempts=0",
        "blocked_cause=None", "last_stage=work"),
-    _t("plan-running", "task.stop", H, "plan-todo"),
-    _t("work-running", "task.stop", H, "work-todo"),
+    _t("plan-running", "task.stop", H, "stuck", "", "last_stage=plan", "blocked_cause=stopped"),
+    _t("work-running", "task.stop", H, "stuck", "", "last_stage=work", "blocked_cause=stopped"),
     *(_t(s, "task.discard", H, "discarded") for s in DISCARDABLE),
 )
 
@@ -159,6 +160,7 @@ EFFECTS: dict[str, Effect] = {
     f"blocked_cause={CAUSE_QUESTION}": _set(blocked_cause=CAUSE_QUESTION),
     f"blocked_cause={CAUSE_BUDGET}": _set(blocked_cause=CAUSE_BUDGET),
     f"blocked_cause={CAUSE_GAVE_UP}": _set(blocked_cause=CAUSE_GAVE_UP),
+    f"blocked_cause={CAUSE_STOPPED}": _set(blocked_cause=CAUSE_STOPPED),
     f"blocked_cause={CAUSE_DEPENDENCY_DISCARDED}": _set(blocked_cause=CAUSE_DEPENDENCY_DISCARDED),
     f"blocked_cause={CAUSE_DEPENDENCY_CYCLE}": _set(blocked_cause=CAUSE_DEPENDENCY_CYCLE),
     "last_error=None": _set(last_error=None),

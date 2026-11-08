@@ -25,6 +25,7 @@ LEGACY_STATES: tuple[str, ...] = ("plan", "todo", "running", "review", "blocked"
 CAUSE_QUESTION = "question"
 CAUSE_BUDGET = "budget"
 CAUSE_GAVE_UP = "gave_up"
+CAUSE_STOPPED = "stopped"
 CAUSE_DEPENDENCY_DISCARDED = "dependency_discarded"
 CAUSE_DEPENDENCY_CYCLE = "dependency_cycle"
 

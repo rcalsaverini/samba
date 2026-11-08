@@ -129,34 +129,56 @@ def test_retry_hints(sb: Sandbox, cause: str, word: str) -> None:
 def test_stop_live_agent(sb: Sandbox, stage: str) -> None:
     running = f"{stage}-running"
     sb.add_task("t1", state=f"{stage}-todo")
-    sb.steps("t1", {"hang": 30}, {"hang": 30})  # the stopped task is dispatched again
+    sb.steps("t1", {"hang": 30}, {"hang": 30})  # the second is used after `task retry`
     proc = sb.popen("run")
     try:
         wait_for(lambda: sb.pids("t1") != [] and sb.state_of("t1") == running)
         pid = sb.pids("t1")[0]
         res = sb.run("task", "stop", "t1")
         assert res.returncode == 0, res.stderr
-        assert res.stdout.strip() == str(sb.tasks_dir / f"{stage}-todo" / "t1.md")
+        assert res.stdout.strip() == str(sb.tasks_dir / "stuck" / "t1.md")
         wait_for(lambda: not alive(pid))
-        wait_for(lambda: len(sb.pids("t1")) == 2)  # redispatched, as a normal todo task
-        time.sleep(0.5)
+        time.sleep(2.5)  # several poll intervals: it must not be dispatched again
+        assert len(sb.pids("t1")) == 1 and sb.state_of("t1") == "stuck"
         side = sb.sidecar("t1")  # the cancelled worker did not write a stale sidecar
-        assert side["attempts"] == 0 and side["state"] == running, side
+        assert side["state"] == "stuck" and side["attempts"] == 0, side
+        assert side["blocked_cause"] == "stopped" and side["last_stage"] == stage, side
+        res = sb.run("task", "retry", "t1")
+        assert res.returncode == 0, res.stderr
+        assert res.stderr.strip() == ""
+        wait_for(lambda: len(sb.pids("t1")) == 2)  # dispatched again
+        assert sb.state_of("t1") == running
     finally:
         stop(proc)
     log = sb.log_section("t1")
-    assert log.count(f"task.stop: {running} -> {stage}-todo") == 1, log
+    assert log.count(f"task.stop: {running} -> stuck") == 1, log
     assert "observed hand move" not in log and "illegal move" not in log, log
 
 
-def test_stop_without_orchestrator(sb: Sandbox) -> None:
-    seed(sb, "t1", "work-running", last_stage="work", attempts=1)
+@pytest.mark.parametrize("stage,after", [("work", "work-review"), ("plan", "plan-review")])
+def test_stop_without_orchestrator(sb: Sandbox, stage: str, after: str) -> None:
+    seed(sb, "t1", f"{stage}-running", last_stage=stage, attempts=1)
     res = sb.run("task", "stop", "t1")
     assert res.returncode == 0, res.stderr
-    assert sb.state_of("t1") == "work-todo" and sb.sidecar("t1")["state"] == "work-todo"
+    assert sb.state_of("t1") == "stuck"
+    side = sb.sidecar("t1")
+    assert side["state"] == "stuck" and side["blocked_cause"] == "stopped"
+    assert side["last_stage"] == stage
     sb.run_idle()
-    assert sb.state_of("t1") == "work-review"
+    assert sb.state_of("t1") == "stuck" and sb.calls("t1") == []
+    assert sb.run("task", "retry", "t1").returncode == 0
+    assert sb.state_of("t1") == f"{stage}-todo"
+    sb.run_idle()
+    assert sb.state_of("t1") == after
     assert "observed" not in sb.log_section("t1")
+
+
+def test_retry_stopped_has_no_hint(sb: Sandbox) -> None:
+    seed(sb, "t1", "stuck", last_stage="work", blocked_cause="stopped")
+    res = sb.run("task", "retry", "t1")
+    assert res.returncode == 0 and res.stderr.strip() == ""
+    assert sb.sidecar("t1")["blocked_cause"] is None
+    assert sb.state_of("t1") == "work-todo"
 
 
 # ---- task discard ---------------------------------------------------------------------------
@@ -203,6 +225,25 @@ def test_discard_tty_prompt(sb: Sandbox) -> None:
             assert proc.returncode == 1
 
 
+def test_discard_prompt_names_resolved_id(sb: Sandbox) -> None:
+    pty = pytest.importorskip("pty")
+    seed(sb, "task-one", "work-review")
+    master, slave = pty.openpty()
+    proc = subprocess.Popen([*symphony_cmd(), "task", "discard", "task-o", "--repo", str(sb.repo)],
+                            cwd=sb.repo, env=sb.env(), stdin=slave, stdout=slave,
+                            stderr=subprocess.PIPE)
+    os.close(slave)
+    out = ""
+    while "[y/N]" not in out:
+        chunk = os.read(master, 4096).decode()
+        assert chunk, "no prompt"
+        out += chunk
+    os.write(master, b"n\n")
+    proc.wait(timeout=60)
+    os.close(master)
+    assert "Discard task task-one?" in out, out
+
+
 def test_discard_running_kills_agent_and_keeps_branch(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.steps("t1", {"hang": 30})
@@ -226,6 +267,7 @@ WRONG = [
     (["question", "answer", "t1", "text"], "work-todo", "question.answer"),
     (["task", "retry", "t1"], "work-review", "task.retry"),
     (["task", "stop", "t1"], "work-todo", "task.stop"),
+    (["task", "stop", "t1"], "stuck", "task.stop"),
     (["task", "discard", "t1", "--yes"], "done", "task.discard"),
     (["task", "discard", "t1", "--yes"], "discarded", "task.discard"),
 ]

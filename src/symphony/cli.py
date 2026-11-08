@@ -179,7 +179,7 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
               file=sys.stderr)
         return 2
     if confirm_plan is not None:
-        code = confirm(confirm_plan, label, yes)
+        code = confirm(confirm_plan.format(id=task_id), label, yes)
         if code is not None:
             return code
 
@@ -405,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
     p_qans.add_argument("--edit", action="store_true", help="write the answer in $EDITOR")
     p_tretry = task_sub.add_parser("retry", help="send a stuck task back to its todo folder")
     p_tretry.add_argument("id", help="task id or unique prefix")
-    p_tstop = task_sub.add_parser("stop", help="stop a running task; it goes back to its todo")
+    p_tstop = task_sub.add_parser("stop", help="stop a running task; it goes to stuck until `task retry`")
     p_tstop.add_argument("id", help="task id or unique prefix")
     p_tdisc = task_sub.add_parser("discard", help="discard a task (asks for confirmation)")
     p_tdisc.add_argument("id", help="task id or unique prefix")
@@ -458,7 +458,7 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_transition(config, str(args.id), "task.stop", "task.stop")
     if command == "discard":
         return cmd_transition(config, str(args.id), "task.discard", "task.discard",
-                              confirm_plan=f"Discard task {args.id}", yes=bool(args.yes))
+                              confirm_plan="Discard task {id}", yes=bool(args.yes))
     if command == "status":
         return cmd_task_list(config, [])
     if command == "list":

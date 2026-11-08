@@ -211,7 +211,7 @@ def test_human_row_is_observed(sb: Sandbox, key: tuple[str, str, str, str]) -> N
 
 COMMAND_ONLY = {("work-review", "work.reject_fresh", "", "work-todo")}
 
-LIVE_ROWS = [("plan-running", "plan-todo", "task.stop"), ("work-running", "work-todo", "task.stop"),
+LIVE_ROWS = [("plan-running", "stuck", "task.stop"), ("work-running", "stuck", "task.stop"),
              ("plan-running", "discarded", "task.discard"),
              ("work-running", "discarded", "task.discard")]
 
@@ -230,8 +230,9 @@ def test_human_row_out_of_running_stops_agent(sb: Sandbox, src: str, dst: str,
     if dst == "discarded":
         assert sb.state_of("t1") == "discarded"
         assert not sb.worktree("t1").exists()
-    else:  # stopped, so it ran again and finished
-        assert len(sb.calls("t1")) == 2
+    else:  # stopped: it stays in stuck and is not dispatched again
+        assert sb.state_of("t1") == "stuck"
+        assert len(sb.calls("t1")) == 1
 
 
 # ---- coverage and drift ----------------------------------------------------------------------
