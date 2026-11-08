@@ -612,6 +612,11 @@ Tested with throwaway repos and `--model haiku`:
   warning); `--allowedTools` and `--settings` allow rules are honored.
 - `--json-schema` returns the parsed object in `result.structured_output`.
 - Isolation results: see §9.4.
+- Read-only planning (§14.4): `--permission-mode plan` runs headless without hanging, but its Write
+  tool still succeeds by redirecting to `~/.claude/plans/<name>.md` (a file in the user's home), and
+  it switched to a different model than `--model` asked for (17x the cost in the test).
+  `dontAsk` with `--allowedTools Read Grep Glob` denies writes, still auto-allows read-only shell
+  commands (`git log`, `git status`, `ls`), honors `--model`, and returns structured output.
 
 ## 13. Later (explicitly out of v0)
 
@@ -621,3 +626,169 @@ Tested with throwaway repos and `--model haiku`:
 - PR creation on `review` and feeding PR comments or CI results back as `## Feedback`.
 - Claude Agent SDK runner, if in-process permission callbacks become useful.
 - Live reload of `WORKFLOW.md`.
+- Automatic subtask creation from a plan, with dependency tracking ("blocked by").
+- Plans committed into the repo (for example `docs/exec-plans/`) instead of only the task file.
+
+## 14. Planning phase (v0.2)
+
+Status: specified, not implemented. This section is self-contained so it can be handed to an agent
+as a task. Where it changes earlier sections, it says so; update those sections in the same change.
+
+### 14.1 Goal
+
+Let the human review a plan before any code is written, for the tasks where that is worth it.
+Planning is **opt-in per task** (or per repo via `require_plan`). Tasks that skip it behave exactly
+as in v0. A planning run can read the repository but cannot change anything; the plan comes back as
+structured output and Symphony writes it into the task file.
+
+### 14.2 States and flow
+
+Two new state folders, added to §2 layout, §4.1 and to `STATES` (order matters for `status`
+output): `plan`, `plan-review`, `todo`, `running`, `review`, `blocked`, `done`.
+
+| Folder        | Meaning                                         | Who moves files in |
+|---------------|-------------------------------------------------|--------------------|
+| `plan`        | Ready to be planned (new, or plan revision)     | Human              |
+| `plan-review` | Plan written; waiting for the human             | Symphony           |
+
+```
+plan ──dispatch──> running (phase plan) ──planned──> plan-review
+                         │  ├──blocked──> blocked
+                         │  └──failure──> plan (retry) / blocked (gave up)
+plan-review ──human approves: move to todo──> todo ──> running (phase execute) ──> review ...
+plan-review ──human adds ## Feedback, moves to plan──> plan   (revises the same plan)
+```
+
+- `running/` is shared by both phases. The sidecar field `phase` (`"plan"` or `"execute"`) says
+  which one a running task is in. Reconcile, stop, shutdown and recovery work unchanged: on
+  recovery or shutdown a running task goes back to the folder it was dispatched from (`plan/` when
+  `phase == "plan"`, else `todo/`).
+- Retries of a failed planning run go back to `plan/` (same backoff and `max_attempts` as §5.4,
+  and the give-up reflection turn is skipped for planning runs).
+
+### 14.3 Dispatch rules
+
+Dispatch candidates come from both `plan/` and `todo/`, in one list sorted as in §5.2, limited by
+the same `max_concurrent`. For each candidate, the phase is decided at dispatch:
+
+1. File in `plan/` → phase `plan`.
+2. File in `todo/` and sidecar `last_outcome == "planned"` → the human approved the plan: set
+   `plan_approved = true`, clear `session_id` (execution starts a fresh session, §14.6), phase
+   `execute`.
+3. File in `todo/`, `planning.require_plan` is true, and `plan_approved` is false → phase `plan`.
+4. Otherwise → phase `execute` (v0 behavior).
+
+The attempt reset rule of §5.4 also applies to planning (`last_outcome` of `blocked` or `failed`).
+
+### 14.4 The planning run
+
+Same machinery as §9 (worktree, stream reading, timeouts, cost accounting, budget cap, denials
+logged), with these differences:
+
+- **Permissions:** always `--permission-mode dontAsk` and `--allowedTools <planning.allow>`
+  (default `Read`, `Grep`, `Glob`), regardless of `claude.permission_mode` and `claude.allow`.
+  Verified (§12.1): writes are denied, read-only shell commands still run. Do **not** use
+  `--permission-mode plan`: it writes files into `~/.claude/plans/` and changes the model.
+- **Model:** `--model <planning.model>` if set, else `claude.model`.
+- **Session:** its own session id, stored in sidecar `plan_session_id` (separate from
+  `session_id`). First planning run: new session with the `plan` prompt. Revision (sidecar has
+  `plan_session_id`): `--resume` it with the `plan_revise` prompt. Missing session: start fresh
+  with the `plan` prompt, as in §9.1.
+- **One invocation per dispatch** (no continue loop, no validation).
+- **Outcome schema** (passed with `--json-schema`):
+
+  ```json
+  {"type": "object",
+   "properties": {"outcome": {"type": "string", "enum": ["planned", "blocked"]},
+                  "plan": {"type": "string"},
+                  "questions": {"type": "string"},
+                  "summary": {"type": "string"}},
+   "required": ["outcome", "plan", "summary"]}
+  ```
+
+- **Protocol prompt:** a planning variant of §8.5 (Symphony-owned, appended with
+  `--append-system-prompt`): you are planning unattended under Symphony; you cannot edit files and
+  must not try; read whatever you need; return the plan in `plan` as Markdown with the sections
+  *Approach*, *Steps* (checkboxes), *Files to change*, *Risks*, *How to verify*, and, if useful,
+  *Suggested subtasks*; put questions for the human in `questions` and use outcome `blocked` only
+  when the plan cannot be written without the answers.
+- **Writing the result** (no agent running at that point, per §3.3):
+  - Replace the whole `## Plan` section of the task file with `## Plan` followed by `plan`
+    (create it if missing, before `## Log` if present, else at the end). Never duplicate it.
+  - If `questions` is non-empty, replace the `## Questions` section the same way.
+  - Append a `## Log` line as in §5.3, including `summary`.
+- **Transitions:** `planned` → `plan-review/`, `last_outcome = "planned"`. `blocked` → `blocked/`,
+  `last_outcome = "blocked"`. Missing or invalid structured output, or no `plan` text with outcome
+  `planned` → a failure (§5.4).
+
+### 14.5 Prompts
+
+Added to §8.3 defaults and overridable in `prompts:` like the others:
+
+- `plan`: the `WORKFLOW.md` body rendered as usual (§8.1), followed by: "Do not implement anything
+  yet. Produce a plan for this task."
+- `plan_revise`: "The human reviewed your plan and left feedback in your task file at
+  {{ task.path }} (see `## Feedback`). Re-read it and return a revised plan."
+
+### 14.6 Executing an approved plan
+
+- Execution after approval starts a **new** session (§14.3 rule 2). The plan must stand on its own;
+  if a fresh session cannot follow it, the plan was incomplete.
+- When `plan_approved` is true, the execution protocol prompt (§8.5) gets one extra rule: "An
+  approved plan is in the `## Plan` section of your task file. Follow it. If you must deviate,
+  record what and why in `## Log`. Tick the plan's checkboxes as you complete steps."
+- Everything else is v0 behavior (continue loop, validation, review).
+- Rework from `review/` (move to `todo/`) keeps `plan_approved = true` and resumes the execution
+  session, as in v0.
+
+### 14.7 Config
+
+Added to §6.1:
+
+```yaml
+planning:
+  require_plan: false         # true: todo/ tasks are planned (and reviewed) before execution
+  model: null                 # defaults to claude.model
+  allow: ["Read", "Grep", "Glob"]
+```
+
+### 14.8 Sidecar and status
+
+- New sidecar fields: `phase` (`"plan" | "execute" | null`), `plan_session_id` (string or null),
+  `plan_approved` (bool, default false). Old sidecars without them load with defaults.
+- `symphony status` shows the two new states; for running tasks it shows the phase.
+- `symphony new --plan` creates the task in `plan/` instead of `todo/`.
+
+### 14.9 Fake claude additions
+
+`tests/fake_claude.py` step fields: `plan` (string, put in `structured_output.plan`),
+`questions` (string). For planning runs the fake emits `outcome` as given (`planned` or
+`blocked`). Keep it standard-library only.
+
+### 14.10 Black-box tests to add
+
+All in the style of `tests/test_blackbox.py` (CLI subprocess, assert on files and recorded calls):
+
+1. A task in `plan/` ends in `plan-review/` with the plan text under `## Plan`; the call used
+   `--permission-mode dontAsk`, `--allowedTools` exactly `planning.allow`, a schema whose outcome
+   enum is `["planned", "blocked"]`, and no execution-only flags' values (no `Edit` in the allow
+   list); no commits were added to `symphony/<id>`.
+2. Approval: moving it to `todo/` runs execution with a **new** `--session-id` (not the plan
+   session), the system prompt mentions the approved plan, and it ends in `review/`.
+3. Rejection: adding `## Feedback` and moving it to `plan/` resumes `plan_session_id` with the
+   revise prompt; afterwards the task file has exactly one `## Plan` section, containing the
+   revised plan.
+4. `planning.require_plan: true`: a task in `todo/` goes to `plan-review/` first, then executes
+   after approval.
+5. Default config: a task in `todo/` executes directly (no planning call).
+6. Planner `blocked` with `questions`: task in `blocked/`, `## Questions` contains them; moving it
+   back to `plan/` replans with attempts reset.
+7. Planner failure then success: retried from `plan/`, ends in `plan-review/`; with
+   `max_attempts: 1` it ends in `blocked/` and no give-up reflection call is made.
+8. `planning.model` is passed as `--model` for planning and `claude.model` for execution.
+9. Recovery: a task in `running/` with sidecar `phase: "plan"` at startup is re-planned from
+   `plan/`, not executed.
+10. Moving a task out of `running/` during planning stops the planner (as in v0).
+11. `symphony new --plan` creates the file in `plan/`.
+
+All existing tests must keep passing unchanged; `uv run pyright` must stay at 0 errors.
