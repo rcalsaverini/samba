@@ -4,9 +4,11 @@
 samba run      [--repo PATH] [--exit-when-idle]
                   # start the loop (foreground; Ctrl-C stops agents and exits).
                   # --exit-when-idle: exit once nothing is running and plan-todo/ and
-                  # work-todo/ hold no task that can run. Tasks held only by dependencies
-                  # (dependencies) do not count, so a dependency waiting for a human cannot hang the
-                  # run. Exits 1 with an `mv` recipe if old-layout folders still hold tasks
+                  # work-todo/ hold no task that can run (plan-review/ and work-review/ are the
+                  # human's and do not keep it alive). Tasks held only by dependencies
+                  # (orchestrator, Dependencies) do not count, so a dependency waiting for a human
+                  # cannot hang the run. A dependency that is itself runnable in a todo folder does
+                  # keep it alive. Exits 1 with an `mv` recipe if old-layout folders still hold tasks
                   # (orchestrator, Startup).
 samba task new [TITLE] [--body TEXT] [--depends-on ID[,ID...]] [--priority N]
                   [--skip-plan] [--repo PATH]
@@ -74,7 +76,7 @@ command moves a task or writes the sidecar except through `fire`. Later commands
   highest existing round), creating the section before `## Log` if missing. Earlier text is never
   rewritten, and `#`/`##` headings inside the text are demoted to `###`. No feedback (or empty)
   is allowed: no round is added and `warning: rejecting without feedback` goes to stderr.
-- `plan accept` fires `plan.accept` (planning). `plan reject` fires `plan.reject` and leaves
+- `plan accept` fires `plan.accept` (states, Planning stage). `plan reject` fires `plan.reject` and leaves
   `plan_session_id` alone. `work reject` fires `work.reject`; with `--fresh` it fires
   `work.reject_fresh`, which also clears `session_id`.
 - `question list` prints every open question of every task (tasks in `question/`) as a table with

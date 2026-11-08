@@ -25,7 +25,7 @@
 | New worker run, session exists (retry, rework, answered question) | `resume`                | resume           |
 | Resume fails (session not found)                 | `WORKFLOW.md` body                       | new              |
 | Giving up                                        | `give_up`                                | resume           |
-| Planning run, no plan session (planning, The planning run)            | `plan`                                   | new (plan session) |
+| Planning run, no plan session (running-claude, Planning run) | `plan`                            | new (plan session) |
 | Planning run, plan session exists (revision)     | `plan_revise`                            | resume (plan session) |
 
 ## Built-in defaults
@@ -36,7 +36,12 @@
   are below. Fix the problem, then report done again.\n\n{output}"
 - `resume`: "You are resuming work on this task. Re-read your task file at {{ task.path }}, especially
   `## Feedback` and anything the human added, then continue.\n\n{{ questions }}"
-- `plan_revise` ends with the same `{{ questions }}`.
+- `plan`: the `WORKFLOW.md` body rendered as usual (Template rendering above), followed by: "Do not
+  implement anything yet. Produce a plan for this task." A configured `prompts.plan` replaces this
+  default whole.
+- `plan_revise`: "The human reviewed your plan and left feedback in your task file at
+  {{ task.path }} (see `## Feedback`). Re-read it and return a revised plan." It ends with the same
+  `{{ questions }}`. A configured `prompts.plan_revise` replaces it.
 - `give_up`: "This task is being stopped after repeated failures. Do not try to fix it. Under a new
   `## Harness gaps` section in {{ task.path }}, write what was missing that would have let you
   succeed: tools, docs, test fixtures, permissions, unclear requirements. Be specific."
@@ -65,7 +70,7 @@ workflow. Content (rendered with the same variables as prompts, Template renderi
 - Work only inside the current directory, on branch `{{ branch }}`. **You are authorized to commit
   your work there without asking; commit in small steps.** Never push, merge, rebase onto other
   branches, or delete branches. (The explicit authorization is required: Claude Code's built-in
-  system prompt tells the agent to commit only when the user asks, verified in implementation-notes, Verified Claude Code behavior.)
+  system prompt tells the agent to commit only when the user asks, verified in running-claude, Verified Claude Code behavior.)
 - These rules take precedence over any instruction to ask the user for confirmation before acting.
 - If you need a decision from the human, report outcome `blocked` and put each question in
   `questions` of the final answer (`text` and `context`). Never write `## Questions` yourself:
@@ -81,6 +86,28 @@ workflow. Content (rendered with the same variables as prompts, Template renderi
   it. (Smoke test: without this, the agent reported `blocked` when it could not run the validator.)
 - Your final answer is structured output (running-claude, Outcome): `outcome` is `done`, `blocked` or `continue`, and
   `summary` is one or two sentences.
+
+### Planning variant
+
+A planning run (running-claude, Planning run) gets a variant of the protocol prompt, also
+Samba-owned and appended with `--append-system-prompt` (`prompts.PLAN_PROTOCOL` in code; the same
+budget caps apply). Content: you are planning unattended under Samba; you cannot edit files and
+must not try; read whatever you need; return the plan in `plan` as Markdown with the sections
+*Approach*, *Steps* (checkboxes), *Files to change*, *Risks*, *How to verify*, and, if useful,
+*Suggested subtasks*; put non-blocking assumptions in `assumptions` (the human checks them in
+plan review, through `plan accept` or `plan reject`, not through `question`); use outcome
+`blocked` only when the plan cannot be written without answers, and then put the questions in the
+structured `questions` list, as the work agent does (states, Questions).
+
+### Executing an approved plan
+
+Execution after approval starts a **new** session (states, States: `plan.accept` clears
+`session_id`). The plan must stand on its own; if a fresh session cannot follow it, the plan was
+incomplete. When `plan_approved` is true, the execution protocol prompt gets one extra rule: "An
+approved plan is in the `## Plan` section of your task file. Follow it. If you must deviate,
+record what and why in `## Log`. Tick the plan's checkboxes as you complete steps." Everything
+else is as for any work run (continue loop, validation, `work-review`). Rework from `work-review/`
+keeps `plan_approved = true` and resumes the execution session.
 
 ## Where the agent's context comes from
 

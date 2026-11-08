@@ -281,7 +281,7 @@ class Orchestrator:
             worker.add_done_callback(functools.partial(self._on_worker_done, task.id))
 
     def _deps_ready(self, task: Task) -> bool:
-        """The dependency guard of the dispatch rows (spec: dependencies). Fires the stuck rows."""
+        """The dependency guard of the dispatch rows (spec: orchestrator, Dependencies). Fires the stuck rows."""
         status = evaluate(self.tasks, task)
         if status.kind == "ready":
             return True
@@ -414,7 +414,7 @@ class Orchestrator:
         await self._fail(task_id, side, f"max_turns ({cfg.max_turns}) exhausted")
 
     async def _plan(self, task: Task, side: Sidecar, ws: Path) -> None:
-        """One planning invocation (spec: planning, The planning run)."""
+        """One planning invocation (spec: running-claude, Planning run)."""
         cfg = self.config
         task_id = task.id
         try:

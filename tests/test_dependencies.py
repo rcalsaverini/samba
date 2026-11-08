@@ -1,4 +1,4 @@
-"""Black-box tests for task dependencies (spec: dependencies). Must not import the samba package."""
+"""Black-box tests for task dependencies (spec: orchestrator, Dependencies). Must not import the samba package."""
 
 from __future__ import annotations
 

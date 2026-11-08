@@ -1,4 +1,6 @@
-# Later (explicitly out of v0)
+# Backlog
+
+Ideas not built yet.
 
 - Reviewer pass: a second Claude run with a review prompt before moving to `work-review/`.
 - Gardening: scheduled tasks that drop cleanup tickets into `work-todo/` (stale docs, drift, tech debt).
@@ -6,6 +8,7 @@
 - PR creation on `work-review` and feeding PR comments or CI results back as `## Feedback`.
 - Claude Agent SDK runner, if in-process permission callbacks become useful.
 - Live reload of `WORKFLOW.md`.
-- Automatic subtask creation from a plan, with dependency tracking ("blocked by").
+- Automatic subtask creation from a plan, with dependency tracking. Dependencies between tasks
+  already exist as `depends_on` (orchestrator, Dependencies); what is missing is creating the
+  subtasks and their `depends_on` from a plan.
 - Plans committed into the repo (for example `docs/exec-plans/`) instead of only the task file.
-

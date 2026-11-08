@@ -96,7 +96,7 @@ The settings that matter most:
 - **`hooks.after_create`**: a shell script run once in each new worktree (for example
   `uv sync -q`). If it fails, the attempt fails. Spec chapter workspaces, Creation.
 - **`planning.require_plan`**: when `true`, every task is planned and reviewed before any code is
-  written, even if it was created with `--skip-plan` or by hand. Spec chapter planning.
+  written, even if it was created with `--skip-plan` or by hand. Spec chapters states (Planning stage), running-claude (Planning run).
 - **`base_branch`** (default `main`) and **`workspaces_root`** (default `~/.samba/workspaces`,
   must be outside the repo).
 - The body: state the task with `{{ task.title }}` and `{{ task.body }}`, point to the repo's own
@@ -148,12 +148,12 @@ Tips for the text:
 - **`depends_on`**: ids of tasks that must be `done` (merged) first. The dependent task waits in
   its todo folder, and its worktree branches from a base branch that already has the
   dependency's work. A dependency that was discarded sends the dependent task to `stuck`. Spec
-  chapter dependencies.
+  chapter orchestrator, Dependencies.
 - **Plan first or not**: by default a task starts in `plan-todo`: the agent reads the repo,
   cannot change anything, and returns a plan you approve or reject before any code is written.
   `--skip-plan` creates the task in `work-todo` and goes straight to work (unless
   `planning.require_plan` is set). Use planning for anything non-trivial, where a wrong approach
-  would be expensive to find in review. Spec chapter planning.
+  would be expensive to find in review. Spec chapters states (Planning stage), running-claude (Planning run).
 
 You can also create the file by hand in `.samba/tasks/plan-todo/` or `.samba/tasks/work-todo/`.
 
