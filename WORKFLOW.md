@@ -24,6 +24,8 @@ claude:
     - "Bash(diff:*)"
     - "Bash(wc:*)"
     - "Bash(sed -n:*)"
+    # Deleting tracked files. Safe here: agents work in worktrees on a branch you review.
+    - "Bash(git rm:*)"
     # Trying the CLI in a scratch repo. Not `samba run` (an orchestrator inside a worktree) and
     # not `work accept` (it merges into a real base branch); their --help is allowed.
     - "Bash(uv run samba --help)"
