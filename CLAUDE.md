@@ -7,8 +7,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
 - `SPEC.md`: the source of truth for behavior. Read the sections relevant to your task before
   changing code, and update the spec in the same change when behavior changes.
 - `src/symphony/`
-  - `cli.py`: `run`, `status`, `new`, `task list|show` (aliases `list`, `show`), `plan`/`work`
-    review commands (including `work accept`).
+  - `cli.py`: `run` and `<noun> <verb>` commands, no aliases: `task new|list|show|retry|stop|discard`,
+    `plan`/`work`/`question` review commands (including `work accept`), `dev transitions`.
   - `merge.py`: git steps of `work accept`: preflight, `--no-commit` merge, validate, commit/abort.
   - `views.py`: read-only shared helpers: table printer, state-prefix matcher, task id resolver
     (`resolve_task_id`, reused by every command taking an id), `task show` renderer.
@@ -16,7 +16,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `tasks.py`: folder-based task store, `## Log` editing, sidecar state (`Sidecar`).
   - `orchestrator.py`: poll loop, dispatch, workers, retries, transitions.
   - `transitions.py`: the transition table (plain data) and `Machine.fire`, the only path that moves
-    a task (SPEC §4.1). `symphony transitions` prints it; SPEC embeds the output.
+    a task (SPEC §4.1). `symphony dev transitions` prints it; SPEC embeds the output.
   - `lock.py`: `repo_lock`, the `.symphony/lock` flock shared by commands and orchestrator ticks.
   - `deps.py`: `depends_on` evaluation (SPEC §15).
   - `claude.py`: builds the `claude` argv, runs it, parses stream-json (`RunResult`).

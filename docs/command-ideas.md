@@ -1,5 +1,7 @@
 # Symphony command ideas
 
+Note: the CLI cleanup changed some spellings (`task new`, `dev transitions`; top-level `new`, `list`, `show`, `status` removed). This doc is historical.
+
 Status: exploration, for human sign-off. No code, tests or SPEC changed by this document. Proposed
 SPEC wording is included where useful; follow-up tasks edit `SPEC.md`.
 
