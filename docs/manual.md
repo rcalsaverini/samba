@@ -313,6 +313,7 @@ $ samba question answer <id> --edit
 ```
 
 - `question list` shows every open question of every task, with the full name ready to paste.
+  The question text fills the terminal width and is cut with `...` only when it does not fit.
 - `question show` prints the text, the context and the answer. Without `/qid` it shows the whole
   latest round.
 - `question answer` records one answer at a time. The task moves back to its todo folder only
@@ -371,7 +372,8 @@ $ samba task show <id>
 `task list` prints one row per task with the columns ID, STATE, ATTEMPTS, TURNS, COST, LAST and
 ERROR. STATE is the folder name; `question` and `stuck` add the cause, as in `stuck (budget)`.
 LAST is the last run's outcome, or `(retry in 45s)` while the task waits out a retry delay, or
-`waiting on other-task` when a todo task is held only by dependencies.
+`waiting on other-task` when a todo task is held only by dependencies. ERROR takes the remaining
+terminal width and is cut with `...` only when it does not fit.
 
 For example, with one planned task and one that depends on it:
 

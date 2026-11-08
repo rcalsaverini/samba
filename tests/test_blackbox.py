@@ -536,6 +536,17 @@ def _shown_events(out: str) -> list[tuple[str, str]]:
     return events
 
 
+def test_task_list_error_column_uses_terminal_width(sb: Sandbox) -> None:
+    sb.add_task("p1", state="plan-review")
+    err = "something went wrong " * 6
+    err = err.strip()
+    sb.write_sidecar("p1", {"last_outcome": "planned", "last_error": err})
+    wide = sb.run("task", "list", COLUMNS="200").stdout.splitlines()
+    assert wide[1].endswith(err) and "..." not in wide[1]
+    narrow = sb.run("task", "list", COLUMNS="80").stdout.splitlines()
+    assert narrow[1].endswith("...") and len(narrow[1]) <= 80
+
+
 def test_show_plan_review(sb: Sandbox) -> None:
     sb.add_task("p1", state="plan-review", title="Plan me", priority=3)
     sb.write_sidecar("p1", {"attempts": 2, "turns_total": 7, "cost_usd_total": 1.5,

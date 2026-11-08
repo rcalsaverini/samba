@@ -81,8 +81,11 @@ command moves a task or writes the sidecar except through `fire`. Later commands
   `work.reject_fresh`, which also clears `session_id`.
 - `question list` prints every open question of every task (tasks in `question/`) as a table with
   columns TASK, QID, STAGE, ASKED, QUESTION. QID is the full name `<task>/<qid>`, ready to paste
-  into `question answer`. QUESTION is the text on one line, truncated with `...` to fit the
-  terminal width (`COLUMNS`, minimum 20 characters).
+  into `question answer`. QUESTION is the text on one line and takes the width left over by the
+  other columns, which are never cut. It is truncated with `...` only when it does not fit the
+  terminal width (`COLUMNS`, else the TTY size, else 80), and is never narrower than 20
+  characters. `task list` uses the same rule for its last column, ERROR (newlines flattened to
+  spaces).
 - `question show TASK[/QID]` prints the full text, context and answer of one question. Without
   `/QID` it prints every question of the task's latest round with its status. It changes nothing.
 - A question is named `TASK/QID`; `TASK` takes a unique prefix as everywhere. An unknown task or

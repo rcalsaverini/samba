@@ -91,7 +91,7 @@ def cmd_task_list(config: Config, states: list[str]) -> int:
         return 2
     tasks = TaskStore(config.samba_dir / "tasks")
     sidecars = SidecarStore(config.samba_dir / "state")
-    print_table(task_rows(tasks, sidecars, chosen))
+    print_table(task_rows(tasks, sidecars, chosen), shutil.get_terminal_size().columns, flex=6)
     return 0
 
 
@@ -242,7 +242,7 @@ def _split_target(target: str) -> tuple[str, str | None]:
 def cmd_question_list(config: Config) -> int:
     tasks = TaskStore(config.samba_dir / "tasks")
     sidecars = SidecarStore(config.samba_dir / "state")
-    print_table(question_rows(tasks, sidecars, shutil.get_terminal_size().columns))
+    print_table(question_rows(tasks, sidecars), shutil.get_terminal_size().columns, flex=4)
     return 0
 
 
