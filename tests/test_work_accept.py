@@ -1,4 +1,4 @@
-"""Black-box tests for `work accept` (SPEC §11). Must not import symphony."""
+"""Black-box tests for `work accept` (SPEC §11). Must not import samba."""
 
 from __future__ import annotations
 
@@ -21,13 +21,13 @@ def commit_file(cwd: Path, name: str, text: str, msg: str = "change") -> None:
 
 def accept_task(sb: Sandbox, task_id: str = "t1", state: str = "work-review",
                 branch: bool = True, **workflow: Any) -> None:
-    """A task in `state` whose branch `symphony/<id>` has one commit adding `feature.txt`."""
+    """A task in `state` whose branch `samba/<id>` has one commit adding `feature.txt`."""
     if workflow:
         sb.write_workflow(**workflow)
     sb.add_task(task_id, state=state, title="Add the feature")
-    sb.write_sidecar(task_id, {"state": state, "branch": f"symphony/{task_id}"})
+    sb.write_sidecar(task_id, {"state": state, "branch": f"samba/{task_id}"})
     if branch:
-        git(sb.repo, "checkout", "-q", "-b", f"symphony/{task_id}")
+        git(sb.repo, "checkout", "-q", "-b", f"samba/{task_id}")
         commit_file(sb.repo, "feature.txt", "feature\n", "add feature")
         git(sb.repo, "checkout", "-q", "main")
 
@@ -58,7 +58,7 @@ def test_success(sb: Sandbox) -> None:
     assert "t1" in git(sb.repo, "log", "-1", "--format=%s")
     assert "Add the feature" in git(sb.repo, "log", "-1", "--format=%s")
     assert (sb.repo / "feature.txt").exists()
-    assert sb.branch_exists("symphony/t1")
+    assert sb.branch_exists("samba/t1")
     assert "work.accept: work-review -> done" in sb.log_section("t1")
 
 
@@ -70,7 +70,7 @@ def test_no_merge(sb: Sandbox) -> None:
     assert sb.state_of("t1") == "done"
     assert head(sb) == before
     assert not (sb.repo / "feature.txt").exists() and not (sb.repo / "ran.marker").exists()
-    assert sb.branch_exists("symphony/t1")
+    assert sb.branch_exists("samba/t1")
 
 
 def test_dry_run(sb: Sandbox) -> None:
@@ -79,7 +79,7 @@ def test_dry_run(sb: Sandbox) -> None:
     res = sb.run("work", "accept", "t1", "--dry-run", **IDENT)
     assert res.returncode == 0, res.stderr
     out = res.stdout + res.stderr
-    assert "symphony/t1" in out and "main" in out and "touch ran.marker" in out
+    assert "samba/t1" in out and "main" in out and "touch ran.marker" in out
     assert "1 commit" in out
     assert head(sb) == before and sb.state_of("t1") == "work-review"
     assert not (sb.repo / "ran.marker").exists()
@@ -98,11 +98,11 @@ def test_tty_prompt(sb: Sandbox) -> None:
     pty = pytest.importorskip("pty")
     import os
 
-    from conftest import symphony_cmd
+    from conftest import samba_cmd
     accept_task(sb)
     for answer, merged in ((b"n\n", False), (b"y\n", True)):
         master, slave = pty.openpty()
-        proc = subprocess.Popen([*symphony_cmd(), "work", "accept", "t1", "--repo", str(sb.repo)],
+        proc = subprocess.Popen([*samba_cmd(), "work", "accept", "t1", "--repo", str(sb.repo)],
                                 cwd=sb.repo, env=sb.env(**IDENT), stdin=slave, stdout=slave,
                                 stderr=subprocess.PIPE)
         os.close(slave)
@@ -141,7 +141,7 @@ def test_preflight_branch_missing(sb: Sandbox) -> None:
     accept_task(sb, branch=False)
     before = head(sb)
     res = sb.run("work", "accept", "t1", "--yes", **IDENT)
-    assert res.returncode == 1 and "symphony/t1" in res.stderr
+    assert res.returncode == 1 and "samba/t1" in res.stderr
     assert sb.state_of("t1") == "work-review" and head(sb) == before
 
 
@@ -161,7 +161,7 @@ def test_unknown_id(sb: Sandbox) -> None:
 
 def test_conflict_aborted(sb: Sandbox) -> None:
     accept_task(sb)
-    git(sb.repo, "checkout", "-q", "symphony/t1")
+    git(sb.repo, "checkout", "-q", "samba/t1")
     commit_file(sb.repo, "shared.txt", "branch side\n")
     git(sb.repo, "checkout", "-q", "main")
     commit_file(sb.repo, "shared.txt", "main side\n")
@@ -192,7 +192,7 @@ def test_validation_failure_after_merge(sb: Sandbox) -> None:
     assert sb.state_of("t1") == "work-review"
     log = sb.log_section("t1")
     assert "validation failed after merge" in log and "MARKER-OUTPUT" in log
-    assert sb.branch_exists("symphony/t1")
+    assert sb.branch_exists("samba/t1")
 
 
 def test_validation_passes_after_merge(sb: Sandbox) -> None:

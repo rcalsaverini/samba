@@ -1,7 +1,7 @@
 """The transition table and the single `fire` path (SPEC §4.1).
 
-The table is plain data so a rewrite in another language can reuse it. Rows only change Symphony's
-own state: the folder, the sidecar and the task's `## Log`. Effects outside Symphony (a git merge,
+The table is plain data so a rewrite in another language can reuse it. Rows only change Samba's
+own state: the folder, the sidecar and the task's `## Log`. Effects outside Samba (a git merge,
 appending an answer) belong to the commands that fire an event, never to a row.
 """
 
@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-from symphony.tasks import (
+from samba.tasks import (
     CAUSE_BUDGET,
     CAUSE_DEPENDENCY_CYCLE,
     CAUSE_DEPENDENCY_DISCARDED,
@@ -30,12 +30,12 @@ from symphony.tasks import (
     dismiss_open,
 )
 
-log = logging.getLogger("symphony")
+log = logging.getLogger("samba")
 
 # Test-only knob (SPEC §12): seconds `fire` sleeps between the rename and the sidecar save.
-DEBUG_FIRE_DELAY = float(os.environ.get("SYMPHONY_DEBUG_FIRE_DELAY") or 0)
+DEBUG_FIRE_DELAY = float(os.environ.get("SAMBA_DEBUG_FIRE_DELAY") or 0)
 
-Actor = Literal["symphony", "human"]
+Actor = Literal["samba", "human"]
 
 
 @dataclass(frozen=True)
@@ -53,7 +53,7 @@ def _t(src: State, event: str, actor: Actor, dst: State, guard: str = "",
     return Transition(src, event, actor, dst, guard, effects)
 
 
-S: Actor = "symphony"
+S: Actor = "samba"
 H: Actor = "human"
 RUNNING: tuple[State, ...] = ("plan-running", "work-running")
 TODO: tuple[State, ...] = ("plan-todo", "work-todo")
@@ -212,7 +212,7 @@ def kv(event: str, **fields: object) -> str:
 
 def log_line(message: str) -> str:
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return f"- {stamp} symphony: {message}"
+    return f"- {stamp} samba: {message}"
 
 
 def human_row(src: State, dst: State, side: Sidecar) -> Transition | None:
@@ -259,7 +259,7 @@ def entry_line(row: Transition, message: str = "") -> str:
 
 
 class Machine:
-    """Applies table rows. `fire` is the only way Symphony moves a task."""
+    """Applies table rows. `fire` is the only way Samba moves a task."""
 
     def __init__(self, tasks: TaskStore, sidecars: SidecarStore,
                  guard: GuardFn | None = None) -> None:

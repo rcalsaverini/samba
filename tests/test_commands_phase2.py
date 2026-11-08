@@ -1,6 +1,6 @@
 """Black-box tests for `question answer`, `task retry|stop|discard` (SPEC §11).
 
-Must not import symphony.
+Must not import samba.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 import pytest
-from conftest import Sandbox, stop, symphony_cmd, wait_for
+from conftest import Sandbox, stop, samba_cmd, wait_for
 
 
 def seed(sb: Sandbox, task_id: str, state: str, **side: object) -> Path:
@@ -45,7 +45,7 @@ def alive(pid: int) -> bool:
 
 def snapshot(sb: Sandbox, task_id: str) -> tuple[str | None, str, str]:
     state = sb.state_of(task_id)
-    side = sb.repo / ".symphony" / "state" / f"{task_id}.json"
+    side = sb.repo / ".samba" / "state" / f"{task_id}.json"
     return state, sb.task_text(task_id), side.read_text() if side.exists() else ""
 
 
@@ -220,7 +220,7 @@ def test_discard_tty_prompt(sb: Sandbox) -> None:
     seed(sb, "t1", "work-review")
     for answer, discarded in ((b"n\n", False), (b"\n", False), (b"y\n", True)):
         master, slave = pty.openpty()
-        proc = subprocess.Popen([*symphony_cmd(), "task", "discard", "t1", "--repo", str(sb.repo)],
+        proc = subprocess.Popen([*samba_cmd(), "task", "discard", "t1", "--repo", str(sb.repo)],
                                 cwd=sb.repo, env=sb.env(), stdin=slave, stdout=slave,
                                 stderr=subprocess.PIPE)
         os.close(slave)
@@ -242,7 +242,7 @@ def test_discard_prompt_names_resolved_id(sb: Sandbox) -> None:
     pty = pytest.importorskip("pty")
     seed(sb, "task-one", "work-review")
     master, slave = pty.openpty()
-    proc = subprocess.Popen([*symphony_cmd(), "task", "discard", "task-o", "--repo", str(sb.repo)],
+    proc = subprocess.Popen([*samba_cmd(), "task", "discard", "task-o", "--repo", str(sb.repo)],
                             cwd=sb.repo, env=sb.env(), stdin=slave, stdout=slave,
                             stderr=subprocess.PIPE)
     os.close(slave)
@@ -271,7 +271,7 @@ def test_discard_running_kills_agent_and_keeps_branch(sb: Sandbox) -> None:
     finally:
         stop(proc)
     assert sb.state_of("t1") == "discarded"
-    assert sb.branch_exists("symphony/t1")
+    assert sb.branch_exists("samba/t1")
 
 
 # ---- shared: wrong state --------------------------------------------------------------------
@@ -317,7 +317,7 @@ def test_command_while_orchestrator_runs(sb: Sandbox, cmd: list[str], state: str
     proc = sb.popen("run")
     try:
         wait_for(lambda: sb.pids("other") != [])
-        res = sb.run(*cmd, SYMPHONY_DEBUG_FIRE_DELAY="1.0")
+        res = sb.run(*cmd, SAMBA_DEBUG_FIRE_DELAY="1.0")
         assert res.returncode == 0, res.stderr
         wait_for(lambda: "done: work-running -> work-review" in sb.log_section("t1"), 30)
     finally:

@@ -1,7 +1,7 @@
 """Black-box test harness.
 
-These tests drive the `symphony` CLI as a subprocess and only inspect files, so they can be reused
-against a rewrite in another language: set SYMPHONY_CMD to the new binary (a shell-style string).
+These tests drive the `samba` CLI as a subprocess and only inspect files, so they can be reused
+against a rewrite in another language: set SAMBA_CMD to the new binary (a shell-style string).
 """
 
 from __future__ import annotations
@@ -27,9 +27,9 @@ STATES = ("plan-todo", "plan-running", "plan-review", "work-todo", "work-running
           "question", "stuck", "done", "discarded")
 
 
-def symphony_cmd() -> list[str]:
-    env = os.environ.get("SYMPHONY_CMD")
-    return shlex.split(env) if env else [sys.executable, "-m", "symphony"]
+def samba_cmd() -> list[str]:
+    env = os.environ.get("SAMBA_CMD")
+    return shlex.split(env) if env else [sys.executable, "-m", "samba"]
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -100,7 +100,7 @@ class Sandbox:
         self.plan[task_id] = list(steps)
 
     def write_sidecar(self, task_id: str, data: dict[str, Any]) -> None:
-        d = self.repo / ".symphony" / "state"
+        d = self.repo / ".samba" / "state"
         d.mkdir(parents=True, exist_ok=True)
         (d / f"{task_id}.json").write_text(json.dumps(data))
 
@@ -114,17 +114,17 @@ class Sandbox:
         return env
 
     def run(self, *args: str, timeout: float = 60, **env: str) -> subprocess.CompletedProcess[str]:
-        cmd = [*symphony_cmd(), *args, "--repo", str(self.repo)]
+        cmd = [*samba_cmd(), *args, "--repo", str(self.repo)]
         return subprocess.run(cmd, cwd=self.repo, env=self.env(**env), capture_output=True,
                               text=True, timeout=timeout)
 
     def run_idle(self, timeout: float = 60, **env: str) -> subprocess.CompletedProcess[str]:
         res = self.run("run", "--exit-when-idle", timeout=timeout, **env)
-        assert res.returncode == 0, f"symphony failed:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
+        assert res.returncode == 0, f"samba failed:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
         return res
 
     def popen(self, *args: str) -> subprocess.Popen[str]:
-        cmd = [*symphony_cmd(), *args, "--repo", str(self.repo)]
+        cmd = [*samba_cmd(), *args, "--repo", str(self.repo)]
         return subprocess.Popen(cmd, cwd=self.repo, env=self.env(), stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, text=True)
 
@@ -132,7 +132,7 @@ class Sandbox:
 
     @property
     def tasks_dir(self) -> Path:
-        return self.repo / ".symphony" / "tasks"
+        return self.repo / ".samba" / "tasks"
 
     def state_of(self, task_id: str) -> str | None:
         found = [s for s in STATES if (self.tasks_dir / s / f"{task_id}.md").exists()]
@@ -150,7 +150,7 @@ class Sandbox:
         return text.split("## Log", 1)[1]
 
     def sidecar(self, task_id: str) -> dict[str, Any]:
-        return json.loads((self.repo / ".symphony" / "state" / f"{task_id}.json").read_text())
+        return json.loads((self.repo / ".samba" / "state" / f"{task_id}.json").read_text())
 
     def move(self, task_id: str, src: str, dst: str) -> None:
         """Move a task file by hand, like dragging it in the file browser."""
@@ -158,7 +158,7 @@ class Sandbox:
         (self.tasks_dir / src / f"{task_id}.md").rename(self.tasks_dir / dst / f"{task_id}.md")
 
     def log_text(self) -> str:
-        p = self.repo / ".symphony" / "symphony.log"
+        p = self.repo / ".samba" / "samba.log"
         return p.read_text() if p.exists() else ""
 
     def calls(self, task_id: str) -> list[list[str]]:

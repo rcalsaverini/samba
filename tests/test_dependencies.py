@@ -1,4 +1,4 @@
-"""Black-box tests for task dependencies (SPEC §15). Must not import the symphony package."""
+"""Black-box tests for task dependencies (SPEC §15). Must not import the samba package."""
 
 from __future__ import annotations
 

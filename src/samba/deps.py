@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from symphony.tasks import Task, TaskStore
+from samba.tasks import Task, TaskStore
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,4 @@
-"""Command line: `symphony run`, and `<noun> <verb>` for task, plan, work, question, dev (SPEC §11)."""
+"""Command line: `samba run`, and `<noun> <verb>` for task, plan, work, question, dev (SPEC §11)."""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ import tempfile
 from pathlib import Path
 from typing import Literal, cast
 
-from symphony import merge, workspace
-from symphony.config import Config, ConfigError, load_config
-from symphony.lock import repo_lock
-from symphony.orchestrator import Orchestrator, StartupError
-from symphony.tasks import (
+from samba import merge, workspace
+from samba.config import Config, ConfigError, load_config
+from samba.lock import repo_lock
+from samba.orchestrator import Orchestrator, StartupError
+from samba.tasks import (
     STATES,
     Question,
     SidecarStore,
@@ -33,8 +33,8 @@ from symphony.tasks import (
     qstr,
     round_questions,
 )
-from symphony.transitions import Machine, human_events, log_line, render_markdown_table
-from symphony.views import (
+from samba.transitions import Machine, human_events, log_line, render_markdown_table
+from samba.views import (
     ResolveError,
     print_table,
     question_rows,
@@ -46,11 +46,11 @@ from symphony.views import (
 
 
 def _setup_logging(config: Config) -> None:
-    config.symphony_dir.mkdir(parents=True, exist_ok=True)
+    config.samba_dir.mkdir(parents=True, exist_ok=True)
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    root = logging.getLogger("symphony")
+    root = logging.getLogger("samba")
     root.setLevel(logging.DEBUG)
-    file_handler = logging.FileHandler(config.symphony_dir / "symphony.log")
+    file_handler = logging.FileHandler(config.samba_dir / "samba.log")
     file_handler.setFormatter(fmt)
     file_handler.setLevel(logging.DEBUG)
     console = logging.StreamHandler(sys.stderr)
@@ -75,10 +75,10 @@ def cmd_run(config: Config, exit_when_idle: bool) -> int:
     try:
         asyncio.run(main())
     except StartupError as e:
-        print(f"symphony: {e}", file=sys.stderr)
+        print(f"samba: {e}", file=sys.stderr)
         return 1
     except asyncio.CancelledError:
-        print("symphony: stopped", file=sys.stderr)
+        print("samba: stopped", file=sys.stderr)
     return 0
 
 
@@ -87,24 +87,24 @@ def cmd_task_list(config: Config, states: list[str]) -> int:
     try:
         chosen = resolve_states(states) if states else STATES
     except ResolveError as e:
-        print(f"symphony: {e.render()}", file=sys.stderr)
+        print(f"samba: {e.render()}", file=sys.stderr)
         return 2
-    tasks = TaskStore(config.symphony_dir / "tasks")
-    sidecars = SidecarStore(config.symphony_dir / "state")
+    tasks = TaskStore(config.samba_dir / "tasks")
+    sidecars = SidecarStore(config.samba_dir / "state")
     print_table(task_rows(tasks, sidecars, chosen))
     return 0
 
 
 def cmd_task_show(config: Config, text: str) -> int:
-    tasks = TaskStore(config.symphony_dir / "tasks")
-    sidecars = SidecarStore(config.symphony_dir / "state")
+    tasks = TaskStore(config.samba_dir / "tasks")
+    sidecars = SidecarStore(config.samba_dir / "state")
     try:
         task = tasks.find(resolve_task_id(tasks, text))
     except ResolveError as e:
-        print(f"symphony: {e.render()}", file=sys.stderr)
+        print(f"samba: {e.render()}", file=sys.stderr)
         return 2
     if task is None:
-        print(f"symphony: unknown task {text!r}", file=sys.stderr)
+        print(f"samba: unknown task {text!r}", file=sys.stderr)
         return 2
     print("\n".join(render_show(tasks, task, sidecars.load(task.id))))
     return 0
@@ -119,10 +119,10 @@ def _edit_feedback() -> str | None:
         try:
             res = subprocess.run([*shlex.split(editor), str(path)])
         except OSError as e:
-            print(f"symphony: cannot run editor {editor!r}: {e}", file=sys.stderr)
+            print(f"samba: cannot run editor {editor!r}: {e}", file=sys.stderr)
             return None
         if res.returncode != 0:
-            print(f"symphony: editor exited with {res.returncode}; nothing changed",
+            print(f"samba: editor exited with {res.returncode}; nothing changed",
                   file=sys.stderr)
             return None
         return path.read_text().strip()
@@ -134,12 +134,12 @@ def confirm(prompt: str, command: str, yes: bool) -> int | None:
     if yes:
         return None
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        print(f"symphony: {command} needs confirmation: run it on a terminal or pass --yes; "
+        print(f"samba: {command} needs confirmation: run it on a terminal or pass --yes; "
               "nothing changed", file=sys.stderr)
         return 2
     print(f"{prompt}? [y/N] ", end="", flush=True)
     if sys.stdin.readline().strip().lower() not in ("y", "yes"):
-        print("symphony: not confirmed; nothing changed", file=sys.stderr)
+        print("samba: not confirmed; nothing changed", file=sys.stderr)
         return 1
     return None
 
@@ -162,28 +162,28 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
     """The command pattern (SPEC §11): resolve, check the event is legal, do the outside effect
     (feedback text), then `Machine.fire`. Nothing else moves a task. Holds the repo lock.
     `confirm_plan` marks a dangerous command (asks after the legality check, before the lock)."""
-    tasks = TaskStore(config.symphony_dir / "tasks")
-    sidecars = SidecarStore(config.symphony_dir / "state")
+    tasks = TaskStore(config.samba_dir / "tasks")
+    sidecars = SidecarStore(config.samba_dir / "state")
     takes_feedback = feedback_mode != "none"
 
     def legal(task_id: str) -> State | None:
         """The task's state if `event` is legal there, else report and return None."""
         state = tasks.state_of(task_id)
         if state is None:
-            print(f"symphony: task {task_id!r} has no file", file=sys.stderr)
+            print(f"samba: task {task_id!r} has no file", file=sys.stderr)
             return None
         events = [r.event for r in human_events(state, sidecars.load(task_id))]
         if event in events:
             return state
         names = ", ".join(events) or "none"
-        print(f"symphony: {task_id} is in {state}; {label} not allowed. Legal events: {names}",
+        print(f"samba: {task_id} is in {state}; {label} not allowed. Legal events: {names}",
               file=sys.stderr)
         return None
 
     try:
         task_id = resolve_task_id(tasks, text)
     except ResolveError as e:
-        print(f"symphony: {e.render()}", file=sys.stderr)
+        print(f"samba: {e.render()}", file=sys.stderr)
         return 2
     if legal(task_id) is None:
         return 1
@@ -195,7 +195,7 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
     if not feedback and feedback_mode == "optional":
         print("warning: rejecting without feedback", file=sys.stderr)
     if not feedback and feedback_mode == "required":
-        print(f"symphony: {label} needs text (argument or --edit); nothing changed",
+        print(f"samba: {label} needs text (argument or --edit); nothing changed",
               file=sys.stderr)
         return 2
     if confirm_plan is not None:
@@ -203,9 +203,9 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
         if code is not None:
             return code
 
-    with repo_lock(config.symphony_dir) as held:
+    with repo_lock(config.samba_dir) as held:
         if not held:
-            print("symphony: another command or the orchestrator holds .symphony/lock; "
+            print("samba: another command or the orchestrator holds .samba/lock; "
                   "try again", file=sys.stderr)
             return 1
         if legal(task_id) is None:  # re-check: a hand move may have raced in
@@ -218,7 +218,7 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
             message = f"feedback round {n}"
         if not Machine(tasks, sidecars).fire(task_id, event, message=message):
             note = "; the feedback was already written" if feedback else ""
-            print(f"symphony: {event} did not apply to {task_id}{note}", file=sys.stderr)
+            print(f"samba: {event} did not apply to {task_id}{note}", file=sys.stderr)
             return 1
     state = tasks.state_of(task_id)
     if state is not None:
@@ -230,7 +230,7 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
 
 
 def _err(msg: str) -> None:
-    print(f"symphony: {msg}", file=sys.stderr)
+    print(f"samba: {msg}", file=sys.stderr)
 
 
 def _split_target(target: str) -> tuple[str, str | None]:
@@ -240,15 +240,15 @@ def _split_target(target: str) -> tuple[str, str | None]:
 
 
 def cmd_question_list(config: Config) -> int:
-    tasks = TaskStore(config.symphony_dir / "tasks")
-    sidecars = SidecarStore(config.symphony_dir / "state")
+    tasks = TaskStore(config.samba_dir / "tasks")
+    sidecars = SidecarStore(config.samba_dir / "state")
     print_table(question_rows(tasks, sidecars, shutil.get_terminal_size().columns))
     return 0
 
 
 def cmd_question_show(config: Config, target: str) -> int:
-    tasks = TaskStore(config.symphony_dir / "tasks")
-    sidecars = SidecarStore(config.symphony_dir / "state")
+    tasks = TaskStore(config.samba_dir / "tasks")
+    sidecars = SidecarStore(config.samba_dir / "state")
     name, qid = _split_target(target)
     try:
         task_id = resolve_task_id(tasks, name)
@@ -300,8 +300,8 @@ def _edit_answer(q: Question) -> str | None:
 def cmd_question_answer(config: Config, target: str, text: str | None, edit: bool) -> int:
     """`question answer` (SPEC §11): records the answer at once; fires `question.answer` only when
     no question of the round is still open."""
-    tasks = TaskStore(config.symphony_dir / "tasks")
-    sidecars = SidecarStore(config.symphony_dir / "state")
+    tasks = TaskStore(config.samba_dir / "tasks")
+    sidecars = SidecarStore(config.samba_dir / "state")
     event = "question.answer"
     name, qid = _split_target(target)
 
@@ -355,9 +355,9 @@ def cmd_question_answer(config: Config, target: str, text: str | None, edit: boo
         _err("question answer needs text (argument or --edit); nothing changed")
         return 2
 
-    with repo_lock(config.symphony_dir) as held:
+    with repo_lock(config.samba_dir) as held:
         if not held:
-            _err("another command or the orchestrator holds .symphony/lock; try again")
+            _err("another command or the orchestrator holds .samba/lock; try again")
             return 1
         q = check(task_id)  # re-check: a hand move or another answer may have raced in
         if isinstance(q, int):
@@ -386,12 +386,12 @@ def cmd_question_answer(config: Config, target: str, text: str | None, edit: boo
 def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: bool, yes: bool,
                     dry_run: bool) -> int:
     """`work accept` (SPEC §11): the command pattern with a merge as the outside effect."""
-    tasks = TaskStore(config.symphony_dir / "tasks")
-    sidecars = SidecarStore(config.symphony_dir / "state")
+    tasks = TaskStore(config.samba_dir / "tasks")
+    sidecars = SidecarStore(config.samba_dir / "state")
     event = "work.accept"
 
     def err(msg: str) -> None:
-        print(f"symphony: {msg}", file=sys.stderr)
+        print(f"samba: {msg}", file=sys.stderr)
 
     def check(task_id: str) -> bool:
         """State and preflight checks; reports the failure."""
@@ -440,9 +440,9 @@ def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: b
     if code is not None:
         return code
 
-    with repo_lock(config.symphony_dir) as held:
+    with repo_lock(config.samba_dir) as held:
         if not held:
-            err("another command or the orchestrator holds .symphony/lock; try again")
+            err("another command or the orchestrator holds .samba/lock; try again")
             return 1
         if not check(task_id):
             return 1
@@ -456,7 +456,7 @@ def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: b
                 config.repo, branch, f"Merge {branch}: {title}", shell=config.shell,
                 validate_command=config.validate_command if do_validate else None,
                 timeout_s=config.validate_timeout_s, tail_lines=config.validate_tail_lines,
-                log_path=config.symphony_dir / "runs" / task_id / "accept-validate.log")
+                log_path=config.samba_dir / "runs" / task_id / "accept-validate.log")
             if res.status == "conflict":
                 tasks.append_log(task_id, f"work.accept: merge failed (conflicts: {res.detail})")
                 err(f"merge conflict in: {res.detail}; merge aborted, task stays in work-review")
@@ -524,11 +524,11 @@ def _ask(prompt: str) -> str:
 def cmd_task_new(config: Config, title: str | None, body: str | None, depends: str | None,
                  priority: int, skip_plan: bool) -> int:
     """`task new` (SPEC §11): flags give every field; on a terminal the missing ones are asked."""
-    tasks = TaskStore(config.symphony_dir / "tasks")
+    tasks = TaskStore(config.samba_dir / "tasks")
     tty = sys.stdin.isatty() and sys.stdout.isatty()
     if title is None and not tty:
-        print("symphony: task new needs a TITLE (or run it on a terminal to be asked); "
-              "usage: symphony task new TITLE [--body TEXT] [--depends-on IDS] [--priority N] "
+        print("samba: task new needs a TITLE (or run it on a terminal to be asked); "
+              "usage: samba task new TITLE [--body TEXT] [--depends-on IDS] [--priority N] "
               "[--skip-plan]", file=sys.stderr)
         return 2
     dep_ids: list[str] = []
@@ -536,7 +536,7 @@ def cmd_task_new(config: Config, title: str | None, body: str | None, depends: s
         try:
             dep_ids = _resolve_deps(tasks, depends)
         except ResolveError as e:
-            print(f"symphony: {e.render()}", file=sys.stderr)
+            print(f"samba: {e.render()}", file=sys.stderr)
             return 2
     if tty:
         try:
@@ -557,11 +557,11 @@ def cmd_task_new(config: Config, title: str | None, body: str | None, depends: s
                         dep_ids = _resolve_deps(tasks, _ask(DEPENDS_PROMPT))
                         break
                     except ResolveError as e:
-                        print(f"symphony: {e.render()}", file=sys.stderr)
+                        print(f"samba: {e.render()}", file=sys.stderr)
             if not skip_plan:
                 skip_plan = _ask("Plan first? [Y/n] ").strip().lower() in ("n", "no")
         except EOFError:
-            print("symphony: input ended; nothing created", file=sys.stderr)
+            print("samba: input ended; nothing created", file=sys.stderr)
             return 1
     assert title is not None
     title = title.strip()
@@ -585,8 +585,8 @@ def cmd_task_new(config: Config, title: str | None, body: str | None, depends: s
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="symphony", formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="development commands:\n    dev    commands for working on Symphony itself "
+        prog="samba", formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="development commands:\n    dev    commands for working on Samba itself "
                "(dev transitions)")
     sub = parser.add_subparsers(dest="command", required=True, title="commands",
                                 metavar="COMMAND")
@@ -616,7 +616,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tshow = task_sub.add_parser("show", help="show one task in detail")
     add_show_args(p_tshow)
     p_dev = sub.add_parser("dev",  # no help=: it is listed in the epilog, apart from the others
-                           description="Commands for working on Symphony itself.")
+                           description="Commands for working on Samba itself.")
     dev_sub = p_dev.add_subparsers(dest="dev_command", required=True)
     p_trans = dev_sub.add_parser("transitions",
                                  help="print the transition table as Markdown (SPEC §4.1)")
@@ -683,7 +683,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = load_config(args.repo)
     except ConfigError as e:
-        print(f"symphony: config error: {e}", file=sys.stderr)
+        print(f"samba: config error: {e}", file=sys.stderr)
         return 2
 
     if args.command == "run":

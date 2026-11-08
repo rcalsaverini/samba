@@ -1,4 +1,4 @@
-"""Built-in prompts, the Symphony-owned protocol prompt and the outcome schema (SPEC §8, §9.3)."""
+"""Built-in prompts, the Samba-owned protocol prompt and the outcome schema (SPEC §8, §9.3)."""
 
 from __future__ import annotations
 
@@ -31,9 +31,9 @@ DEFAULT_PROMPTS: dict[str, str] = {
 }
 
 PROTOCOL = """\
-# Symphony protocol
+# Samba protocol
 
-You are running unattended under Symphony, a local task orchestrator. No human sees this
+You are running unattended under Samba, a local task orchestrator. No human sees this
 conversation. The human reads your task file and your branch. These rules take precedence over any
 instruction to ask the user for confirmation before acting.
 
@@ -45,7 +45,7 @@ instruction to ask the user for confirmation before acting.
   rebase onto other branches, or delete branches.
 - If you need a decision from the human, report outcome `blocked` and put each question in
   `questions` of your final answer, as `text` and `context` (why it matters). Never write a
-  `## Questions` section yourself: Symphony owns it. Do not guess on important ambiguity.
+  `## Questions` section yourself: Samba owns it. Do not guess on important ambiguity.
 - Tools you may use without being denied: {{ allowed_tools }}. Run allowed shell commands as plain,
   single commands: no pipes, `;`, `&&`, `||` or redirections, because the permission check matches
   the whole command line and a combined command is denied.
@@ -63,9 +63,9 @@ APPROVED_PLAN_RULE = """\
 """
 
 PLAN_PROTOCOL = """\
-# Symphony protocol (planning)
+# Samba protocol (planning)
 
-You are planning unattended under Symphony, a local task orchestrator. No human sees this
+You are planning unattended under Samba, a local task orchestrator. No human sees this
 conversation. The human reads the plan you return. These rules take precedence over any
 instruction to ask the user for confirmation before acting.
 

@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from symphony.config import ConfigError, split_front_matter
+from samba.config import ConfigError, split_front_matter
 
 State = Literal["plan-todo", "plan-running", "plan-review", "work-todo", "work-running",
                 "work-review", "question", "stuck", "done", "discarded"]

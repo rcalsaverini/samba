@@ -22,7 +22,7 @@ claude:
   turn_timeout_s: 3600
   stall_timeout_s: 600
 ---
-You are working on Symphony itself.
+You are working on Samba itself.
 
 Task: {{ task.title }}
 

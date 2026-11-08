@@ -1,5 +1,5 @@
 import sys
 
-from symphony.cli import main
+from samba.cli import main
 
 sys.exit(main())

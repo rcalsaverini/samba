@@ -1,6 +1,6 @@
-"""Black-box tests for the transition table (SPEC §4.1). Must not import the symphony package.
+"""Black-box tests for the transition table (SPEC §4.1). Must not import the samba package.
 
-The table is read from `symphony dev transitions`. Every row has a scenario below, and a coverage test
+The table is read from `samba dev transitions`. Every row has a scenario below, and a coverage test
 fails when a row is added without one.
 """
 
@@ -19,7 +19,7 @@ BLOCKER = ["no-such-task"]  # an unknown dependency keeps a todo task where it i
 
 
 def table(sb: Sandbox) -> dict[tuple[str, str, str, str], dict[str, str]]:
-    """`symphony dev transitions` parsed into {(src, event, guard, dst): row}."""
+    """`samba dev transitions` parsed into {(src, event, guard, dst): row}."""
     res = sb.run("dev", "transitions")
     assert res.returncode == 0, res.stderr
     rows: dict[tuple[str, str, str, str], dict[str, str]] = {}
@@ -39,7 +39,7 @@ def safe_text(sb: Sandbox, task_id: str) -> str:
         return ""
 
 
-# ---- scenarios: Symphony rows ---------------------------------------------------------------
+# ---- scenarios: Samba rows ---------------------------------------------------------------
 
 Scenario = Callable[[Sandbox], None]
 
@@ -109,7 +109,7 @@ FAIL_ONCE = {"is_error": True}
 CAP = {"max_cost_usd_per_task": 0.15}
 GIVE_UP = {"max_attempts": 1, "reflect_on_give_up": False}
 
-SYMPHONY_ROWS: dict[tuple[str, str, str], Scenario] = {
+SAMBA_ROWS: dict[tuple[str, str, str], Scenario] = {
     ("plan-todo", "dispatch_plan", "deps_met"):
         check_sidecar(plain_run("plan-todo"), last_stage="plan"),
     ("work-todo", "dispatch_work", "deps_met"):
@@ -150,11 +150,11 @@ SYMPHONY_ROWS: dict[tuple[str, str, str], Scenario] = {
 }
 
 
-@pytest.mark.parametrize("key", list(SYMPHONY_ROWS), ids=lambda k: f"{k[1]}:{k[0]}")
-def test_symphony_row(sb: Sandbox, key: tuple[str, str, str]) -> None:
+@pytest.mark.parametrize("key", list(SAMBA_ROWS), ids=lambda k: f"{k[1]}:{k[0]}")
+def test_samba_row(sb: Sandbox, key: tuple[str, str, str]) -> None:
     src, event, _guard = key
-    (dst,) = {r[3] for r in table(sb) if r[:3] == key}  # Symphony rows have one destination
-    SYMPHONY_ROWS[key](sb)
+    (dst,) = {r[3] for r in table(sb) if r[:3] == key}  # Samba rows have one destination
+    SAMBA_ROWS[key](sb)
     assert f"{event}: {src} -> {dst}" in sb.log_section("t1")
     assert f"event=transition task=t1 transition={event} src={src} dst={dst}" in sb.log_text()
 
@@ -242,7 +242,7 @@ def test_every_row_has_a_test(sb: Sandbox) -> None:
     rows = table(sb)
     covered = set(HUMAN_ROWS) | {(s, e, "", d) for s, d, e in LIVE_ROWS}
     covered |= COMMAND_ONLY  # no hand move selects these rows; tests/test_commands.py covers them
-    covered |= {(*k, rows_dst) for k in SYMPHONY_ROWS
+    covered |= {(*k, rows_dst) for k in SAMBA_ROWS
                 for rows_dst in {r[3] for r in rows if r[:3] == k}}
     assert set(rows) == covered
 
@@ -260,7 +260,7 @@ def test_spec_table_matches_the_code(sb: Sandbox) -> None:
 
 def test_actors_and_known_names(sb: Sandbox) -> None:
     rows = table(sb)
-    assert {r["who"] for r in rows.values()} == {"symphony", "human"}
+    assert {r["who"] for r in rows.values()} == {"samba", "human"}
     assert all(re.fullmatch(r"[a-z_.]+", e) for _, e, _, _ in rows)
 
 
@@ -317,7 +317,7 @@ def test_first_sight_records_the_folder_and_fires_nothing(sb: Sandbox) -> None:
     assert "## Log" not in sb.task_text("t1")
 
 
-def test_symphony_own_moves_are_not_seen_as_hand_moves(sb: Sandbox) -> None:
+def test_samba_own_moves_are_not_seen_as_hand_moves(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "blocked"})
     sb.run_idle()

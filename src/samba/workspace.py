@@ -5,8 +5,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from symphony.config import Config
-from symphony.proc import git, run_shell
+from samba.config import Config
+from samba.proc import git, run_shell
 
 
 class WorkspaceError(Exception):
@@ -20,7 +20,7 @@ def repo_key(repo: Path) -> str:
 
 
 def branch_name(task_id: str) -> str:
-    return f"symphony/{task_id}"
+    return f"samba/{task_id}"
 
 
 class Workspaces:

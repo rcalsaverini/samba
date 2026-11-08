@@ -31,7 +31,7 @@ Step fields (all optional):
 
 `claude auth status` prints {"loggedIn": true} unless FAKE_CLAUDE_LOGGED_OUT is set.
 
-Standard library only, so it can be reused unchanged against a non-Python Symphony.
+Standard library only, so it can be reused unchanged against a non-Python Samba.
 """
 
 from __future__ import annotations

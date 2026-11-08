@@ -6,7 +6,7 @@ import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
-from symphony.proc import CmdResult, git, run_shell
+from samba.proc import CmdResult, git, run_shell
 
 MAX_LOG_TAIL_LINES = 10
 

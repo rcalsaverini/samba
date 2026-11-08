@@ -1,19 +1,19 @@
 [project]
-name = "symphony"
+name = "samba"
 version = "0.1.0"
 description = "Local orchestrator that runs Claude Code on task files in git worktrees"
 requires-python = ">=3.11"
 dependencies = ["pyyaml>=6.0"]
 
 [project.scripts]
-symphony = "symphony.cli:main"
+samba = "samba.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/symphony"]
+packages = ["src/samba"]
 
 [dependency-groups]
 dev = ["pytest>=8", "pyright>=1.1.380", "types-pyyaml"]

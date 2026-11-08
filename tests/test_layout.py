@@ -1,4 +1,4 @@
-"""Black-box tests for the stage x status folder layout (SPEC §2, §4). No symphony import."""
+"""Black-box tests for the stage x status folder layout (SPEC §2, §4). No samba import."""
 
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ def test_done_and_discarded_remove_worktree_and_keep_branch(sb: Sandbox) -> None
     assert sb.state_of("b") == "discarded"
     for tid in ("a", "b"):
         assert not sb.worktree(tid).exists()
-        assert sb.branch_exists(f"symphony/{tid}")
+        assert sb.branch_exists(f"samba/{tid}")
 
 
 def test_moving_running_task_to_discarded_stops_agent(sb: Sandbox) -> None:
@@ -112,7 +112,7 @@ def test_moving_running_task_to_discarded_stops_agent(sb: Sandbox) -> None:
     assert proc.wait(timeout=15) == 0
     assert sb.state_of("t1") == "discarded"
     assert not sb.worktree("t1").exists()
-    assert sb.branch_exists("symphony/t1")
+    assert sb.branch_exists("samba/t1")
 
 
 # ---- last_stage routing --------------------------------------------------------------------

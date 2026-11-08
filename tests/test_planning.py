@@ -1,4 +1,4 @@
-"""Black-box tests for the planning phase (SPEC §14). Must not import the symphony package."""
+"""Black-box tests for the planning phase (SPEC §14). Must not import the samba package."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def test_plan_task_ends_in_plan_review_read_only(sb: Sandbox) -> None:
     assert "Edit" not in argv and "Write" not in argv
     schema = json.loads(flag(argv, "--json-schema") or "{}")
     assert schema["properties"]["outcome"]["enum"] == ["planned", "blocked"]
-    assert git(sb.repo, "rev-list", "--count", "main..symphony/t1") == "0"
+    assert git(sb.repo, "rev-list", "--count", "main..samba/t1") == "0"
     assert sb.sidecar("t1")["last_outcome"] == "planned"
 
 

@@ -10,9 +10,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from symphony.config import ClaudeConfig, PlanningConfig
-from symphony.proc import kill_group, run_cmd
-from symphony.prompts import OUTCOME_SCHEMA_JSON, PLAN_OUTCOME_SCHEMA_JSON
+from samba.config import ClaudeConfig, PlanningConfig
+from samba.proc import kill_group, run_cmd
+from samba.prompts import OUTCOME_SCHEMA_JSON, PLAN_OUTCOME_SCHEMA_JSON
 
 Outcome = Literal["done", "blocked", "continue", "planned"]
 LINE_LIMIT = 10 * 1024 * 1024

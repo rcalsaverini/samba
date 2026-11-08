@@ -1,4 +1,4 @@
-"""Black-box tests for the shape of the command line (SPEC §11). Must not import symphony."""
+"""Black-box tests for the shape of the command line (SPEC §11). Must not import samba."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ def test_help_lists_only_the_six_nouns(sb: Sandbox) -> None:
              if not n.startswith("-") and n != "COMMAND"]
     assert names == ["run", "task", "plan", "work", "question", "dev"], res.stdout
     assert res.stdout.index("development commands:") > res.stdout.index("question")
-    assert "Symphony itself" in res.stdout
+    assert "Samba itself" in res.stdout
 
 
 def test_dev_transitions_prints_the_table(sb: Sandbox) -> None:

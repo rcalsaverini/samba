@@ -13,12 +13,12 @@ LOCK_NAME = "lock"
 
 
 @contextmanager
-def repo_lock(symphony_dir: Path, *, blocking: bool = True,
+def repo_lock(samba_dir: Path, *, blocking: bool = True,
               timeout: float = 10.0) -> Generator[bool]:
-    """Hold `<symphony_dir>/lock` (flock). Yields True once held. Non-blocking, or blocking past
+    """Hold `<samba_dir>/lock` (flock). Yields True once held. Non-blocking, or blocking past
     `timeout` seconds, yields False and holds nothing."""
-    symphony_dir.mkdir(parents=True, exist_ok=True)
-    fd = os.open(symphony_dir / LOCK_NAME, os.O_RDWR | os.O_CREAT, 0o644)
+    samba_dir.mkdir(parents=True, exist_ok=True)
+    fd = os.open(samba_dir / LOCK_NAME, os.O_RDWR | os.O_CREAT, 0o644)
     held = False
     try:
         deadline = time.monotonic() + timeout

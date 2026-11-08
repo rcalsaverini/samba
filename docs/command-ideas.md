@@ -1,4 +1,4 @@
-# Symphony command ideas
+# Samba command ideas
 
 Note: the CLI cleanup changed some spellings (`task new`, `dev transitions`; top-level `new`, `list`, `show`, `status` removed). This doc is historical.
 
@@ -16,39 +16,39 @@ that wrote this. Re-check versions and maintenance status before relying on them
 
 Three commands (SPEC §11): `run`, `status`, `new "Title" [--priority N] [--plan]`. Everything else
 the human does is a file operation: `mv` between state folders, editing `## Feedback`, `git diff`,
-`git merge`, `git worktree remove`, reading `runs/` and `symphony.log`.
+`git merge`, `git worktree remove`, reading `runs/` and `samba.log`.
 
 Manual work, by how often it happens:
 
 | Manual step today | Frequency | Pain |
 |---|---|---|
 | Approve a plan: `mv plan-review/x.md todo/` | every planned task | must remember the folder names; no check |
-| Accept work: `git merge symphony/x` in the main checkout, then `mv review/x.md done/` | every task | two steps, order matters, easy to forget the move (worktree stays) |
+| Accept work: `git merge samba/x` in the main checkout, then `mv review/x.md done/` | every task | two steps, order matters, easy to forget the move (worktree stays) |
 | Reject with feedback: edit `## Feedback`, then `mv` to `plan/` or `todo/` | common | right folder depends on the state; section may be missing |
 | Answer a question: edit the file, `mv blocked/x.md todo/` | common | which folder: `todo` or `plan` depends on the phase |
 | Retry a gave-up task | occasional | same `mv`, but the cause is unclear from the folder alone |
 | Find a task and its state | constant | `status` prints everything, no filter, no prefix match |
-| See what the agent did: `git diff main...symphony/x`, find the worktree path | every review | branch and path are conventions the human must know |
+| See what the agent did: `git diff main...samba/x`, find the worktree path | every review | branch and path are conventions the human must know |
 | Read why it failed: `runs/<id>/*.jsonl`, `validate-N.log` | on failures | paths and raw JSONL |
 | Remove branches and sidecars of finished tasks | occasional | nothing deletes branches (SPEC §7.4) |
 | Check setup (git, claude login, WORKFLOW.md valid, validate command works) | once per repo | failures show up only at `run` |
 
 ## 2. Artifact inventory (drives the nouns)
 
-Every thing Symphony creates or owns, verified against `tasks.py`, `orchestrator.py`, `workspace.py`
+Every thing Samba creates or owns, verified against `tasks.py`, `orchestrator.py`, `workspace.py`
 and SPEC §2, §4, §14:
 
 | Artifact | Where | Writer | Lifecycle | Human verbs today |
 |---|---|---|---|---|
-| **Task** | `tasks/<state>/<id>.md`: front matter (`priority`), `# Title`, body | human (`new`), Symphony moves it | until `done` or deleted | create, edit, prioritize, list (`status`), discard (move to `done`/delete) |
-| **Plan** | `## Plan` section; sidecar `plan_session_id`, `plan_approved`, `last_outcome=planned` | agent (via Symphony, replaced whole on each revision) | exists once planning ran; approved by the move `plan-review` to `todo` | read, approve, reject |
+| **Task** | `tasks/<state>/<id>.md`: front matter (`priority`), `# Title`, body | human (`new`), Samba moves it | until `done` or deleted | create, edit, prioritize, list (`status`), discard (move to `done`/delete) |
+| **Plan** | `## Plan` section; sidecar `plan_session_id`, `plan_approved`, `last_outcome=planned` | agent (via Samba, replaced whole on each revision) | exists once planning ran; approved by the move `plan-review` to `todo` | read, approve, reject |
 | **Feedback** | `## Feedback` section | human | attached to a plan or to finished work, consumed by the next run | add |
 | **Question** | `## Questions` section; task sits in `blocked/` | agent | until the human answers and moves it | read, answer |
-| **Work** | branch `symphony/<id>` plus worktree `~/.symphony/workspaces/<key>/<id>`; in state `review` it passed validation | agent commits | worktree removed when the task reaches `done` or is deleted; branch is never deleted | diff, merge, reject, remove branch |
-| **Run** | `runs/<id>/<n>.jsonl`, `validate-<n>.log` | Symphony | append only, never cleaned | read |
-| **Sidecar** | `state/<id>.json`: attempts, `not_before`, `last_error`, `last_outcome`, `phase`, session ids, cost, branch, workspace | Symphony only | lives forever | read (via `status`), implicit resets |
-| **Log** | task `## Log` section; `symphony.log` | Symphony (and agent) | append only | read |
-| **Session** | Claude session ids inside the sidecar | Symphony | `session_id` cleared on plan approval | none |
+| **Work** | branch `samba/<id>` plus worktree `~/.samba/workspaces/<key>/<id>`; in state `review` it passed validation | agent commits | worktree removed when the task reaches `done` or is deleted; branch is never deleted | diff, merge, reject, remove branch |
+| **Run** | `runs/<id>/<n>.jsonl`, `validate-<n>.log` | Samba | append only, never cleaned | read |
+| **Sidecar** | `state/<id>.json`: attempts, `not_before`, `last_error`, `last_outcome`, `phase`, session ids, cost, branch, workspace | Samba only | lives forever | read (via `status`), implicit resets |
+| **Log** | task `## Log` section; `samba.log` | Samba (and agent) | append only | read |
+| **Session** | Claude session ids inside the sidecar | Samba | `session_id` cleared on plan approval | none |
 
 ### 2.1 Finding: three review artifacts
 
@@ -97,15 +97,15 @@ anything else. `retry` applies to any state in `blocked` (and `review` as "send 
 feedback"); it is not specific to `blocked`. `question answer` is sugar for "append answer to the
 task (as `## Feedback`) and retry", so `answer` and `retry` share one transition.
 
-`list` and `show` are queries over the Task noun: canonical form `symphony task list [STATE]` and
-`symphony task show <id>`, with top-level `list` and `show` as short aliases (a Rust rewrite can
+`list` and `show` are queries over the Task noun: canonical form `samba task list [STATE]` and
+`samba task show <id>`, with top-level `list` and `show` as short aliases (a Rust rewrite can
 keep both). Decision for the human: only the short forms, or both.
 
 ## 3. Critique of the current state model
 
 ### 3.1 What exists (from the code, not only the SPEC diagram)
 
-Complete transition list. "who" is human (H) or Symphony (S).
+Complete transition list. "who" is human (H) or Samba (S).
 
 | # | From | To | Who | Trigger | Side effects in sidecar |
 |---|---|---|---|---|---|
@@ -122,7 +122,7 @@ Complete transition list. "who" is human (H) or Symphony (S).
 | 11 | `plan-review` | `plan` | H | reject (after writing `## Feedback`) | none |
 | 12 | `review` | `todo` | H | rework (after `## Feedback`) | none |
 | 13 | `blocked` | `todo`/`plan` | H | answer or retry | `attempts` reset at dispatch if `last_outcome` blocked/failed |
-| 14 | `review` | `done` | H | accept (merge is manual, outside Symphony) | worktree removed by the tick |
+| 14 | `review` | `done` | H | accept (merge is manual, outside Samba) | worktree removed by the tick |
 | 15 | any | `done` | H | abandon | worktree removed by the tick |
 | 16 | any | (deleted) | H | file deleted, same as `done` | |
 
@@ -247,7 +247,7 @@ later, but given the cost argument above I would not choose it.
 
 ### 3.4 Proposed transition table (layout B)
 
-Event names are the commands. "S" is Symphony, "H" is human (command or observed hand move).
+Event names are the commands. "S" is Samba, "H" is human (command or observed hand move).
 
 | Event | From | To | Who | Effects |
 |---|---|---|---|---|
@@ -297,7 +297,7 @@ recommend.
 ### 4.2 Why libraries fit poorly here
 
 - Libraries own a current-state attribute in memory. Here the state is the filesystem and every
-  transition is an atomic `os.rename` (SPEC §12) by two actors (the human with `mv`, Symphony). We
+  transition is an atomic `os.rename` (SPEC §12) by two actors (the human with `mv`, Samba). We
   would have to rebuild the machine from the folder on every command and then write the state back,
   which makes the library a validator of `(src, event) -> dst` and nothing else.
 - Dependencies: SPEC §12 says standard library plus PyYAML. A library breaks that for a 16-row
@@ -315,7 +315,7 @@ recommend.
 class Transition:
     src: State
     event: str            # e.g. "plan.accept", "work.reject", "dispatch", "give_up"
-    actor: Literal["human", "symphony"]
+    actor: Literal["human", "samba"]
     dst: State
     guard: str | None     # e.g. "no uncommitted merge conflict" (documented, checked by caller)
     effects: tuple[str, ...]   # sidecar changes, e.g. ("attempts=0", "last_outcome=approved")
@@ -325,7 +325,7 @@ class Transition:
   pair not in the table (hand moves in the file browser are still observed, not prevented).
 - The orchestrator and the CLI commands call `fire(task_id, event)`, which finds the row, performs
   the rename and the effects, appends the `## Log` line. Illegal event: exit 1 listing the legal
-  events for the current state (this is also `symphony next <id>`).
+  events for the current state (this is also `samba next <id>`).
 - The same table is rendered into SPEC §4.1 as markdown. One parametrized black-box test builds a
   task in `src`, runs the command for `event`, and asserts the folder, the Log line and the sidecar
   effects; a second test asserts every row has been exercised. A Rust rewrite reuses the markdown
@@ -345,16 +345,16 @@ Until then the table costs a few dozen lines.
 
 ### 5.1 Grammar
 
-`symphony <noun> <verb> <id>` for transitions and artifact actions. Flat verbs where the artifact is
+`samba <noun> <verb> <id>` for transitions and artifact actions. Flat verbs where the artifact is
 the task itself, or the verb is a query.
 
 ```
-symphony plan accept|reject <id>        # plan-review -> work-todo | plan-todo
-symphony work accept|reject <id>        # work-review -> done (merge) | work-todo
-symphony question answer <id> "text"    # question -> plan-todo | work-todo (reads text or $EDITOR)
-symphony task retry|discard|stop <id>   # retry: stuck -> *-todo; discard: any -> discarded; stop: *-running -> *-todo
-symphony task list [STATE] | show <id> | prio <id> N   # queries and edits on the task
-symphony list | show | new | edit | feedback | status | run   # flat forms
+samba plan accept|reject <id>        # plan-review -> work-todo | plan-todo
+samba work accept|reject <id>        # work-review -> done (merge) | work-todo
+samba question answer <id> "text"    # question -> plan-todo | work-todo (reads text or $EDITOR)
+samba task retry|discard|stop <id>   # retry: stuck -> *-todo; discard: any -> discarded; stop: *-running -> *-todo
+samba task list [STATE] | show <id> | prio <id> N   # queries and edits on the task
+samba list | show | new | edit | feedback | status | run   # flat forms
 ```
 
 ### 5.2 Conventions for every transition command
@@ -388,12 +388,12 @@ Testability is black-box in all cases unless noted.
 
 | Command | Replaces | Usage | State touched | SPEC | Size | Danger |
 |---|---|---|---|---|---|---|
-| `list [STATE...]` | scanning `status` | `symphony list plan-review`, prefix filters, `--json` optional | none | §10, §11 | S | safe |
+| `list [STATE...]` | scanning `status` | `samba list plan-review`, prefix filters, `--json` optional | none | §10, §11 | S | safe |
 | `show <id>` | opening the file, the sidecar and git by hand | task text, state, cause, attempts, cost, branch, workspace path, next legal commands | none | §10, §11 | S | safe |
 | `next <id>` or `next` | remembering what is legal | legal events for the task; without id, tasks awaiting the human | none | §4.1, §11 | S | safe |
 | `logs <id> [--run N]` | reading JSONL | pretty-print the last run's assistant messages and the validation log | none | §9.2, §10 | M | safe |
-| `diff <id>` | `git diff base...symphony/<id>` | wraps git, uses sidecar `branch` | none | §7, §11 | S | safe |
-| `path <id> [--workspace]` | finding the file or worktree | prints a path, for `cd $(symphony path -w x)` | none | §2, §11 | S | safe |
+| `diff <id>` | `git diff base...samba/<id>` | wraps git, uses sidecar `branch` | none | §7, §11 | S | safe |
+| `path <id> [--workspace]` | finding the file or worktree | prints a path, for `cd $(samba path -w x)` | none | §2, §11 | S | safe |
 | `doctor` | discovering setup errors at `run` | git, login, `WORKFLOW.md`, base branch, validate command dry run | none | §5.1, §11 | M | safe |
 
 ### 6.2 Edits
@@ -424,8 +424,8 @@ Testability is black-box in all cases unless noted.
 |---|---|---|---|---|
 | `clean [--merged] [--older N]` | delete branches, sidecars and `runs/` of finished tasks | uses `resolution`; `--dry-run` | M | danger |
 | `pr <id>` | push branch and open a PR, feed comments back as feedback | SPEC §13; needs `gh`; scope carefully | L | danger |
-| `subtasks <id>` | create tasks from the plan's *Suggested subtasks* | SPEC §13; emits `symphony new` lines first, no dependencies | M | change |
-| `watch` | live `status` | defer: `watch symphony status` works | S | safe |
+| `subtasks <id>` | create tasks from the plan's *Suggested subtasks* | SPEC §13; emits `samba new` lines first, no dependencies | M | change |
+| `watch` | live `status` | defer: `watch samba status` works | S | safe |
 
 ## 7. Mapping to the three blocked sibling tasks
 
@@ -442,23 +442,23 @@ Order: transition table first (Phase 1), then `list` and `feedback`, then the ac
 Phase 0: sign-off on this document (decisions listed in section 9).
 
 Phase 1, explicit machine. SPEC §4.1, §4.2.
-- `symphony new "Redesign the state model: stage x status folders (plan-todo, plan-running, plan-review, work-todo, work-running, work-review, question, stuck, done, discarded), explicit transition table in tasks.py, blocked_cause and last_stage in the sidecar, observed hand moves, SPEC and black-box test rename, one parametrized test per table row" --plan` (the largest task; consider splitting into the table and the rename)
+- `samba new "Redesign the state model: stage x status folders (plan-todo, plan-running, plan-review, work-todo, work-running, work-review, question, stuck, done, discarded), explicit transition table in tasks.py, blocked_cause and last_stage in the sidecar, observed hand moves, SPEC and black-box test rename, one parametrized test per table row" --plan` (the largest task; consider splitting into the table and the rename)
 
 Phase 2, read commands and the feedback primitive. SPEC §11.
-- `symphony new "Add list command with state filter, id prefix resolver and shared table printer" --plan`
-- `symphony new "Add feedback command that appends to ## Feedback (short text or EDITOR)" --plan`
-- `symphony new "Add show and next commands (task details, legal events)" --plan`
+- `samba new "Add list command with state filter, id prefix resolver and shared table printer" --plan`
+- `samba new "Add feedback command that appends to ## Feedback (short text or EDITOR)" --plan`
+- `samba new "Add show and next commands (task details, legal events)" --plan`
 
 Phase 3, artifact groups with confirmation. SPEC §4.1, §11, §14.2.
-- `symphony new "Add plan accept and plan reject commands" --plan`
-- `symphony new "Add work accept (merge with preflight, --no-merge) and work reject, with the confirmation policy and --yes" --plan`
-- `symphony new "Add question answer and task retry, stop, discard" --plan`
+- `samba new "Add plan accept and plan reject commands" --plan`
+- `samba new "Add work accept (merge with preflight, --no-merge) and work reject, with the confirmation policy and --yes" --plan`
+- `samba new "Add question answer and task retry, stop, discard" --plan`
 
 Phase 4, convenience. SPEC §11, §10.
-- `symphony new "Add edit, path, diff and logs commands"`
-- `symphony new "Add doctor and init commands"`
-- `symphony new "Add clean command (dry run, merged only)" --plan`
-- `symphony new "Add pr and subtasks commands" --plan`
+- `samba new "Add edit, path, diff and logs commands"`
+- `samba new "Add doctor and init commands"`
+- `samba new "Add clean command (dry run, merged only)" --plan`
+- `samba new "Add pr and subtasks commands" --plan`
 
 ## 9. Open questions (need human sign-off)
 

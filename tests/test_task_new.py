@@ -1,4 +1,4 @@
-"""Black-box tests for `task new` (SPEC §11). Must not import symphony."""
+"""Black-box tests for `task new` (SPEC §11). Must not import samba."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from conftest import Sandbox, symphony_cmd
+from conftest import Sandbox, samba_cmd
 
 STATE_DIRS = ("plan-todo", "work-todo")
 
@@ -105,12 +105,12 @@ def test_no_title_and_no_tty_is_a_usage_error(sb: Sandbox) -> None:
 
 
 class Pty:
-    """Drives `symphony task new` on a pty: wait for a prompt, then answer."""
+    """Drives `samba task new` on a pty: wait for a prompt, then answer."""
 
     def __init__(self, sb: Sandbox, *args: str) -> None:
         import pty
         self.master, slave = pty.openpty()
-        self.proc = subprocess.Popen([*symphony_cmd(), "task", "new", *args, "--repo", str(sb.repo)],
+        self.proc = subprocess.Popen([*samba_cmd(), "task", "new", *args, "--repo", str(sb.repo)],
                                      cwd=sb.repo, env=sb.env(), stdin=slave, stdout=slave,
                                      stderr=subprocess.PIPE, text=True)
         os.close(slave)

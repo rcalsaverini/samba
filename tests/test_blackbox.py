@@ -1,4 +1,4 @@
-"""Black-box behavior tests (see conftest.py). They must not import the symphony package."""
+"""Black-box behavior tests (see conftest.py). They must not import the samba package."""
 
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ def test_done_with_passing_validation_goes_to_review(sb: Sandbox) -> None:
     assert sb.state_of("t1") == "work-review"
     log = sb.log_section("t1")
     assert "work-review" in log and "made it" in log
-    assert sb.branch_exists("symphony/t1")
-    assert "fake commit" in git(sb.repo, "log", "--oneline", "symphony/t1")
+    assert sb.branch_exists("samba/t1")
+    assert "fake commit" in git(sb.repo, "log", "--oneline", "samba/t1")
     assert sb.worktree("t1").is_dir()
     side = sb.sidecar("t1")
     assert side["attempts"] == 0
@@ -65,7 +65,7 @@ def test_validation_failure_is_fed_back_then_passes(sb: Sandbox) -> None:
     assert len(calls) == 2
     p = prompt_of(calls[1])
     assert "failed" in p and "MISSING fixed.txt" in p
-    assert (sb.repo / ".symphony" / "runs" / "t1").is_dir()
+    assert (sb.repo / ".samba" / "runs" / "t1").is_dir()
 
 
 def test_blocked_moves_to_question(sb: Sandbox) -> None:
@@ -258,7 +258,7 @@ def test_claude_argv_contract(sb: Sandbox) -> None:
     assert schema["properties"]["outcome"]["enum"] == ["done", "blocked", "continue"]
     system = flag(argv, "--append-system-prompt") or ""
     assert "authorized to commit" in system
-    assert "symphony/t1" in system
+    assert "samba/t1" in system
     assert "running/t1.md" in system
     assert "system runs `true`" in system
     assert "`Bash(git commit:*)`" in system  # agent is told what it may run
@@ -368,7 +368,7 @@ def test_human_discarding_running_task_kills_agent_and_removes_worktree(sb: Sand
     assert proc.wait(timeout=15) == 0
     assert sb.state_of("t1") == "discarded"
     assert not sb.worktree("t1").exists()
-    assert sb.branch_exists("symphony/t1")
+    assert sb.branch_exists("samba/t1")
 
 
 def test_stuck_task_moved_back_to_todo_resets_attempts(sb: Sandbox) -> None:
@@ -414,10 +414,10 @@ def test_refuses_invalid_config(sb: Sandbox) -> None:
     assert "max_concurrent" in res.stderr
 
 
-def test_symphony_dir_is_git_excluded(sb: Sandbox) -> None:
+def test_samba_dir_is_git_excluded(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.run_idle()
-    assert ".symphony/" in (sb.repo / ".git" / "info" / "exclude").read_text()
+    assert ".samba/" in (sb.repo / ".git" / "info" / "exclude").read_text()
     assert git(sb.repo, "status", "--porcelain") == "?? WORKFLOW.md"
 
 
@@ -507,7 +507,7 @@ def test_list_empty_prints_header_only(sb: Sandbox) -> None:
 
 
 def _table_events(sb: Sandbox, state: str, last_stage: str | None) -> list[tuple[str, str]]:
-    """Human events for `state` read from the `symphony dev transitions` output (the table)."""
+    """Human events for `state` read from the `samba dev transitions` output (the table)."""
     want = last_stage or "unset"
     seen: list[tuple[str, str]] = []
     for line in sb.run("dev", "transitions").stdout.splitlines():
@@ -540,7 +540,7 @@ def test_show_plan_review(sb: Sandbox) -> None:
     sb.add_task("p1", state="plan-review", title="Plan me", priority=3)
     sb.write_sidecar("p1", {"attempts": 2, "turns_total": 7, "cost_usd_total": 1.5,
                             "last_outcome": "planned", "last_error": "x" * 100,
-                            "branch": "symphony/p1", "workspace": "/tmp/ws/p1",
+                            "branch": "samba/p1", "workspace": "/tmp/ws/p1",
                             "session_id": "sess-1", "plan_session_id": "psess-1"})
     res = sb.run("task", "show", "p1")
     assert res.returncode == 0, res.stderr
@@ -551,7 +551,7 @@ def test_show_plan_review(sb: Sandbox) -> None:
     assert "attempts: 2" in out and "turns: 7" in out and "cost: $1.50" in out
     assert "last_outcome: planned" in out
     assert "last_error: " + "x" * 100 in out
-    assert "branch: symphony/p1" in out and "worktree: /tmp/ws/p1" in out
+    assert "branch: samba/p1" in out and "worktree: /tmp/ws/p1" in out
     assert "session_id: sess-1" in out and "plan_session_id: psess-1" in out
     assert _shown_events(out) == _table_events(sb, "plan-review", None)
     assert [e for e, _ in _shown_events(out)] == ["plan.accept", "plan.reject", "task.discard"]

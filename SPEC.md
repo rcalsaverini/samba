@@ -1,4 +1,4 @@
-# Symphony (local edition): Specification v0
+# Samba: Specification v0
 
 Status: Draft v0. Derived from OpenAI's Symphony spec (Draft v1), trimmed for local, single-user
 experimentation, and informed by OpenAI's "harness engineering" write-up.
@@ -45,13 +45,13 @@ Principles taken from harness engineering:
 
 ## 2. Layout
 
-Symphony is run from the root of a target git repository:
+Samba is run from the root of a target git repository:
 
 ```
 <repo>/
   WORKFLOW.md                    # config (front matter) + first-turn prompt (body)
   CLAUDE.md                      # optional, the repo's own agent map; Claude Code loads it
-  .symphony/                     # created by Symphony, added to .git/info/exclude
+  .samba/                     # created by Samba, added to .git/info/exclude
     tasks/
       plan-todo/     <id>.md         # planning stage (§14): ready to be planned
       plan-running/  <id>.md
@@ -65,13 +65,13 @@ Symphony is run from the root of a target git repository:
       discarded/     <id>.md         # abandoned
     state/         <id>.json     # orchestrator-owned sidecar per task
     runs/          <id>/<n>.jsonl # raw Claude Code event stream per turn
-    symphony.log
+    samba.log
 
-~/.symphony/workspaces/<repo-key>/
-  <id>/                          # git worktree per task, branch symphony/<id>
+~/.samba/workspaces/<repo-key>/
+  <id>/                          # git worktree per task, branch samba/<id>
 ```
 
-On startup Symphony creates any missing folders and appends `.symphony/` to `.git/info/exclude`
+On startup Samba creates any missing folders and appends `.samba/` to `.git/info/exclude`
 (never edits the repo's `.gitignore`). The folder name is the complete state of a task (§4.1).
 Earlier versions used the folders `plan`, `todo`, `running`, `review` and `blocked`; startup refuses
 to run while any of them still holds task files (§5.1).
@@ -90,7 +90,7 @@ All paths are configurable (§6); these are the defaults.
 
 - Task id = file name without `.md`.
 - The id must match `[A-Za-z0-9._-]+`. Files with other names are skipped with a warning.
-- The id is used for the workspace folder, the sidecar file, and the branch `symphony/<id>`.
+- The id is used for the workspace folder, the sidecar file, and the branch `samba/<id>`.
 
 ### 3.2 Format
 
@@ -110,10 +110,10 @@ Free-form description written by the human: goal, context, acceptance criteria.
 (Maintained by the agent: steps, with checkboxes.)
 
 ## Log
-(Appended by the agent and by Symphony: decisions, progress, validation results.)
+(Appended by the agent and by Samba: decisions, progress, validation results.)
 
 ## Questions
-(Rendered by Symphony from the question records (§4.3). Nobody edits it.)
+(Rendered by Samba from the question records (§4.3). Nobody edits it.)
 ```
 
 - Title = first `# ` heading, else the id.
@@ -121,7 +121,7 @@ Free-form description written by the human: goal, context, acceptance criteria.
   list of strings is ignored like an unknown key.
 - Ownership of sections is a convention stated in the prompt, not enforced by code.
 - `## Questions` is the exception: it is a rendered view of the question records in the sidecar
-  (§4.3). Symphony regenerates the whole section each time the records change; neither the agent
+  (§4.3). Samba regenerates the whole section each time the records change; neither the agent
   nor the human edits it (an edit is overwritten). The agent reports questions in its outcome
   (§9.3). Each question renders as `### qN (round R, STATUS)`, its text, `Context: ...` and, once
   answered, `Answer: ...`. Without records the section is not created. Old free-text
@@ -131,7 +131,7 @@ Free-form description written by the human: goal, context, acceptance criteria.
 ### 3.3 Write discipline
 
 - The agent may edit its own task file while it runs.
-- Symphony writes to a task file **only when no agent process is running for it** (before dispatch
+- Samba writes to a task file **only when no agent process is running for it** (before dispatch
   and after the worker ends), using read-modify-write of the whole file, and only appends lines to
   `## Log` (creating the section if missing).
 - Orchestrator bookkeeping goes to the sidecar (§4.2), not to the markdown.
@@ -142,7 +142,7 @@ Free-form description written by the human: goal, context, acceptance criteria.
   line to the new path (`stuck/` or `discarded/`), which the agent does not hold, and the
   orchestrator's next tick cancels the worker. A read-modify-write race with an agent that has
   already rewritten its file is accepted.
-- **Repo lock.** `.symphony/lock` is an advisory `flock`. Every state-changing command holds it for
+- **Repo lock.** `.samba/lock` is an advisory `flock`. Every state-changing command holds it for
   its whole resolve, check, write, `fire` sequence (blocking up to about 10 s, then exit 1). The
   orchestrator takes it non-blocking at the start of each tick and **skips the whole tick** when it
   is held. Without it a tick could see a command's file already renamed but its sidecar `state`
@@ -160,14 +160,14 @@ the status (`todo`, `running`, `review`) are both in the name. Moving a file is 
 
 | Folder         | Meaning                                              | Who moves files in         |
 |----------------|------------------------------------------------------|----------------------------|
-| `plan-todo`    | Ready to be planned (new, or plan revision, §14)     | Human, or Symphony (retry) |
-| `plan-running` | Claimed for planning; a planner is (about to be) running | Symphony only          |
-| `plan-review`  | Plan written; waiting for the human (§14)            | Symphony                   |
-| `work-todo`    | Ready to run (new, retry, rework, or plan approved)  | Human, or Symphony (retry) |
-| `work-running` | Claimed; an agent is (or is about to be) running     | Symphony only              |
-| `work-review`  | Validation passed; branch ready for the human        | Symphony                   |
-| `question`     | The agent needs an answer from the human             | Symphony                   |
-| `stuck`        | Budget exceeded, gave up or stopped; needs a human decision | Symphony or human   |
+| `plan-todo`    | Ready to be planned (new, or plan revision, §14)     | Human, or Samba (retry) |
+| `plan-running` | Claimed for planning; a planner is (about to be) running | Samba only          |
+| `plan-review`  | Plan written; waiting for the human (§14)            | Samba                   |
+| `work-todo`    | Ready to run (new, retry, rework, or plan approved)  | Human, or Samba (retry) |
+| `work-running` | Claimed; an agent is (or is about to be) running     | Samba only              |
+| `work-review`  | Validation passed; branch ready for the human        | Samba                   |
+| `question`     | The agent needs an answer from the human             | Samba                   |
+| `stuck`        | Budget exceeded, gave up or stopped; needs a human decision | Samba or human   |
 | `done`         | Terminal: accepted (merged)                          | Human                      |
 | `discarded`    | Terminal: abandoned                                  | Human                      |
 
@@ -178,15 +178,15 @@ the status (`todo`, `running`, `review`) are both in the name. Moving a file is 
 
 #### Transition table
 
-The state machine is one declarative table in code (`src/symphony/transitions.py`), plain data:
+The state machine is one declarative table in code (`src/samba/transitions.py`), plain data:
 rows of `(src, event, actor, dst, guard, effects)`. Nothing moves a task outside the table: the
 orchestrator and, later, the commands all go through one `fire(task_id, event)` path that finds the
 row for the task's current folder, checks the guard, renames the file, applies the sidecar effects
 and appends one line to the task's `## Log`: `<event>: <src> -> <dst>[: detail]`. A `transition`
-line goes to `symphony.log` too. The table below is generated by `symphony dev transitions` and a test
+line goes to `samba.log` too. The table below is generated by `samba dev transitions` and a test
 fails if it drifts from the code.
 
-Event names are the future command names (`plan.accept`, `work.reject`, ...). Actor `symphony`
+Event names are the future command names (`plan.accept`, `work.reject`, ...). Actor `samba`
 rows are fired by the orchestrator; actor `human` rows are fired by a command or observed as a hand
 move (below). Guards are names evaluated in code: `deps_met` (§15), `plan_required` (`require_plan`
 is set and the plan is not approved), `last_stage=plan|work|unset` (the sidecar field, §4.2; `unset` means none is recorded: a task from
@@ -197,7 +197,7 @@ folder of that stage is legal. Effects are
 named sidecar changes: `last_error=ctx` takes the error text of the event, `not_before=retry` the
 retry delay. `task new` has no source folder and is not a row.
 
-**Rows change only Symphony's own state** (folder, sidecar, `## Log`). Effects outside Symphony are
+**Rows change only Samba's own state** (folder, sidecar, `## Log`). Effects outside Samba are
 not row effects: a git merge for `work.accept` or recording an answer for `question.answer`
 is done by the command, which then fires the event. (`questions=dismiss_open` only edits the
 sidecar, so it is a row effect.) An observed hand move only fires the event, so
@@ -206,25 +206,25 @@ dragging a task from `work-review` to `done` never merges anything.
 <!-- transitions:begin -->
 | Event | From | To | Who | Guard | Effects |
 |---|---|---|---|---|---|
-| `dispatch_plan` | `plan-todo` | `plan-running` | symphony | `deps_met` | `not_before=None`, `blocked_cause=None`, `last_stage=plan`, `first_dispatched_at=now` |
-| `dispatch_work` | `work-todo` | `work-running` | symphony | `deps_met` | `not_before=None`, `blocked_cause=None`, `last_stage=work`, `first_dispatched_at=now` |
-| `route_to_plan` | `work-todo` | `plan-todo` | symphony | `plan_required,deps_met` | |
-| `planned` | `plan-running` | `plan-review` | symphony | | `last_outcome=planned`, `attempts=0`, `last_error=None`, `blocked_cause=None` |
-| `plan_blocked` | `plan-running` | `question` | symphony | | `last_outcome=blocked`, `blocked_cause=question` |
-| `done` | `work-running` | `work-review` | symphony | | `last_outcome=done`, `attempts=0`, `last_error=None`, `blocked_cause=None` |
-| `work_blocked` | `work-running` | `question` | symphony | | `last_outcome=blocked`, `blocked_cause=question` |
-| `budget` | `plan-running` | `stuck` | symphony | | `last_outcome=blocked`, `blocked_cause=budget` |
-| `budget` | `work-running` | `stuck` | symphony | | `last_outcome=blocked`, `blocked_cause=budget` |
-| `give_up` | `plan-running` | `stuck` | symphony | | `attempts+=1`, `last_outcome=failed`, `last_error=ctx`, `blocked_cause=gave_up` |
-| `give_up` | `work-running` | `stuck` | symphony | | `attempts+=1`, `last_outcome=failed`, `last_error=ctx`, `blocked_cause=gave_up` |
-| `retry_plan` | `plan-running` | `plan-todo` | symphony | | `attempts+=1`, `last_error=ctx`, `not_before=retry`, `last_outcome=retrying` |
-| `retry_work` | `work-running` | `work-todo` | symphony | | `attempts+=1`, `last_error=ctx`, `not_before=retry`, `last_outcome=retrying` |
-| `recover` | `plan-running` | `plan-todo` | symphony | | |
-| `recover` | `work-running` | `work-todo` | symphony | | |
-| `dependency_discarded` | `plan-todo` | `stuck` | symphony | | `last_stage=plan`, `blocked_cause=dependency_discarded` |
-| `dependency_discarded` | `work-todo` | `stuck` | symphony | | `last_stage=work`, `blocked_cause=dependency_discarded` |
-| `dependency_cycle` | `plan-todo` | `stuck` | symphony | | `last_stage=plan`, `blocked_cause=dependency_cycle` |
-| `dependency_cycle` | `work-todo` | `stuck` | symphony | | `last_stage=work`, `blocked_cause=dependency_cycle` |
+| `dispatch_plan` | `plan-todo` | `plan-running` | samba | `deps_met` | `not_before=None`, `blocked_cause=None`, `last_stage=plan`, `first_dispatched_at=now` |
+| `dispatch_work` | `work-todo` | `work-running` | samba | `deps_met` | `not_before=None`, `blocked_cause=None`, `last_stage=work`, `first_dispatched_at=now` |
+| `route_to_plan` | `work-todo` | `plan-todo` | samba | `plan_required,deps_met` | |
+| `planned` | `plan-running` | `plan-review` | samba | | `last_outcome=planned`, `attempts=0`, `last_error=None`, `blocked_cause=None` |
+| `plan_blocked` | `plan-running` | `question` | samba | | `last_outcome=blocked`, `blocked_cause=question` |
+| `done` | `work-running` | `work-review` | samba | | `last_outcome=done`, `attempts=0`, `last_error=None`, `blocked_cause=None` |
+| `work_blocked` | `work-running` | `question` | samba | | `last_outcome=blocked`, `blocked_cause=question` |
+| `budget` | `plan-running` | `stuck` | samba | | `last_outcome=blocked`, `blocked_cause=budget` |
+| `budget` | `work-running` | `stuck` | samba | | `last_outcome=blocked`, `blocked_cause=budget` |
+| `give_up` | `plan-running` | `stuck` | samba | | `attempts+=1`, `last_outcome=failed`, `last_error=ctx`, `blocked_cause=gave_up` |
+| `give_up` | `work-running` | `stuck` | samba | | `attempts+=1`, `last_outcome=failed`, `last_error=ctx`, `blocked_cause=gave_up` |
+| `retry_plan` | `plan-running` | `plan-todo` | samba | | `attempts+=1`, `last_error=ctx`, `not_before=retry`, `last_outcome=retrying` |
+| `retry_work` | `work-running` | `work-todo` | samba | | `attempts+=1`, `last_error=ctx`, `not_before=retry`, `last_outcome=retrying` |
+| `recover` | `plan-running` | `plan-todo` | samba | | |
+| `recover` | `work-running` | `work-todo` | samba | | |
+| `dependency_discarded` | `plan-todo` | `stuck` | samba | | `last_stage=plan`, `blocked_cause=dependency_discarded` |
+| `dependency_discarded` | `work-todo` | `stuck` | samba | | `last_stage=work`, `blocked_cause=dependency_discarded` |
+| `dependency_cycle` | `plan-todo` | `stuck` | samba | | `last_stage=plan`, `blocked_cause=dependency_cycle` |
+| `dependency_cycle` | `work-todo` | `stuck` | samba | | `last_stage=work`, `blocked_cause=dependency_cycle` |
 | `plan.accept` | `plan-review` | `work-todo` | human | | `plan_approved=True`, `session_id=None` |
 | `plan.reject` | `plan-review` | `plan-todo` | human | | |
 | `work.accept` | `work-review` | `done` | human | | |
@@ -262,31 +262,31 @@ an effect of `question.answer` and `task.retry`.
 
 #### Observed hand moves
 
-The sidecar records the last known folder as `state` (§4.2). Symphony's own moves update it, so
+The sidecar records the last known folder as `state` (§4.2). Samba's own moves update it, so
 they are never mistaken for hand moves. Each tick, before anything else, every task file whose
 folder differs from its sidecar `state` is looked up as `(state, folder)` among the `human` rows
 (guards evaluated on the sidecar):
 
 - A row exists: it is an **observed event**. Its effects are applied, the new `state` is saved and
   `<event>: <src> -> <dst>: observed hand move` is appended to `## Log`. Only the event fires: no
-  effect outside Symphony happens (nothing is merged, no feedback text is written).
+  effect outside Samba happens (nothing is merged, no feedback text is written).
 - No row: an **illegal move**. The file is renamed back to its previous folder, the sidecar is not
   changed, `illegal move: <src> -> <dst>, moved back to <src>` is appended to `## Log` and a
-  warning goes to `symphony.log`. Examples: `work-todo -> done`, `done -> work-todo`,
+  warning goes to `samba.log`. Examples: `work-todo -> done`, `done -> work-todo`,
   `plan-todo -> work-todo` (a rejected plan cannot be approved by skipping the review),
   `question -> work-todo` for a task whose `last_stage` is `plan` (but not when `last_stage` is
   unset).
 - No `state` yet (first sight: a new task, an old sidecar, a missing sidecar): the current folder is
   recorded and nothing fires.
 
-A hand move made while Symphony was stopped is interpreted in the first tick after it starts, after
+A hand move made while Samba was stopped is interpreted in the first tick after it starts, after
 recovery (§5.1).
 
 Moving a task out of a `*-running` folder: the legal targets are `stuck`
 (`task.stop`, which sets `last_stage` and `blocked_cause=stopped`) and `discarded`
 (`task.discard`). Both stop the agent (§5.2). Any other target
 (`done`, a review folder, `question`, a todo folder, the other stage's folders) is illegal: the file is
-moved back **before** the agent is reconciled, so the agent keeps running. Because Symphony writes
+moved back **before** the agent is reconciled, so the agent keeps running. Because Samba writes
 to a task file only while no agent runs (§3.3), the `## Log` line of an event observed on a task
 with a live agent is held in memory and appended when its worker ends.
 
@@ -295,11 +295,11 @@ worktree removed, branch kept, §5.2).
 
 ### 4.2 Sidecar state (`state/<id>.json`)
 
-Owned by Symphony. Fields:
+Owned by Samba. Fields:
 
 - `state` (folder name or null): the last known folder of the task, written by every transition
   and used to interpret hand moves (§4.1). Null on first sight (recorded, nothing fires).
-- `session_id` (string or null): Claude Code session UUID, generated by Symphony and written here
+- `session_id` (string or null): Claude Code session UUID, generated by Samba and written here
   before launch (§9.1), used for `--resume`.
 - `attempts` (int): failed attempts so far (reset to 0 when the task reaches `work-review` or
   `plan-review`).
@@ -327,7 +327,7 @@ next save.
 
 ### 4.3 Questions
 
-A question is a record owned by Symphony, stored in the sidecar `questions` list:
+A question is a record owned by Samba, stored in the sidecar `questions` list:
 
 | Field | Meaning |
 |---|---|
@@ -343,7 +343,7 @@ A question is a record owned by Symphony, stored in the sidecar `questions` list
   The orchestrator assigns ids and the round, saves the records and renders `## Questions` (§3.3)
   before firing `work_blocked` or `plan_blocked`. Malformed entries are dropped. A `blocked` outcome
   without a valid question (for example an agent stopped by a permission denial) still goes to
-  `question/`: Symphony records one open question whose `text` is the run summary (or "The agent
+  `question/`: Samba records one open question whose `text` is the run summary (or "The agent
   reported blocked without a question") and whose `context` says it was synthesized and lists the
   run's permission denials. A blocked run is never retried.
 - **Answering.** `question answer` (§11) records each answer at once, under the repo lock. It fires
@@ -362,16 +362,16 @@ A question is a record owned by Symphony, stored in the sidecar `questions` list
 
 ### 4.5 Data model
 
-Every kind of record Symphony deals with. The store is files (task files, sidecars, run logs); a
+Every kind of record Samba deals with. The store is files (task files, sidecars, run logs); a
 database would replace the storage, not the model.
 
 | Record | Identifier | Written by | Stored in | Lifecycle |
 |---|---|---|---|---|
-| Task | the file name without `.md` (§3.1) | the human creates it (`task new` or by hand); Symphony moves it and appends to `## Log`; the agent edits its own file while it runs | `tasks/<state>/<id>.md`; bookkeeping in `state/<id>.json` (§4.2) | created in a todo folder, moves through the states (§4.1), ends in `done` or `discarded`; files are never deleted by Symphony |
-| Run | `runs/<task>/NNN.jsonl`, `NNN` = the task's turn number (`turns_total`) | Symphony, from the agent's stream (§9.2) | `runs/<task>/NNN.jsonl` (and `validate-NNN.log`) | one per agent invocation, append-only, kept after the task ends |
+| Task | the file name without `.md` (§3.1) | the human creates it (`task new` or by hand); Samba moves it and appends to `## Log`; the agent edits its own file while it runs | `tasks/<state>/<id>.md`; bookkeeping in `state/<id>.json` (§4.2) | created in a todo folder, moves through the states (§4.1), ends in `done` or `discarded`; files are never deleted by Samba |
+| Run | `runs/<task>/NNN.jsonl`, `NNN` = the task's turn number (`turns_total`) | Samba, from the agent's stream (§9.2) | `runs/<task>/NNN.jsonl` (and `validate-NNN.log`) | one per agent invocation, append-only, kept after the task ends |
 | Feedback round | `### Round N` under `## Feedback`, N = highest existing + 1 | the human, through `plan reject` and `work reject` | the task file | appended, never rewritten |
-| Question | `qN` per task, full name `<task>/qN` (§4.3) | the agent asks (in its outcome), Symphony records it; the human answers through `question answer` | the sidecar `questions` list; `## Questions` in the task file is a rendered view | `open`, then `answered` or `dismissed`; never deleted, ids never reused |
-| Log line | none (a timestamped bullet) | Symphony and the agent | `## Log` of the task file | appended, never rewritten |
+| Question | `qN` per task, full name `<task>/qN` (§4.3) | the agent asks (in its outcome), Samba records it; the human answers through `question answer` | the sidecar `questions` list; `## Questions` in the task file is a rendered view | `open`, then `answered` or `dismissed`; never deleted, ids never reused |
+| Log line | none (a timestamped bullet) | Samba and the agent | `## Log` of the task file | appended, never rewritten |
 
 Questions are the first record with real ids; the others are documented as they are.
 
@@ -394,9 +394,9 @@ later:
 3. **Refuse the old layout:** if any of the old folders `plan/`, `todo/`, `running/`, `review/` or
    `blocked/` under `tasks/` still holds `*.md` files, exit non-zero before touching anything
    (no folder created, no file moved, no agent started). The message names the folders and prints
-   an `mv` recipe, for example `mv .symphony/tasks/todo/*.md .symphony/tasks/work-todo/`
+   an `mv` recipe, for example `mv .samba/tasks/todo/*.md .samba/tasks/work-todo/`
    (`plan` to `plan-todo`, `todo` to `work-todo`, `running` to the matching todo folder,
-   `review` to `work-review`, `blocked` to `question` or `stuck`). Symphony never migrates
+   `review` to `work-review`, `blocked` to `question` or `stuck`). Samba never migrates
    automatically. Empty old folders do not block.
 4. Create folders, update `.git/info/exclude`.
 5. **Recover:** every file in `plan-running/` and `work-running/` has no live agent (we just
@@ -443,7 +443,7 @@ max_turns reached -> failure ("max_turns exhausted")
 ```
 
 Every exit path appends one line to the task's `## Log`, for example:
-`- 2026-11-06 21:40 symphony: validate passed after 4 turns ($0.83), moved to work-review`.
+`- 2026-11-06 21:40 samba: validate passed after 4 turns ($0.83), moved to work-review`.
 
 ### 5.4 Failures and retries
 
@@ -474,8 +474,8 @@ Markdown with YAML front matter. The body is the first-turn prompt template.
 
 ```yaml
 ---
-symphony_dir: .symphony
-workspaces_root: ~/.symphony/workspaces   # per-repo subfolder <repo-key> is added (§2)
+samba_dir: .samba
+workspaces_root: ~/.samba/workspaces   # per-repo subfolder <repo-key> is added (§2)
 base_branch: main               # branch new worktrees start from
 poll_interval_s: 10
 max_concurrent: 2
@@ -536,13 +536,13 @@ warning.
 
 Headless runs cannot answer permission prompts. With `permission_mode: dontAsk`, any tool call not
 allowed is denied; the run continues, the agent is told it was denied, and the denial is listed in
-the `result` event's `permission_denials` (verified, §12.1). Symphony appends each denial to the
+the `result` event's `permission_denials` (verified, §12.1). Samba appends each denial to the
 task's `## Log` so the human can widen `allow` or treat it as a harness gap.
 
 **The allow list lives in `WORKFLOW.md`, not in the repo's `.claude/settings.json`.** Claude Code
 ignores `permissions.allow` from a project's settings when the folder has not been trusted
 interactively, and every new worktree path is untrusted. Allow rules passed on the command line
-(`--allowedTools`, `--settings`) are honored (verified). Symphony therefore passes `claude.allow` as
+(`--allowedTools`, `--settings`) are honored (verified). Samba therefore passes `claude.allow` as
 `--allowedTools`. The repo's `.claude/settings.json` still applies for everything else Claude Code
 loads from it, minus the ignored allow rules.
 
@@ -558,9 +558,9 @@ Typical setups:
 
 If `workspaces/<id>` does not exist:
 
-1. If branch `symphony/<id>` exists (task reworked after its worktree was removed):
-   `git worktree add <path> symphony/<id>`.
-2. Else: `git worktree add -b symphony/<id> <path> <base_branch>`.
+1. If branch `samba/<id>` exists (task reworked after its worktree was removed):
+   `git worktree add <path> samba/<id>`.
+2. Else: `git worktree add -b samba/<id> <path> <base_branch>`.
 3. Run `hooks.after_create` with cwd = worktree. Failure or timeout: remove the worktree, fail the
    attempt.
 
@@ -576,7 +576,7 @@ If it exists, reuse it as is (no reset).
 ### 7.3 Validation
 
 `validate.command` (and hooks) run via `shell` (default `bash -c`, a non-login shell that inherits
-Symphony's environment) with cwd = workspace, after the agent reports done.
+Samba's environment) with cwd = workspace, after the agent reports done.
 
 The agent's Bash tool runs with the user's interactive shell environment, which can resolve tools
 differently (found in the smoke test: the agent's `python3` had pytest, while a `bash -lc` login
@@ -590,7 +590,7 @@ worker failure. `work accept` runs the same command again on the merged result (
 ### 7.4 Removal
 
 `git worktree remove --force <path>` when the task reaches `done/` or is deleted. The branch is kept.
-Symphony never deletes branches.
+Samba never deletes branches.
 
 ## 8. Prompts
 
@@ -645,13 +645,13 @@ the body does not need to repeat the outcome format or task-file rules. A good f
 - Describes how this repo wants work done: commit granularity, testing expectations, what "done"
   means beyond `{{ validate_command }}`, when to ask instead of guess.
 
-### 8.5 Protocol prompt (Symphony-owned)
+### 8.5 Protocol prompt (Samba-owned)
 
-Rules that Symphony's own logic depends on are not left to `WORKFLOW.md`. Symphony appends them to
+Rules that Samba's own logic depends on are not left to `WORKFLOW.md`. Samba appends them to
 the system prompt of every run with `--append-system-prompt`. They cannot be overridden by the
 workflow. Content (rendered with the same variables as §8.1):
 
-- You are running unattended under Symphony. No human sees this conversation; the human reads your
+- You are running unattended under Samba. No human sees this conversation; the human reads your
   task file at `{{ task.path }}` and your branch.
 - Edit only your own task file among the files under the tasks folder.
 - Keep `## Plan` (checkbox steps) and `## Log` (decisions, progress) in your task file up to date.
@@ -663,7 +663,7 @@ workflow. Content (rendered with the same variables as §8.1):
 - These rules take precedence over any instruction to ask the user for confirmation before acting.
 - If you need a decision from the human, report outcome `blocked` and put each question in
   `questions` of the final answer (`text` and `context`). Never write `## Questions` yourself:
-  Symphony renders it (§3.3). Do not guess on important ambiguity.
+  Samba renders it (§3.3). Do not guess on important ambiguity.
 - The tools you may use (rendered from `claude.allow`). Run allowed shell commands as plain single
   commands, without pipes, `;`, `&&`, `||` or redirections: allow rules match the whole command
   line, so a combined command is denied. (Smoke test: the agent piped the allowed test command into
@@ -680,7 +680,7 @@ workflow. Content (rendered with the same variables as §8.1):
 
 | Layer | Owner | Delivered by |
 |---|---|---|
-| Protocol: outcome format, task-file sections, branch and git limits | Symphony | `--append-system-prompt` (§8.5) and `--json-schema` (§9.3), every run |
+| Protocol: outcome format, task-file sections, branch and git limits | Samba | `--append-system-prompt` (§8.5) and `--json-schema` (§9.3), every run |
 | Policy: how this repo wants tasks done | Repo, `WORKFLOW.md` body | First-turn prompt (§8.2) |
 | Permissions: what the agent may run | Repo, `WORKFLOW.md` `claude.allow` | `--allowedTools` (§6.2) |
 | Knowledge: architecture, conventions, how-to skills | Repo, `CLAUDE.md`, `docs/`, `.claude/skills/` | Loaded natively by Claude Code from the worktree |
@@ -691,7 +691,7 @@ Notes:
 
 - The worktree is a checkout of the task branch, so the agent sees repo skills and rules as committed
   on `base_branch` (plus its own commits). Uncommitted edits in the main checkout are not visible.
-- Symphony ships no skills of its own in v0. Anything repo-specific belongs in the repo, versioned.
+- Samba ships no skills of its own in v0. Anything repo-specific belongs in the repo, versioned.
 
 ## 9. Running Claude Code
 
@@ -715,11 +715,11 @@ Notes:
 
 - cwd = workspace. stdin = `/dev/null` (otherwise Claude waits 3 s for piped stdin and warns).
 - `--verbose` is mandatory with `-p` and `stream-json` (the CLI errors without it).
-- **Session ids are chosen by Symphony.** For a new session, Symphony generates a UUID, writes it to
+- **Session ids are chosen by Samba.** For a new session, Samba generates a UUID, writes it to
   the sidecar, then passes `--session-id`. Later runs pass `--resume <id>`. A UUID is never reused
   with `--session-id` (the CLI rejects an id already in use). Resume works from any cwd.
 - If `--resume` fails because the session is gone (`result.subtype == "error_during_execution"`,
-  stderr "No conversation found with session ID"), Symphony starts a new session with the first
+  stderr "No conversation found with session ID"), Samba starts a new session with the first
   prompt (§8.2). This does not count as a failed attempt.
 - `--add-dir` gives the agent read and write access to the tasks folder. Without it, reading the task
   file is denied.
@@ -733,14 +733,14 @@ Notes:
 - Event order: optional `system` hook events, then `system`/`init`, then `assistant`/`user` messages,
   then one `result`. Do not assume `init` is the first line.
 - `init` lists what was loaded (`skills`, `plugins`, `mcp_servers`, `tools`, `permissionMode`).
-  Symphony logs these on the first run of each `symphony run`, so leaks are visible.
+  Samba logs these on the first run of each `samba run`, so leaks are visible.
 - `result` fields used: `is_error`, `subtype`, `result` (text), `structured_output`,
   `total_cost_usd` (for this invocation only, not cumulative over a resumed session),
   `usage.input_tokens`, `usage.output_tokens`, `num_turns`, `terminal_reason`,
   `permission_denials`.
 - **Success = exit code 0 and `is_error == false`.** `subtype` is not reliable: an expired login
   produced `subtype: "success"` with `is_error: true` and exit code 1.
-- stderr: appended to `symphony.log` as diagnostics, never parsed except for the resume case above.
+- stderr: appended to `samba.log` as diagnostics, never parsed except for the resume case above.
 - Turn timeout (`claude.turn_timeout_s` since launch) and stall (no stdout line for
   `claude.stall_timeout_s`) kill the process group and count as a failure (§5.4).
 
@@ -760,7 +760,7 @@ Every run passes `--json-schema` with:
  "required": ["outcome", "summary"]}
 ```
 
-Claude Code returns the parsed object in `result.structured_output` (verified). Symphony reads
+Claude Code returns the parsed object in `result.structured_output` (verified). Samba reads
 `outcome` from there:
 
 - `done`: work complete, ready for validation.
@@ -777,7 +777,7 @@ a default run loaded the user `CLAUDE.md`, 50 skills, 12 plugins, user hooks, an
 including claude.ai connectors (Gmail, Drive, Calendar and more). Besides conflicting rules, that
 gives an unattended agent access to the user's accounts.
 
-When `claude.isolate_user_config` is true, Symphony adds
+When `claude.isolate_user_config` is true, Samba adds
 `--setting-sources project,local --strict-mcp-config` and
 `--settings '{"claudeMdExcludes": [...]}'`, where the list holds `CLAUDE.md`, `CLAUDE.local.md`,
 `.claude/CLAUDE.md` and `.claude/CLAUDE.local.md` for **every ancestor directory of the worktree**
@@ -785,7 +785,7 @@ When `claude.isolate_user_config` is true, Symphony adds
 
 The exclude list is needed because Claude Code also loads memory files from each ancestor of its
 working directory, and `--setting-sources` does not cover that route. Worktrees live under
-`~/.symphony/workspaces/` by default, so the home directory is an ancestor and the user's
+`~/.samba/workspaces/` by default, so the home directory is an ancestor and the user's
 `~/.claude/CLAUDE.md` is found there as an ancestor's `.claude/CLAUDE.md`. Found in use: personal
 rules ("ask before committing", "no Co-Authored-By") appeared in a planner's output. Do not use a
 broad pattern such as `$HOME/**`: it would also exclude the repo's own `CLAUDE.md`.
@@ -814,11 +814,11 @@ If a repo needs MCP servers, a later version can pass them explicitly with `--mc
 
 ## 10. Observability
 
-- `symphony.log`: one line per event, `key=value` style, always with `task=<id>`. Logs dispatch,
+- `samba.log`: one line per event, `key=value` style, always with `task=<id>`. Logs dispatch,
   turn start/end, outcome, validation result, state moves, failures, cost.
 - `runs/`: raw event streams and validation outputs for debugging.
 - Task `## Log`: the human-readable summary, one line per worker exit.
-- `symphony task list` (no filter, §11) prints a table from folders and sidecars: id, state, attempts, turns, cost,
+- `samba task list` (no filter, §11) prints a table from folders and sidecars: id, state, attempts, turns, cost,
   last outcome, last error. The STATE column is the folder name; for `question` and `stuck` it is
   followed by the `blocked_cause` in parentheses, for example `stuck (budget)`. A task waiting for a
   retry delay shows `(retry in Ns)` in the last-outcome column. A task in a todo folder held only
@@ -827,36 +827,36 @@ If a repo needs MCP servers, a later version can pass them explicitly with `--mc
 ## 11. CLI
 
 ```
-symphony run      [--repo PATH] [--exit-when-idle]
+samba run      [--repo PATH] [--exit-when-idle]
                   # start the loop (foreground; Ctrl-C stops agents and exits).
                   # --exit-when-idle: exit once nothing is running and plan-todo/ and
                   # work-todo/ hold no task that can run. Tasks held only by dependencies
                   # (§15) do not count, so a dependency waiting for a human cannot hang the
                   # run. Exits 1 with an `mv` recipe if old-layout folders still hold tasks
                   # (§5.1).
-symphony task new [TITLE] [--body TEXT] [--depends-on ID[,ID...]] [--priority N]
+samba task new [TITLE] [--body TEXT] [--depends-on ID[,ID...]] [--priority N]
                   [--skip-plan] [--repo PATH]
                   # create plan-todo/<slug>.md (work-todo/<slug>.md with --skip-plan)
-symphony task list [STATE...] [--repo PATH]
-symphony task show ID         [--repo PATH]
-symphony dev transitions
+samba task list [STATE...] [--repo PATH]
+samba task show ID         [--repo PATH]
+samba dev transitions
                   # print the transition table (§4.1) as Markdown; needs no repo.
-symphony plan accept ID [--repo PATH]
-symphony plan reject ID [--feedback TEXT | --edit] [--repo PATH]
-symphony work reject ID [--feedback TEXT | --edit] [--fresh] [--repo PATH]
-symphony work accept ID [--no-merge] [--no-validate] [--yes] [--dry-run] [--repo PATH]
-symphony question list [--repo PATH]
-symphony question show TASK[/QID] [--repo PATH]
-symphony question answer TASK[/QID] (TEXT | --edit) [--repo PATH]
-symphony task retry ID   [--repo PATH]
-symphony task stop ID    [--repo PATH]
-symphony task discard ID [--yes] [--repo PATH]
+samba plan accept ID [--repo PATH]
+samba plan reject ID [--feedback TEXT | --edit] [--repo PATH]
+samba work reject ID [--feedback TEXT | --edit] [--fresh] [--repo PATH]
+samba work accept ID [--no-merge] [--no-validate] [--yes] [--dry-run] [--repo PATH]
+samba question list [--repo PATH]
+samba question show TASK[/QID] [--repo PATH]
+samba question answer TASK[/QID] (TEXT | --edit) [--repo PATH]
+samba task retry ID   [--repo PATH]
+samba task stop ID    [--repo PATH]
+samba task discard ID [--yes] [--repo PATH]
 ```
 
 Every command is `run` or `<noun> <verb>`, with nouns `task`, `plan`, `work`, `question` and `dev`.
 There are no top-level `new`, `list`, `show`, `status` or `transitions`, and no aliases: they are
-usage errors (exit 2). `symphony --help` lists `run`, `task`, `plan`, `work` and `question`, then
-`dev` apart under "development commands" (its help says it is for working on Symphony itself).
+usage errors (exit 2). `samba --help` lists `run`, `task`, `plan`, `work` and `question`, then
+`dev` apart under "development commands" (its help says it is for working on Samba itself).
 `dev transitions` accepts `--repo` and ignores it; it loads no config.
 
 **`task new`** creates the whole task, so the file need not be opened afterwards. It does not take
@@ -881,7 +881,7 @@ State-changing commands (`plan accept`, `plan reject`, `work reject`, `work acce
 `question answer`, `task retry`, `task stop`, `task discard`) follow one **command
 pattern**: resolve the id, take the repo lock (§3.3), check that the task's folder has a human row
 for the event, do the **outside effect** (here: write the feedback into the task file), then
-**fire** the event through `Machine.fire` (§4.1). Table rows only change Symphony's state, and no
+**fire** the event through `Machine.fire` (§4.1). Table rows only change Samba's state, and no
 command moves a task or writes the sidecar except through `fire`. Later commands reuse the pattern.
 
 - Exit codes: 0 done; 1 wrong state, lock timeout, editor failure, failed preflight, merge or
@@ -954,14 +954,14 @@ event and never merges.
   commands wait or fail with the lock-busy message meanwhile.
 - Preflight, before any change (exit 1, nothing changed): the task is in `work-review`; the main
   checkout is on `base_branch`; it has no uncommitted changes to tracked files (untracked files
-  are fine); branch `symphony/<id>` exists. With `--no-merge` only the state is checked.
+  are fine); branch `samba/<id>` exists. With `--no-merge` only the state is checked.
 - Confirmation: `--yes` skips it. On a TTY (stdin and stdout) it prints
-  `Merge symphony/<id> into <base> (N commits)? [y/N]` (naming the validate command when one will
+  `Merge samba/<id> into <base> (N commits)? [y/N]` (naming the validate command when one will
   run; `Mark <id> done without merging` for `--no-merge`); anything but `y`/`yes` is exit 1.
   With no TTY and no `--yes`: exit 2, nothing changed. `--dry-run` runs after preflight, prints
   branch, base, commit count, merge, validate (command or `skipped`) and final state, never runs
   validation, needs no confirmation, exits 0.
-- Merge: `git merge --no-ff --no-commit -m "Merge symphony/<id>: <title>"`. If
+- Merge: `git merge --no-ff --no-commit -m "Merge samba/<id>: <title>"`. If
   `validate.command` is set and `--no-validate` is absent, it runs in the main checkout with the
   §7.3 shell and timeout, on the merged but uncommitted result; only a pass runs
   `git commit --no-edit`. This catches a branch that passes alone but fails after merging a main
@@ -1016,17 +1016,17 @@ On Ctrl-C: kill all agent processes, move their tasks back to the todo folder of
   killed with `os.killpg` (SIGTERM, then SIGKILL after 5 s).
 - One event loop owns all state changes; workers report back through it.
 - Moves are `os.rename` within the same filesystem (atomic).
-- The validate command for Symphony's own code: `uv run pyright` (strict) and `uv run pytest`.
+- The validate command for Samba's own code: `uv run pyright` (strict) and `uv run pytest`.
 - A Rust rewrite is expected later. To keep the tests reusable, the main suite is **black-box**:
-  it builds a temporary git repo, writes `WORKFLOW.md` and task files, runs the `symphony` CLI as a
+  it builds a temporary git repo, writes `WORKFLOW.md` and task files, runs the `samba` CLI as a
   subprocess with `--exit-when-idle`, and asserts only on files (task folders, sidecars, task `## Log`,
   branches, worktrees) and on the calls recorded by a fake `claude`. Nothing in it imports the
   Python package. Unit tests of Python internals are kept few.
 - The fake `claude` (`tests/fake_claude.py`) follows a per-task script of steps (outcome, cost, file
   writes, commits, exit code, `is_error`, missing result, hang, malformed lines, permission denials,
   missing session on resume) and records each invocation's argv for assertions.
-- Symphony checks `claude auth status` at startup and refuses to start when logged out.
-- Test-only knob: `SYMPHONY_DEBUG_FIRE_DELAY=<seconds>` makes `fire` sleep between the rename and
+- Samba checks `claude auth status` at startup and refuses to start when logged out.
+- Test-only knob: `SAMBA_DEBUG_FIRE_DELAY=<seconds>` makes `fire` sleep between the rename and
   the sidecar save, so black-box tests can make the race the repo lock covers (§3.3) deterministic.
 
 ### 12.1 Verified Claude Code behavior (2.1.220, 2026-11-06)
@@ -1078,7 +1078,7 @@ Status: implemented. Details settled during implementation:
 
 - `--exit-when-idle` also waits while `plan-todo/` is non-empty (`plan-review/` is the human's,
   like `work-review/`).
-- On approval (`plan.accept`) Symphony sets `plan_approved = true`, so a later stop or retry does
+- On approval (`plan.accept`) Samba sets `plan_approved = true`, so a later stop or retry does
   not route the task to planning again.
 - Headings `#` and `##` inside `plan`, `assumptions` and the question text are written as `###`, so they cannot be
   mistaken for task sections when the `## Plan` section is replaced.
@@ -1086,7 +1086,7 @@ Status: implemented. Details settled during implementation:
   rendered, then the sentence in §14.5); `prompts.plan_revise` replaces the revise prompt.
 - The planning variant of the execution protocol lives in `prompts.PLAN_PROTOCOL`; budget caps apply
   to planning like to execution (§9.1).
-- In `symphony task list` the folder name is the STATE column (`plan-running` or `work-running` says
+- In `samba task list` the folder name is the STATE column (`plan-running` or `work-running` says
   which stage a running task is in).
 
 ### 14.1 Goal
@@ -1094,7 +1094,7 @@ Status: implemented. Details settled during implementation:
 Let the human review a plan before any code is written, for the tasks where that is worth it.
 Planning is **opt-in per task** (or per repo via `require_plan`). Tasks that skip it behave exactly
 as in v0. A planning run can read the repository but cannot change anything; the plan comes back as
-structured output and Symphony writes it into the task file.
+structured output and Samba writes it into the task file.
 
 ### 14.2 States and flow
 
@@ -1167,8 +1167,8 @@ logged), with these differences:
    "required": ["outcome", "plan", "summary"]}
   ```
 
-- **Protocol prompt:** a planning variant of §8.5 (Symphony-owned, appended with
-  `--append-system-prompt`): you are planning unattended under Symphony; you cannot edit files and
+- **Protocol prompt:** a planning variant of §8.5 (Samba-owned, appended with
+  `--append-system-prompt`): you are planning unattended under Samba; you cannot edit files and
   must not try; read whatever you need; return the plan in `plan` as Markdown with the sections
   *Approach*, *Steps* (checkboxes), *Files to change*, *Risks*, *How to verify*, and, if useful,
   *Suggested subtasks*; put non-blocking assumptions in `assumptions` (the human checks them in
@@ -1223,8 +1223,8 @@ planning:
   false), plus `last_stage` and `blocked_cause` (§4.2). The former `phase` field is gone: the
   running folder says which stage a task is in. Old sidecars load with defaults and their `phase`
   is ignored.
-- `symphony task list` shows the folder name as the state of each task (§10).
-- `symphony task new` creates the task in `plan-todo/`; `--skip-plan` uses `work-todo/` instead.
+- `samba task list` shows the folder name as the state of each task (§10).
+- `samba task new` creates the task in `plan-todo/`; `--skip-plan` uses `work-todo/` instead.
 
 ### 14.9 Fake claude additions
 
@@ -1240,7 +1240,7 @@ All in the style of `tests/test_blackbox.py` (CLI subprocess, assert on files an
 1. A task in `plan-todo/` ends in `plan-review/` with the plan text under `## Plan`; the call used
    `--permission-mode dontAsk`, `--allowedTools` exactly `planning.allow`, a schema whose outcome
    enum is `["planned", "blocked"]`, and no execution-only flags' values (no `Edit` in the allow
-   list); no commits were added to `symphony/<id>`.
+   list); no commits were added to `samba/<id>`.
 2. Approval: moving it to `work-todo/` runs execution with a **new** `--session-id` (not the plan
    session), the system prompt mentions the approved plan, and it ends in `work-review/`.
 3. Rejection: adding `## Feedback` and moving it to `plan-todo/` resumes `plan_session_id` with the
@@ -1259,14 +1259,14 @@ All in the style of `tests/test_blackbox.py` (CLI subprocess, assert on files an
 9. Recovery: a task in `plan-running/` at startup is re-planned from `plan-todo/`, not executed.
 10. Moving a task out of `plan-running/` to `discarded/` (or `plan-todo/`) during planning stops
     the planner (as in v0); any other target is an illegal move (§4.1).
-11. `symphony task new` creates the file in `plan-todo/` (`--skip-plan`: `work-todo/`).
+11. `samba task new` creates the file in `plan-todo/` (`--skip-plan`: `work-todo/`).
 
 Layout tests (`tests/test_layout.py`): question versus stuck routing and `blocked_cause`,
 `done` versus `discarded` (worktree removed, branch kept), `last_stage` routing of retries,
 shutdown and recovery, the old-folder startup refusal, and loading an old sidecar.
 
 Transition tests (`tests/test_transitions.py`): one parametrized test per table row, a test that
-every row of `symphony dev transitions` has a scenario, the SPEC table drift check, and illegal hand
+every row of `samba dev transitions` has a scenario, the SPEC table drift check, and illegal hand
 moves. Dependency tests: `tests/test_dependencies.py` (§15).
 
 All existing tests must keep passing; `uv run pyright` must stay at 0 errors. Tests that moved a
@@ -1287,7 +1287,7 @@ finished first. It is a guard on the dispatch rows, not a state: a waiting task 
   folder, `question/`, `stuck/`) the task is simply not a dispatch candidate. It does not count
   toward `max_concurrent`.
 - **Unknown id** (no task file in any folder): treated as unmet, and a warning
-  `event=unknown_dependency task=<id> dependency=<id>` goes to `symphony.log` once per pair. A typo
+  `event=unknown_dependency task=<id> dependency=<id>` goes to `samba.log` once per pair. A typo
   never unblocks a task.
 - **A dependency in `discarded/`:** the dependent task fires `dependency_discarded` and goes to
   `stuck/` with `blocked_cause = dependency_discarded` (its `## Log` names the ids). Sending it back
@@ -1296,7 +1296,7 @@ finished first. It is a guard on the dispatch rows, not a state: a waiting task 
   not `done`, a self-dependency included): every task in the cycle fires `dependency_cycle` and
   goes to `stuck/` with `blocked_cause = dependency_cycle`. A task that only depends on a cycle
   keeps waiting.
-- **`symphony task list`** shows `waiting on <id>[, <id>...]` in the last-outcome column for a task in
+- **`samba task list`** shows `waiting on <id>[, <id>...]` in the last-outcome column for a task in
   a todo folder held only by dependencies (not in a retry delay), listing the ids not yet `done`.
 - **`--exit-when-idle`** (§11): a todo task held only by dependencies does not keep the run alive,
   so a dependency waiting for a human cannot hang it. A dependency that is itself runnable in a todo

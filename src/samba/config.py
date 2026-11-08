@@ -50,7 +50,7 @@ class PlanningConfig:
 @dataclass(frozen=True)
 class Config:
     repo: Path
-    symphony_dir: Path
+    samba_dir: Path
     workspaces_root: Path
     base_branch: str
     poll_interval_s: float
@@ -198,9 +198,9 @@ def load_config(repo: Path) -> Config:
     prompts_r = r.section("prompts")
     planning_r = r.section("planning")
 
-    symphony_dir = _expand(r.string("symphony_dir", ".symphony") or ".symphony", repo)
-    workspaces_root = _expand(r.string("workspaces_root", "~/.symphony/workspaces")
-                              or "~/.symphony/workspaces", repo)
+    samba_dir = _expand(r.string("samba_dir", ".samba") or ".samba", repo)
+    workspaces_root = _expand(r.string("workspaces_root", "~/.samba/workspaces")
+                              or "~/.samba/workspaces", repo)
     if workspaces_root == repo or repo in workspaces_root.parents:
         raise ConfigError(f"workspaces_root ({workspaces_root}) must be outside the repository, "
                           "or the agent would also load the main checkout's CLAUDE.md")
@@ -242,7 +242,7 @@ def load_config(repo: Path) -> Config:
 
     config = Config(
         repo=repo,
-        symphony_dir=symphony_dir,
+        samba_dir=samba_dir,
         workspaces_root=workspaces_root,
         base_branch=r.string("base_branch", "main") or "main",
         poll_interval_s=r.number("poll_interval_s", 10),

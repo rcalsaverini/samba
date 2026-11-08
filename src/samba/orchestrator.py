@@ -13,10 +13,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from symphony.claude import Invocation, RunResult, logged_in, run_claude
-from symphony.config import Config
-from symphony.proc import git, run_shell
-from symphony.prompts import (
+from samba.claude import Invocation, RunResult, logged_in, run_claude
+from samba.config import Config
+from samba.proc import git, run_shell
+from samba.prompts import (
     APPROVED_PLAN_RULE,
     DEFAULT_PROMPTS,
     PLAN_PROTOCOL,
@@ -24,9 +24,9 @@ from symphony.prompts import (
     allowed_tools_note,
     validate_note,
 )
-from symphony.deps import evaluate
-from symphony.lock import repo_lock
-from symphony.tasks import (
+from samba.deps import evaluate
+from samba.lock import repo_lock
+from samba.tasks import (
     STATES,
     Sidecar,
     SidecarStore,
@@ -40,11 +40,11 @@ from symphony.tasks import (
     running_of,
     todo_of,
 )
-from symphony.template import TemplateError, render
-from symphony.transitions import Machine, human_row, kv, log_line
-from symphony.workspace import WorkspaceError, Workspaces, branch_name
+from samba.template import TemplateError, render
+from samba.transitions import Machine, human_row, kv, log_line
+from samba.workspace import WorkspaceError, Workspaces, branch_name
 
-log = logging.getLogger("symphony")
+log = logging.getLogger("samba")
 
 StopReason = Literal["moved", "shutdown"]
 STATE_BY_NAME: dict[str, State] = {s: s for s in STATES}
@@ -79,7 +79,7 @@ class Running:
 class Orchestrator:
     def __init__(self, config: Config) -> None:
         self.config = config
-        self.sym = config.symphony_dir
+        self.sym = config.samba_dir
         self.tasks = TaskStore(self.sym / "tasks")
         self.sidecars = SidecarStore(self.sym / "state")
         self.runs_dir = self.sym / "runs"
@@ -133,18 +133,18 @@ class Orchestrator:
 
         self.tasks.ensure()
         self.runs_dir.mkdir(parents=True, exist_ok=True)
-        await self._exclude_symphony_dir()
+        await self._exclude_samba_dir()
 
         for stage in ("plan", "work"):
             for task in self.tasks.list(running_of(stage)):
                 if self.machine.fire(task.id, "recover", message="recovered at startup"):
                     log.info(kv("recovered", task=task.id, to=todo_of(stage)))
 
-    async def _exclude_symphony_dir(self) -> None:
+    async def _exclude_samba_dir(self) -> None:
         try:
             rel = self.sym.relative_to(self.config.repo)
         except ValueError:
-            return  # symphony_dir outside the repo: nothing to exclude
+            return  # samba_dir outside the repo: nothing to exclude
         res = await git(self.config.repo, "rev-parse", "--git-path", "info/exclude")
         if not res.ok:
             return
@@ -328,7 +328,7 @@ class Orchestrator:
                                                                         "discarded"):
                 with contextlib.suppress(WorkspaceError):
                     await self.workspaces.remove(task_id)
-        except Exception as e:  # a bug in Symphony itself: do not lose the task
+        except Exception as e:  # a bug in Samba itself: do not lose the task
             log.exception(kv("worker_crashed", task=task_id, error=e))
             side = self.sidecars.load(task_id)
             await self._fail(task_id, side, f"internal error: {e}")
@@ -610,7 +610,7 @@ class Orchestrator:
         question (for example a permission denial) gets one synthesized from its summary."""
         items = res.question_items
         if not items:
-            context = "Symphony synthesized this question: the agent reported blocked without one."
+            context = "Samba synthesized this question: the agent reported blocked without one."
             if res.denials:
                 context += " Permission denied: " + ", ".join(res.denials) + "."
             items = [(res.summary or "The agent reported blocked without a question", context)]

@@ -1,4 +1,4 @@
-"""Black-box tests for questions as data (SPEC §4.3, §11 `question`, §14). Must not import symphony."""
+"""Black-box tests for questions as data (SPEC §4.3, §11 `question`, §14). Must not import samba."""
 
 from __future__ import annotations
 

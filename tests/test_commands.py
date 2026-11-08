@@ -1,4 +1,4 @@
-"""Black-box tests for `plan accept|reject` and `work reject` (SPEC §11). Must not import symphony."""
+"""Black-box tests for `plan accept|reject` and `work reject` (SPEC §11). Must not import samba."""
 
 from __future__ import annotations
 
@@ -262,7 +262,7 @@ def test_command_while_orchestrator_runs(sb: Sandbox, cmd: list[str], state: str
         wait_for(lambda: started(sb))
         time.sleep(0.3)
         # The delay between rename and sidecar save lasts many ticks (poll interval 0.05 s).
-        res = sb.run(*cmd[:2], "t1", *cmd[2:], SYMPHONY_DEBUG_FIRE_DELAY="1.0")
+        res = sb.run(*cmd[:2], "t1", *cmd[2:], SAMBA_DEBUG_FIRE_DELAY="1.0")
         assert res.returncode == 0, res.stderr
         settle(sb, "t1", marker)
     finally:
@@ -273,7 +273,7 @@ def test_command_while_orchestrator_runs(sb: Sandbox, cmd: list[str], state: str
 
 def test_command_waits_for_lock_and_orchestrator_keeps_ticking(sb: Sandbox) -> None:
     review_task(sb, "t1", "plan-review")
-    lock_path = sb.repo / ".symphony" / "lock"
+    lock_path = sb.repo / ".samba" / "lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("w") as fh:
         fcntl.flock(fh, fcntl.LOCK_EX)
@@ -290,7 +290,7 @@ def test_command_waits_for_lock_and_orchestrator_keeps_ticking(sb: Sandbox) -> N
 
 def test_orchestrator_skips_ticks_while_lock_is_held(sb: Sandbox) -> None:
     review_task(sb, "t1", "work-todo")
-    lock_path = sb.repo / ".symphony" / "lock"
+    lock_path = sb.repo / ".samba" / "lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("w") as fh:
         fcntl.flock(fh, fcntl.LOCK_EX)

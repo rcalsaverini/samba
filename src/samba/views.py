@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable
 
-from symphony.deps import evaluate
-from symphony.tasks import (
+from samba.deps import evaluate
+from samba.tasks import (
     STATES,
     Sidecar,
     SidecarStore,
@@ -16,7 +16,7 @@ from symphony.tasks import (
     open_questions,
     qstr,
 )
-from symphony.transitions import human_events
+from samba.transitions import human_events
 
 HEADER = ["ID", "STATE", "ATTEMPTS", "TURNS", "COST", "LAST", "ERROR"]
 
