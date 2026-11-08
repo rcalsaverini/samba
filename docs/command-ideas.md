@@ -154,26 +154,127 @@ Observations:
 | Option | Change | Cost | Benefit |
 |---|---|---|---|
 | A. Keep folders, make events explicit | Declarative transition table in code; commands perform side effects at event time; add sidecar `blocked_cause` and `resolution` (`accepted` or `discarded`) set when entering `blocked` and `done` | small: sidecar fields only, no folder rename, existing black-box tests unchanged | fixes observations 2, 3, 4; `status` gains a cause column |
-| B. Split stage and status | folders become e.g. `plan/queued`, `plan/review`, `exec/queued`, `exec/review`, `running`, ... or a front matter `stage` field | large: user-visible layout change, 61 folder-name assertions in `test_blackbox.py`, SPEC §2 and §4.1, breaks every user's muscle memory, and the Rust rewrite must match | removes the phase inference; cleaner theory |
-| C. Add folders `discarded` and `approved` (and maybe `paused`) | three more folders | medium: tests that list folders, `STATES` order, `ensure()`, cleanup rules | `approved` removes the `last_outcome` trick; `discarded` splits `done`; but more folders for a barebones tool |
+| B. Stage x status folders (revised, see 3.3) | one folder per (stage, status) pair, `running` split by stage, `blocked` split by verdict needed, `done` split by resolution | mechanical but wide: `STATES`, `orchestrator.py` folder literals, SPEC §2, §4.1, §14, the folder names in `test_blackbox.py` (a rename pass), and a one-time `mv` of the human's existing task files. Not a rewrite of logic | removes the `phase` inference and most sidecar tricks; folder name says what the human must do |
+| C. Add only `discarded` and `approved` (and maybe `paused`) | three more folders on top of today's layout | medium, about the same touch points as B for less gain | fixes `done` and approval, leaves the shared `running` and the `blocked` mix |
+
+Revision after human feedback (round 2): the first version of this document recommended A and
+priced B as "large" because of user-visible layout, test assertions and muscle memory. That
+weighed the cost wrongly. There is one user, the project is pre-release, and the test change is a
+mechanical rename. The honest cost of B is a day-sized refactor, paid once, and it is cheapest now
+and most expensive after the Rust rewrite or a second user. The right question is which model is
+saner, and the SPEC should follow it.
 
 ### 3.3 Recommendation
 
-**Option A now. Defer B and C.** Reasons: folders are the user-visible API and the tests are
-black-box on folder names, so a rename costs the most and fixes only a modelling blemish. The real
-defects (implicit events, mixed causes, mixed resolutions) are fixed with data (sidecar fields) and
-an explicit table. Revisit C if `approved` or `paused` is asked for by real use; revisit B only
-with the Rust rewrite, where a layout break is cheaper.
+**Option B, with restraint. Option A's explicit table and sidecar cause field come with it.**
+My answer to "if there is a better model, go with it": yes. The cost argument I made does not
+hold for a single-user, pre-release tool, and the defects in 3.1 trace to one cause: the folder
+set does not carry the information the machine needs, so the code infers it from sidecar side
+effects. Fix the model, and the code gets simpler, not more complex.
 
-Concretely:
+The principle: **a folder name is a complete state, and tells the human what is expected of them.**
+Stage (plan or work) and status (todo, running, review) become visible and orthogonal in the name,
+and a state that needs a different human verdict gets its own folder.
 
-- `blocked_cause` in the sidecar: `question | budget | gave_up`, set at transitions 5 and 6, cleared
-  on dispatch. `status` shows it in the LAST column when state is `blocked`.
-- `resolution` in the sidecar: `merged | discarded`, set by the commands that move to `done`
-  (hand-moved tasks have none). `clean` uses it.
-- Commands do the explicit effects (reset attempts, set `last_outcome=approved`, clear
-  `session_id`) at event time; the dispatch inference stays as a fallback for hand moves, so the
-  file-browser workflow of SPEC §1 keeps working.
+Proposed layout (ten folders; the stage prefix matches the nouns `plan` and `work`):
+
+| Folder | Meaning | Human verdict expected |
+|---|---|---|
+| `plan-todo` | queued for planning | none (maybe edit) |
+| `plan-running` | planner running | none |
+| `plan-review` | plan written | `plan accept` or `plan reject` |
+| `work-todo` | queued for execution (new, approved, rework, retry) | none |
+| `work-running` | executor running | none |
+| `work-review` | validation passed, branch ready | `work accept` or `work reject` |
+| `question` | agent (or planner) asked something | `question answer` |
+| `stuck` | gave up or budget exceeded; `blocked_cause` says which | `task retry` or `task discard` |
+| `done` | accepted (merged); terminal | none |
+| `discarded` | abandoned; terminal | none |
+
+What this removes or fixes:
+
+- `phase` stops being sidecar state: the folder is the phase. Recovery and shutdown return
+  `plan-running` to `plan-todo` and `work-running` to `work-todo` with no lookup. `running` is no
+  longer shared (observation 1).
+- Approval is the table row `plan-review -> work-todo`; its effects (`plan_approved`, clear
+  `session_id`) belong to that row, not to a dispatch-time guess on `last_outcome`. The `planned`
+  and `approved` values of `last_outcome` become unnecessary (observation 2).
+- `question` and `stuck` separate "answer me" from "fix the harness or raise the budget"
+  (observation 3). Attempts reset is an effect of the retry and answer rows.
+- `done` and `discarded` separate merged from abandoned, so `clean` and `work accept` have a clear
+  contract (observation 4). A discarded task keeps its branch until `clean`.
+- `require_plan` becomes a rule on `new`, plus a table row `work-todo -> plan-todo` for a
+  hand-created task with no approved plan, instead of a dispatch branch (observation 5).
+- Retry waiting stays `work-todo` or `plan-todo` with a future `not_before`; no extra folder.
+
+Where I hold back, deliberately:
+
+- No `paused` and no `approved` folder: `work-todo` with `plan_approved` already means approved and
+  queued. Add `paused` when real use asks.
+- No nested directories (`plan/review/`): flat names list well with `ls` and the one-level
+  `TaskStore`.
+- `todo`, `review` and `blocked` are renamed, not kept, because a bare `review` would be ambiguous
+  between plan and work once the pairs exist.
+
+Hand moves in the file browser stay supported, through the same table. The sidecar records the last
+known `state`; on each tick a file found in a different folder is looked up as
+`(last state, folder)`. A row that exists is an observed event and its effects are applied; a pair
+not in the table is logged as an illegal move and the file is moved back. This replaces the ad hoc
+inference with one rule and keeps SPEC §1's "steer with a file browser" principle.
+
+Cost of the change, now:
+
+- `tasks.py`: `State`, `STATES`. `orchestrator.py`: folder literals in dispatch, recovery,
+  reconcile, cleanup; remove the `phase` and `last_outcome` inference.
+- SPEC §2, §4.1, §4.2, §5.1, §5.4, §10, §11, §14.2, §14.3, §14.8, updated in the same task.
+- `tests/test_blackbox.py` and `conftest.py`: a rename pass for folder names, plus the new
+  parametrized per-row test. The fake claude is unaffected.
+- The human's own repos: task files in old folders. A startup message listing old folders that
+  still hold files (a `mv` recipe in the task Log) is enough for one user.
+- The Rust rewrite inherits the clean layout instead of a legacy one: the strongest argument for
+  doing this before the rewrite.
+
+Sidecar: add `blocked_cause` (`question | budget | gave_up`, set when entering `question` or
+`stuck`) and `state` (last known folder, for observed hand moves); remove `phase`; drop the
+`planned` and `approved` values of `last_outcome`. No `resolution` field is needed, the folder is
+the resolution. Old sidecars load with defaults (SPEC §4.2).
+
+Smaller fallback, if the human prefers: Option A (keep folders, add `blocked_cause` and
+`resolution`, explicit table). Its table and fields are a subset of B's, so B can be layered on
+later, but given the cost argument above I would not choose it.
+
+### 3.4 Proposed transition table (layout B)
+
+Event names are the commands. "S" is Symphony, "H" is human (command or observed hand move).
+
+| Event | From | To | Who | Effects |
+|---|---|---|---|---|
+| `new` | none | `work-todo` (`plan-todo` with `--plan` or `require_plan`) | H | create file |
+| `dispatch_plan` | `plan-todo` | `plan-running` | S | claim; `not_before=None` |
+| `dispatch_work` | `work-todo` | `work-running` | S | claim; `not_before=None` |
+| `route_to_plan` | `work-todo` | `plan-todo` | S | only if `require_plan` and not `plan_approved` |
+| `planned` | `plan-running` | `plan-review` | S | `attempts=0` |
+| `plan_blocked` | `plan-running` | `question` | S | `blocked_cause=question` |
+| `done` | `work-running` | `work-review` | S | `attempts=0`; validation passed |
+| `work_blocked` | `work-running` | `question` | S | `blocked_cause=question` |
+| `budget` | `plan-running` or `work-running` | `stuck` | S | `blocked_cause=budget` |
+| `give_up` | `plan-running` or `work-running` | `stuck` | S | `blocked_cause=gave_up` |
+| `retry_plan` | `plan-running` | `plan-todo` | S | `attempts+=1`, `not_before` |
+| `retry_work` | `work-running` | `work-todo` | S | `attempts+=1`, `not_before` |
+| `recover` | `plan-running` or `work-running` | the matching `-todo` | S | none (startup, shutdown) |
+| `plan.accept` | `plan-review` | `work-todo` | H | `plan_approved=True`, clear `session_id` |
+| `plan.reject` | `plan-review` | `plan-todo` | H | append feedback |
+| `work.accept` | `work-review` | `done` | H | merge (unless `--no-merge`) |
+| `work.reject` | `work-review` | `work-todo` | H | append feedback |
+| `question.answer` | `question` | `plan-todo` or `work-todo` (by which run asked; sidecar `last_stage`) | H | append answer, `attempts=0` |
+| `task.retry` | `stuck` (also `work-review`) | `plan-todo` or `work-todo` (by `last_stage`) | H | `attempts=0` |
+| `task.stop` | `plan-running` or `work-running` | the matching `-todo` | H | agent killed |
+| `task.discard` | any non-terminal | `discarded` | H | worktree removed by the tick |
+
+`last_stage` (`plan | work`) replaces `phase` as the one remembered fact, needed only because
+`question` and `stuck` do not encode the stage; it is set at dispatch. If this is felt to be
+residual state, the alternative is `question` and `stuck` per stage (four folders), which I do not
+recommend.
 
 ## 4. Build or buy: the state machine
 
@@ -246,10 +347,10 @@ Until then the table costs a few dozen lines.
 the task itself, or the verb is a query.
 
 ```
-symphony plan accept|reject <id>        # plan-review -> todo | plan
-symphony work accept|reject <id>        # review -> done (merge) | todo
-symphony question answer <id> "text"    # blocked -> todo | plan (reads text or $EDITOR)
-symphony task retry|discard|stop <id>   # retry: blocked/review -> todo; discard: any -> done(discarded); stop: running -> todo
+symphony plan accept|reject <id>        # plan-review -> work-todo | plan-todo
+symphony work accept|reject <id>        # work-review -> done (merge) | work-todo
+symphony question answer <id> "text"    # question -> plan-todo | work-todo (reads text or $EDITOR)
+symphony task retry|discard|stop <id>   # retry: stuck -> *-todo; discard: any -> discarded; stop: *-running -> *-todo
 symphony task list [STATE] | show <id> | prio <id> N   # queries and edits on the task
 symphony list | show | new | edit | feedback | status | run   # flat forms
 ```
@@ -304,7 +405,7 @@ Testability is black-box in all cases unless noted.
 
 ### 6.3 Transitions
 
-| Command | Replaces | Event row (section 3.1) | Effects | Size | Danger |
+| Command | Replaces | Event row (section 3.1, today's layout; section 3.4 has the new names) | Effects | Size | Danger |
 |---|---|---|---|---|---|
 | `plan accept <id>` | `mv plan-review todo` | 10 | `last_outcome=approved`, `plan_approved`, clear `session_id` (explicit) | S | change |
 | `plan reject <id> --feedback` | feedback plus `mv` to `plan` | 11 | adds feedback, moves | S | change |
@@ -339,7 +440,7 @@ Order: transition table first (Phase 1), then `list` and `feedback`, then the ac
 Phase 0: sign-off on this document (decisions listed in section 9).
 
 Phase 1, explicit machine. SPEC §4.1, §4.2.
-- `symphony new "Make state transitions an explicit table in tasks.py, with sidecar blocked_cause and resolution, and a parametrized black-box test per row" --plan`
+- `symphony new "Redesign the state model: stage x status folders (plan-todo, plan-running, plan-review, work-todo, work-running, work-review, question, stuck, done, discarded), explicit transition table in tasks.py, blocked_cause and last_stage in the sidecar, observed hand moves, SPEC and black-box test rename, one parametrized test per table row" --plan` (the largest task; consider splitting into the table and the rename)
 
 Phase 2, read commands and the feedback primitive. SPEC §11.
 - `symphony new "Add list command with state filter, id prefix resolver and shared table printer" --plan`
@@ -361,7 +462,10 @@ Phase 4, convenience. SPEC §11, §10.
 
 1. Noun for finished work: `work` (recommended) or `review`?
 2. `task list` and `task show` canonical with short aliases, or short forms only?
-3. Accept the recommendation to keep folders and add `blocked_cause` and `resolution` (option A)?
+3. Accept option B (ten stage x status folders, section 3.3) with the transition table of 3.4, and
+   the spec changing to match? Sub-questions: the folder names; whether `question` and `stuck`
+   should stay stage-free with `last_stage` in the sidecar; and whether illegal hand moves are
+   moved back (recommended) or only logged.
 4. Own transition table, no library (section 4.3)? Library facts in section 4 need a web re-check
    by someone with search access if the decision is contested.
 5. `question answer`: append the answer as `## Feedback` (recommended, reuses the primitive) or
