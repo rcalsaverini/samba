@@ -24,8 +24,6 @@ claude:
     - "Bash(diff:*)"
     - "Bash(wc:*)"
     - "Bash(sed -n:*)"
-    # Exact command, for the SPEC split task. Remove it once that task is merged.
-    - "Bash(git rm SPEC.md)"
     # Trying the CLI in a scratch repo. Not `samba run` (an orchestrator inside a worktree) and
     # not `work accept` (it merges into a real base branch); their --help is allowed.
     - "Bash(uv run samba --help)"
