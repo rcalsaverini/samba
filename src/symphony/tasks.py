@@ -12,8 +12,27 @@ from typing import Any, Literal, cast
 
 from symphony.config import ConfigError, split_front_matter
 
-State = Literal["plan", "plan-review", "todo", "running", "review", "blocked", "done"]
-STATES: tuple[State, ...] = ("plan", "plan-review", "todo", "running", "review", "blocked", "done")
+State = Literal["plan-todo", "plan-running", "plan-review", "work-todo", "work-running",
+                "work-review", "question", "stuck", "done", "discarded"]
+STATES: tuple[State, ...] = ("plan-todo", "plan-running", "plan-review", "work-todo",
+                             "work-running", "work-review", "question", "stuck", "done",
+                             "discarded")
+Stage = Literal["plan", "work"]
+# Folders of the pre-stage layout (SPEC §5.1 refuses to start while they hold task files).
+LEGACY_STATES: tuple[str, ...] = ("plan", "todo", "running", "review", "blocked")
+
+# Values of Sidecar.blocked_cause. Plain strings, not a closed type: more are added later.
+CAUSE_QUESTION = "question"
+CAUSE_BUDGET = "budget"
+CAUSE_GAVE_UP = "gave_up"
+
+
+def todo_of(stage: Stage) -> State:
+    return "plan-todo" if stage == "plan" else "work-todo"
+
+
+def running_of(stage: Stage) -> State:
+    return "plan-running" if stage == "plan" else "work-running"
 ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
@@ -56,6 +75,11 @@ class TaskStore:
     def ensure(self) -> None:
         for s in STATES:
             (self.root / s).mkdir(parents=True, exist_ok=True)
+
+    def legacy_nonempty(self) -> list[str]:
+        """Old-layout folders that still hold task files."""
+        return [s for s in LEGACY_STATES
+                if (self.root / s).is_dir() and any((self.root / s).glob("*.md"))]
 
     def path(self, task_id: str, state: State) -> Path:
         return self.root / state / f"{task_id}.md"
@@ -179,7 +203,8 @@ def append_to_log_section(text: str, line: str) -> str:
 @dataclass
 class Sidecar:
     session_id: str | None = None
-    phase: str | None = None  # "plan" | "execute" (SPEC §14.8)
+    last_stage: str | None = None  # "plan" | "work", set at dispatch (SPEC §4.2)
+    blocked_cause: str | None = None  # why the task is in question/stuck (CAUSE_*)
     plan_session_id: str | None = None
     plan_approved: bool = False
     attempts: int = 0

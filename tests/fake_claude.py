@@ -109,7 +109,8 @@ def main() -> int:
     if step.get("task_log"):
         add_dir = arg_value(argv, "--add-dir")
         if add_dir:
-            tf = Path(add_dir) / "running" / f"{task_id}.md"
+            found = sorted(Path(add_dir).glob(f"*-running/{task_id}.md"))
+            tf = found[0] if found else Path(add_dir) / "work-running" / f"{task_id}.md"
             if tf.exists():
                 with tf.open("a") as f:
                     f.write(step["task_log"] + "\n")

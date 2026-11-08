@@ -17,9 +17,9 @@ def test_done_with_passing_validation_goes_to_review(sb: Sandbox) -> None:
                     "commit": True, "cost": 0.25})
     sb.run_idle()
 
-    assert sb.state_of("t1") == "review"
+    assert sb.state_of("t1") == "work-review"
     log = sb.log_section("t1")
-    assert "review" in log and "made it" in log
+    assert "work-review" in log and "made it" in log
     assert sb.branch_exists("symphony/t1")
     assert "fake commit" in git(sb.repo, "log", "--oneline", "symphony/t1")
     assert sb.worktree("t1").is_dir()
@@ -34,7 +34,7 @@ def test_no_validate_command_done_goes_straight_to_review(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "done"})
     sb.run_idle()
-    assert sb.state_of("t1") == "review"
+    assert sb.state_of("t1") == "work-review"
 
 
 def test_continue_then_done_resumes_same_session(sb: Sandbox) -> None:
@@ -42,7 +42,7 @@ def test_continue_then_done_resumes_same_session(sb: Sandbox) -> None:
     sb.steps("t1", {"outcome": "continue"}, {"outcome": None}, {"outcome": "done"})
     sb.run_idle()
 
-    assert sb.state_of("t1") == "review"
+    assert sb.state_of("t1") == "work-review"
     calls = sb.calls("t1")
     assert len(calls) == 3
     sid = flag(calls[0], "--session-id")
@@ -60,7 +60,7 @@ def test_validation_failure_is_fed_back_then_passes(sb: Sandbox) -> None:
     sb.steps("t1", {"outcome": "done"}, {"outcome": "done", "write": {"fixed.txt": "x"}})
     sb.run_idle()
 
-    assert sb.state_of("t1") == "review"
+    assert sb.state_of("t1") == "work-review"
     calls = sb.calls("t1")
     assert len(calls) == 2
     p = prompt_of(calls[1])
@@ -68,13 +68,13 @@ def test_validation_failure_is_fed_back_then_passes(sb: Sandbox) -> None:
     assert (sb.repo / ".symphony" / "runs" / "t1").is_dir()
 
 
-def test_blocked_moves_to_blocked(sb: Sandbox) -> None:
+def test_blocked_moves_to_question(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "blocked", "summary": "which db?",
                     "task_log": "## Questions\nWhich database?"})
     sb.run_idle()
 
-    assert sb.state_of("t1") == "blocked"
+    assert sb.state_of("t1") == "question"
     text = sb.task_text("t1")
     assert "Which database?" in text
     assert "which db?" in sb.log_section("t1")
@@ -85,15 +85,15 @@ def test_rework_from_review_resumes_session_with_resume_prompt(sb: Sandbox) -> N
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "done"}, {"outcome": "done"})
     sb.run_idle()
-    assert sb.state_of("t1") == "review"
+    assert sb.state_of("t1") == "work-review"
     sid = sb.sidecar("t1")["session_id"]
 
-    src = sb.tasks_dir / "review" / "t1.md"
+    src = sb.tasks_dir / "work-review" / "t1.md"
     src.write_text(src.read_text() + "\n## Feedback\nPlease rename it.\n")
-    src.rename(sb.tasks_dir / "todo" / "t1.md")
+    src.rename(sb.tasks_dir / "work-todo" / "t1.md")
     sb.run_idle()
 
-    assert sb.state_of("t1") == "review"
+    assert sb.state_of("t1") == "work-review"
     calls = sb.calls("t1")
     assert flag(calls[1], "--resume") == sid
     assert "resuming" in prompt_of(calls[1])
@@ -107,7 +107,7 @@ def test_failure_is_retried_then_succeeds(sb: Sandbox) -> None:
     sb.steps("t1", {"exit_code": 2, "no_result": True}, {"outcome": "done"})
     sb.run_idle()
 
-    assert sb.state_of("t1") == "review"
+    assert sb.state_of("t1") == "work-review"
     assert len(sb.calls("t1")) == 2
     assert sb.sidecar("t1")["attempts"] == 0
     assert "retry" in sb.log_section("t1").lower()
@@ -118,7 +118,7 @@ def test_is_error_result_counts_as_failure(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "done", "is_error": True, "exit_code": 0})
     sb.run_idle()
-    assert sb.state_of("t1") == "blocked"
+    assert sb.state_of("t1") == "stuck"
     assert sb.sidecar("t1")["last_outcome"] == "failed"
 
 
@@ -128,7 +128,7 @@ def test_gives_up_after_max_attempts_with_reflection_turn(sb: Sandbox) -> None:
     sb.steps("t1", {"is_error": True}, {"is_error": True}, {"outcome": "continue"})
     sb.run_idle()
 
-    assert sb.state_of("t1") == "blocked"
+    assert sb.state_of("t1") == "stuck"
     calls = sb.calls("t1")
     assert len(calls) == 3
     assert "Harness gaps" in prompt_of(calls[2])
@@ -143,7 +143,7 @@ def test_max_turns_exhausted_is_a_failure(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "continue"}, {"outcome": "continue"})
     sb.run_idle()
-    assert sb.state_of("t1") == "blocked"
+    assert sb.state_of("t1") == "stuck"
     assert "max_turns" in sb.sidecar("t1")["last_error"]
 
 
@@ -154,7 +154,7 @@ def test_stall_kills_agent_and_retries(sb: Sandbox) -> None:
     started = time.monotonic()
     sb.run_idle(timeout=30)
     assert time.monotonic() - started < 15
-    assert sb.state_of("t1") == "review"
+    assert sb.state_of("t1") == "work-review"
     assert len(sb.calls("t1")) == 2
 
 
@@ -166,7 +166,7 @@ def test_turn_timeout_kills_agent(sb: Sandbox) -> None:
     started = time.monotonic()
     sb.run_idle(timeout=30)
     assert time.monotonic() - started < 15
-    assert sb.state_of("t1") == "blocked"
+    assert sb.state_of("t1") == "stuck"
     assert "timeout" in sb.sidecar("t1")["last_error"].lower()
 
 
@@ -174,7 +174,7 @@ def test_malformed_lines_are_skipped(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "done", "malformed": True})
     sb.run_idle()
-    assert sb.state_of("t1") == "review"
+    assert sb.state_of("t1") == "work-review"
 
 
 def test_missing_session_on_resume_starts_fresh(sb: Sandbox) -> None:
@@ -183,7 +183,7 @@ def test_missing_session_on_resume_starts_fresh(sb: Sandbox) -> None:
     sb.steps("t1", {"missing_session": True}, {"outcome": "done"})
     sb.run_idle()
 
-    assert sb.state_of("t1") == "review"
+    assert sb.state_of("t1") == "work-review"
     calls = sb.calls("t1")
     assert flag(calls[0], "--resume") == "00000000-0000-0000-0000-000000000000"
     new_sid = flag(calls[1], "--session-id")
@@ -199,7 +199,8 @@ def test_budget_cap_blocks_task(sb: Sandbox) -> None:
              {"outcome": "done"})
     sb.run_idle()
 
-    assert sb.state_of("t1") == "blocked"
+    assert sb.state_of("t1") == "stuck"
+    assert sb.sidecar("t1")["blocked_cause"] == "budget"
     calls = sb.calls("t1")
     assert len(calls) == 2
     assert flag(calls[0], "--max-budget-usd") is not None
@@ -220,7 +221,7 @@ def test_after_create_hook_failure_fails_attempt(sb: Sandbox) -> None:
                       hooks={"after_create": "echo boom; exit 3"})
     sb.add_task("t1")
     sb.run_idle()
-    assert sb.state_of("t1") == "blocked"
+    assert sb.state_of("t1") == "stuck"
     assert sb.calls("t1") == []
     assert not sb.worktree("t1").exists()
 
@@ -287,7 +288,7 @@ def test_template_unknown_variable_fails_attempt(sb: Sandbox) -> None:
     sb.write_workflow(body="Hello {{ task.nope }}", max_attempts=1, reflect_on_give_up=False)
     sb.add_task("t1")
     sb.run_idle()
-    assert sb.state_of("t1") == "blocked"
+    assert sb.state_of("t1") == "stuck"
     assert "task.nope" in sb.sidecar("t1")["last_error"]
     assert sb.calls("t1") == []
 
@@ -317,20 +318,21 @@ def test_concurrency_limit_respected(sb: Sandbox) -> None:
     max_running = 0
     deadline = time.monotonic() + 30
     while proc.poll() is None and time.monotonic() < deadline:
-        running = list((sb.tasks_dir / "running").glob("*.md")) if (sb.tasks_dir / "running").exists() else []
+        run_dir = sb.tasks_dir / "work-running"
+        running = list(run_dir.glob("*.md")) if run_dir.exists() else []
         max_running = max(max_running, len(running))
         time.sleep(0.05)
     assert proc.wait(timeout=5) == 0
     assert max_running == 2
-    assert all(sb.state_of(f"t{i}") == "review" for i in range(4))
+    assert all(sb.state_of(f"t{i}") == "work-review" for i in range(4))
 
 
 def test_running_tasks_recovered_on_startup(sb: Sandbox) -> None:
-    sb.add_task("t1", state="running")
+    sb.add_task("t1", state="work-running")
     sb.write_sidecar("t1", {"session_id": "11111111-1111-1111-1111-111111111111", "attempts": 1})
     sb.steps("t1", {"outcome": "done"})
     sb.run_idle()
-    assert sb.state_of("t1") == "review"
+    assert sb.state_of("t1") == "work-review"
     assert flag(sb.calls("t1")[0], "--resume") == "11111111-1111-1111-1111-111111111111"
 
 
@@ -338,7 +340,7 @@ def test_human_moving_running_task_to_done_kills_agent_and_removes_worktree(sb: 
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "done", "hang": 30})
     proc = sb.popen("run", "--exit-when-idle")
-    running = sb.tasks_dir / "running" / "t1.md"
+    running = sb.tasks_dir / "work-running" / "t1.md"
     deadline = time.monotonic() + 15
     while not (running.exists() and sb.calls("t1")) and time.monotonic() < deadline:
         time.sleep(0.05)
@@ -351,24 +353,24 @@ def test_human_moving_running_task_to_done_kills_agent_and_removes_worktree(sb: 
     assert sb.branch_exists("symphony/t1")
 
 
-def test_blocked_task_moved_back_to_todo_resets_attempts(sb: Sandbox) -> None:
+def test_stuck_task_moved_back_to_todo_resets_attempts(sb: Sandbox) -> None:
     sb.write_workflow(max_attempts=1, reflect_on_give_up=False)
     sb.add_task("t1")
     sb.steps("t1", {"is_error": True}, {"outcome": "done"})
     sb.run_idle()
-    assert sb.state_of("t1") == "blocked"
-    (sb.tasks_dir / "blocked" / "t1.md").rename(sb.tasks_dir / "todo" / "t1.md")
+    assert sb.state_of("t1") == "stuck"
+    (sb.tasks_dir / "stuck" / "t1.md").rename(sb.tasks_dir / "work-todo" / "t1.md")
     sb.run_idle()
-    assert sb.state_of("t1") == "review"
+    assert sb.state_of("t1") == "work-review"
 
 
 def test_invalid_task_names_are_skipped(sb: Sandbox) -> None:
-    (sb.tasks_dir / "todo").mkdir(parents=True)
-    (sb.tasks_dir / "todo" / "bad name!.md").write_text("# bad\n")
+    (sb.tasks_dir / "work-todo").mkdir(parents=True)
+    (sb.tasks_dir / "work-todo" / "bad name!.md").write_text("# bad\n")
     sb.add_task("ok")
     sb.run_idle()
-    assert sb.state_of("ok") == "review"
-    assert (sb.tasks_dir / "todo" / "bad name!.md").exists()
+    assert sb.state_of("ok") == "work-review"
+    assert (sb.tasks_dir / "work-todo" / "bad name!.md").exists()
 
 
 # ---- startup and CLI -----------------------------------------------------------------------
@@ -404,11 +406,11 @@ def test_symphony_dir_is_git_excluded(sb: Sandbox) -> None:
 def test_new_command_creates_todo_task(sb: Sandbox) -> None:
     res = sb.run("new", "Add CSV export!", "--priority", "2")
     assert res.returncode == 0, res.stderr
-    text = (sb.tasks_dir / "todo" / "add-csv-export.md").read_text()
+    text = (sb.tasks_dir / "work-todo" / "add-csv-export.md").read_text()
     assert "# Add CSV export!" in text
     assert "priority: 2" in text
     res = sb.run("new", "Add CSV export!")
-    assert (sb.tasks_dir / "todo" / "add-csv-export-2.md").exists()
+    assert (sb.tasks_dir / "work-todo" / "add-csv-export-2.md").exists()
 
 
 def test_status_command_lists_tasks(sb: Sandbox) -> None:

@@ -24,7 +24,19 @@ from symphony.prompts import (
     allowed_tools_note,
     validate_note,
 )
-from symphony.tasks import Sidecar, SidecarStore, State, Task, TaskStore
+from symphony.tasks import (
+    CAUSE_BUDGET,
+    CAUSE_GAVE_UP,
+    CAUSE_QUESTION,
+    Sidecar,
+    SidecarStore,
+    Stage,
+    State,
+    Task,
+    TaskStore,
+    running_of,
+    todo_of,
+)
 from symphony.template import TemplateError, render
 from symphony.workspace import WorkspaceError, Workspaces, branch_name
 
@@ -32,9 +44,22 @@ log = logging.getLogger("symphony")
 
 StopReason = Literal["moved", "shutdown"]
 
+# Where a task file of an old-layout folder goes (SPEC §5.1). Shown in the refusal message.
+LEGACY_MOVES: dict[str, str] = {
+    "plan": "plan-todo",
+    "todo": "work-todo",
+    "running": "work-todo   (plan-todo for tasks that were being planned)",
+    "review": "work-review",
+    "blocked": "question    (stuck for tasks that failed or hit the budget)",
+}
+
 
 class StartupError(Exception):
     pass
+
+
+def stage_of(side: Sidecar) -> Stage:
+    return "plan" if side.last_stage == "plan" else "work"
 
 
 def kv(event: str, **fields: object) -> str:
@@ -53,6 +78,7 @@ def kv(event: str, **fields: object) -> str:
 class Running:
     task: asyncio.Task[None]
     started_at: float
+    folder: State  # the running folder the task was claimed into
     turn: int = 0
     stop_reason: StopReason | None = None
 
@@ -71,8 +97,21 @@ class Orchestrator:
 
     # ---- startup ------------------------------------------------------------------------
 
+    def _refuse_legacy_layout(self) -> None:
+        old = self.tasks.legacy_nonempty()
+        if not old:
+            return
+        root = self.tasks.root
+        lines = [f"old task folders still hold tasks: {', '.join(old)}. Move them to the new "
+                 "layout (SPEC §2), then start again:", f"  mkdir -p {root}/work-todo "
+                 f"{root}/plan-todo {root}/work-review {root}/question {root}/stuck"]
+        for folder in old:
+            lines.append(f"  mv {root}/{folder}/*.md {root}/{LEGACY_MOVES[folder]}")
+        raise StartupError("\n".join(lines))
+
     async def startup(self) -> None:
         cfg = self.config
+        self._refuse_legacy_layout()
         top = await git(cfg.repo, "rev-parse", "--show-toplevel")
         if not top.ok or Path(top.output.strip()).resolve() != cfg.repo:
             raise StartupError(f"{cfg.repo} is not the root of a git repository")
@@ -91,10 +130,11 @@ class Orchestrator:
         self.runs_dir.mkdir(parents=True, exist_ok=True)
         await self._exclude_symphony_dir()
 
-        for task in self.tasks.list("running"):
-            origin = self._origin(task.id)
-            if self.tasks.move(task.id, "running", origin):
-                log.info(kv("recovered", task=task.id, to=origin))
+        for stage in ("plan", "work"):
+            for task in self.tasks.list(running_of(stage)):
+                origin = todo_of(stage)
+                if self.tasks.move(task.id, running_of(stage), origin):
+                    log.info(kv("recovered", task=task.id, to=origin))
 
     async def _exclude_symphony_dir(self) -> None:
         try:
@@ -122,8 +162,8 @@ class Orchestrator:
         try:
             while True:
                 await self.tick()
-                if (exit_when_idle and not self.running and not self.tasks.list("todo")
-                        and not self.tasks.list("plan")):
+                if (exit_when_idle and not self.running and not self.tasks.list("work-todo")
+                        and not self.tasks.list("plan-todo")):
                     await self.cleanup_workspaces()
                     log.info(kv("idle_exit"))
                     return
@@ -138,10 +178,10 @@ class Orchestrator:
 
     def reconcile(self) -> None:
         for task_id, entry in list(self.running.items()):
-            if entry.stop_reason is None and self.tasks.state_of(task_id) != "running":
+            if entry.stop_reason is None and self.tasks.state_of(task_id) != entry.folder:
                 entry.stop_reason = "moved"
                 entry.task.cancel()
-                log.info(kv("stopping", task=task_id, reason="task file left running/",
+                log.info(kv("stopping", task=task_id, reason=f"task file left {entry.folder}/",
                             now=self.tasks.state_of(task_id) or "deleted"))
 
     async def cleanup_workspaces(self) -> None:
@@ -149,7 +189,7 @@ class Orchestrator:
             if task_id in self.running:
                 continue
             state = self.tasks.state_of(task_id)
-            if state is None or state == "done":
+            if state in (None, "done", "discarded"):
                 try:
                     await self.workspaces.remove(task_id)
                     log.info(kv("workspace_removed", task=task_id))
@@ -157,7 +197,7 @@ class Orchestrator:
                     log.warning(kv("workspace_remove_failed", task=task_id, error=e))
 
     def dispatch(self) -> None:
-        for folder in ("plan", "todo"):
+        for folder in ("plan-todo", "work-todo"):
             for name in self.tasks.invalid_names(folder):
                 if name not in self.warned_invalid:
                     self.warned_invalid.add(name)
@@ -165,7 +205,7 @@ class Orchestrator:
                                    hint="use only letters, digits, '.', '_' and '-'"))
         now = time.time()
         candidates: list[tuple[Task, Sidecar, State]] = []
-        for folder in ("plan", "todo"):
+        for folder in ("plan-todo", "work-todo"):
             for task in self.tasks.list(folder):
                 if task.id in self.running:
                     continue
@@ -178,31 +218,38 @@ class Orchestrator:
         for task, side, folder in candidates:
             if len(self.running) >= self.config.max_concurrent:
                 break
-            if not self.tasks.move(task.id, folder, "running"):
-                continue
-            if side.last_outcome in ("blocked", "failed"):
-                side.attempts = 0  # the human sent it back
-            if folder == "plan":
-                side.phase = "plan"
-            elif side.last_outcome == "planned":
-                # The human approved the plan: execution starts a fresh session (SPEC §14.3).
-                side.plan_approved = True
-                side.session_id = None
-                side.last_outcome = "approved"
-                side.phase = "execute"
+            approved = False
+            if folder == "plan-todo":
+                stage: Stage = "plan"
+            elif side.plan_session_id and not side.plan_approved:
+                # A plan exists and was never approved, so the file came from plan-review by
+                # hand: that is the approval (SPEC §14.3). Part 2 replaces this inference with
+                # the `plan.accept` row of the transition table.
+                stage, approved = "work", True
             elif self.config.planning.require_plan and not side.plan_approved:
-                side.phase = "plan"
+                stage = "plan"
             else:
-                side.phase = "execute"
+                stage = "work"
+            running_folder = running_of(stage)
+            if not self.tasks.move(task.id, folder, running_folder):
+                continue
+            if side.last_outcome in ("blocked", "failed") or side.blocked_cause:
+                side.attempts = 0  # the human sent it back
+            side.blocked_cause = None
+            if approved:
+                side.plan_approved = True
+                side.session_id = None  # execution starts a fresh session (SPEC §14.3)
+            side.last_stage = stage
             side.not_before = None
             if side.first_dispatched_at is None:
                 side.first_dispatched_at = time.time()
             self.sidecars.save(task.id, side)
-            log.info(kv("dispatch", task=task.id, attempt=side.attempts, phase=side.phase,
-                        resume=bool(side.plan_session_id if side.phase == "plan"
+            log.info(kv("dispatch", task=task.id, attempt=side.attempts, stage=stage,
+                        resume=bool(side.plan_session_id if stage == "plan"
                                     else side.session_id)))
             worker = asyncio.create_task(self.work(task.id))
-            self.running[task.id] = Running(task=worker, started_at=time.monotonic())
+            self.running[task.id] = Running(task=worker, started_at=time.monotonic(),
+                                            folder=running_folder)
             worker.add_done_callback(functools.partial(self._on_worker_done, task.id))
 
     def _on_worker_done(self, task_id: str, _worker: asyncio.Task[None]) -> None:
@@ -228,10 +275,12 @@ class Orchestrator:
             reason = entry.stop_reason if entry else "shutdown"
             log.info(kv("stopped", task=task_id, reason=reason))
             origin = self._origin(task_id)
-            if reason == "shutdown" and self.tasks.move(task_id, "running", origin):
+            if reason == "shutdown" and self.tasks.move(task_id, self._running_folder(task_id),
+                                                        origin):
                 self.tasks.append_log(task_id, self._log_line(
                     f"stopped by shutdown, back to {origin}"))
-            elif reason == "moved" and self.tasks.state_of(task_id) in (None, "done"):
+            elif reason == "moved" and self.tasks.state_of(task_id) in (None, "done",
+                                                                        "discarded"):
                 with contextlib.suppress(WorkspaceError):
                     await self.workspaces.remove(task_id)
         except Exception as e:  # a bug in Symphony itself: do not lose the task
@@ -256,7 +305,7 @@ class Orchestrator:
         task = self.tasks.find(task_id)
         if task is None:
             return
-        if side.phase == "plan":
+        if stage_of(side) == "plan":
             await self._plan(task, side, ws)
             return
         try:
@@ -275,8 +324,9 @@ class Orchestrator:
             if entry:
                 entry.turn = turn
             if self._budget_left(side) is not None and (self._budget_left(side) or 0) <= 0:
-                await self._finish(task_id, side, "blocked", "blocked",
-                                   f"budget exceeded (${side.cost_usd_total:.2f})")
+                await self._finish(task_id, side, "stuck", "blocked",
+                                   f"budget exceeded (${side.cost_usd_total:.2f})",
+                                   cause=CAUSE_BUDGET)
                 return
             res = await self._invoke(task_id, side, ws, prompt, resume, system_prompt)
             if res.session_missing:
@@ -291,8 +341,9 @@ class Orchestrator:
                 return
             left = self._budget_left(side)
             if left is not None and left <= 0:
-                await self._finish(task_id, side, "blocked", "blocked",
-                                   f"budget exceeded (${side.cost_usd_total:.2f})", res.summary)
+                await self._finish(task_id, side, "stuck", "blocked",
+                                   f"budget exceeded (${side.cost_usd_total:.2f})", res.summary,
+                                   cause=CAUSE_BUDGET)
                 return
 
             outcome = res.outcome
@@ -302,16 +353,17 @@ class Orchestrator:
                         cost=f"{res.cost_usd:.4f}"))
             if outcome == "done":
                 if not cfg.validate_command:
-                    await self._finish(task_id, side, "review", "done", "done", res.summary)
+                    await self._finish(task_id, side, "work-review", "done", "done", res.summary)
                     return
                 ok, tail = await self._validate(task_id, side, ws)
                 if ok:
-                    await self._finish(task_id, side, "review", "done", "validation passed",
-                                       res.summary)
+                    await self._finish(task_id, side, "work-review", "done",
+                                       "validation passed", res.summary)
                     return
                 prompt = self._prompt("validate_failed", variables) + "\n\n```\n" + tail + "\n```"
             elif outcome == "blocked":
-                await self._finish(task_id, side, "blocked", "blocked", "blocked", res.summary)
+                await self._finish(task_id, side, "question", "blocked", "blocked", res.summary,
+                                   cause=CAUSE_QUESTION)
                 return
             else:
                 prompt = self._prompt("continue", variables)
@@ -342,8 +394,9 @@ class Orchestrator:
             entry.turn = 1
         left = self._budget_left(side)
         if left is not None and left <= 0:
-            await self._finish(task_id, side, "blocked", "blocked",
-                               f"budget exceeded (${side.cost_usd_total:.2f})")
+            await self._finish(task_id, side, "stuck", "blocked",
+                               f"budget exceeded (${side.cost_usd_total:.2f})",
+                               cause=CAUSE_BUDGET)
             return
         res = await self._invoke(task_id, side, ws, prompt, resume, system_prompt, planning=True)
         if res.session_missing:
@@ -358,8 +411,9 @@ class Orchestrator:
             return
         left = self._budget_left(side)
         if left is not None and left <= 0:
-            await self._finish(task_id, side, "blocked", "blocked",
-                               f"budget exceeded (${side.cost_usd_total:.2f})", res.summary)
+            await self._finish(task_id, side, "stuck", "blocked",
+                               f"budget exceeded (${side.cost_usd_total:.2f})", res.summary,
+                               cause=CAUSE_BUDGET)
             return
         outcome = res.outcome
         log.info(kv("turn_end", task=task_id, turn=1, outcome=outcome or "missing",
@@ -373,7 +427,8 @@ class Orchestrator:
         if outcome == "planned":
             await self._finish(task_id, side, "plan-review", "planned", "planned", res.summary)
         else:
-            await self._finish(task_id, side, "blocked", "blocked", "blocked", res.summary)
+            await self._finish(task_id, side, "question", "blocked", "blocked", res.summary,
+                               cause=CAUSE_QUESTION)
 
     def _first_plan_prompt(self, variables: dict[str, str]) -> str:
         override = self.config.prompts.get("plan")
@@ -382,8 +437,11 @@ class Orchestrator:
         return render(self.config.prompt_template, variables) + "\n\n" + DEFAULT_PROMPTS["plan"]
 
     def _origin(self, task_id: str) -> State:
-        """Folder a running task returns to when stopped or recovered."""
-        return "plan" if self.sidecars.load(task_id).phase == "plan" else "todo"
+        """Folder a running task returns to when stopped or retried."""
+        return todo_of(stage_of(self.sidecars.load(task_id)))
+
+    def _running_folder(self, task_id: str) -> State:
+        return running_of(stage_of(self.sidecars.load(task_id)))
 
     async def _invoke(self, task_id: str, side: Sidecar, ws: Path, prompt: str, resume: bool,
                       system_prompt: str, planning: bool = False) -> RunResult:
@@ -440,13 +498,14 @@ class Orchestrator:
     # ---- transitions --------------------------------------------------------------------
 
     async def _finish(self, task_id: str, side: Sidecar, to: State, outcome: str, what: str,
-                      summary: str = "") -> None:
+                      summary: str = "", cause: str | None = None) -> None:
         side.last_outcome = outcome
-        if to in ("review", "plan-review"):
+        side.blocked_cause = cause
+        if to in ("work-review", "plan-review"):
             side.attempts = 0
             side.last_error = None
         self.sidecars.save(task_id, side)
-        moved = self.tasks.move(task_id, "running", to)
+        moved = self.tasks.move(task_id, self._running_folder(task_id), to)
         msg = f"{what}, moved to {to}" if moved else what
         msg += f" (turns {side.turns_total}, ${side.cost_usd_total:.2f})"
         if summary:
@@ -464,14 +523,15 @@ class Orchestrator:
             side.not_before = time.time() + delay
             side.last_outcome = "retrying"
             self.sidecars.save(task_id, side)
-            moved = self.tasks.move(task_id, "running", self._origin(task_id))
+            moved = self.tasks.move(task_id, self._running_folder(task_id),
+                                    self._origin(task_id))
             if moved:
                 self.tasks.append_log(task_id, self._log_line(
                     f"attempt {side.attempts} failed: {error}; retry in {delay:.0f}s"))
             return
 
-        if (cfg.reflect_on_give_up and side.session_id and side.phase != "plan"
-                and self.tasks.state_of(task_id) == "running"):
+        if (cfg.reflect_on_give_up and side.session_id and stage_of(side) != "plan"
+                and self.tasks.state_of(task_id) == self._running_folder(task_id)):
             task = self.tasks.find(task_id)
             if task is not None:
                 with contextlib.suppress(TemplateError):
@@ -480,11 +540,12 @@ class Orchestrator:
                     await self._invoke(task_id, side, ws, self._prompt("give_up", variables),
                                        True, self._system_prompt(variables, side))
         side.last_outcome = "failed"
+        side.blocked_cause = CAUSE_GAVE_UP
         self.sidecars.save(task_id, side)
-        moved = self.tasks.move(task_id, "running", "blocked")
+        moved = self.tasks.move(task_id, self._running_folder(task_id), "stuck")
         if moved:
             self.tasks.append_log(task_id, self._log_line(
-                f"gave up after {side.attempts} failed attempts: {error}; moved to blocked"))
+                f"gave up after {side.attempts} failed attempts: {error}; moved to stuck"))
 
     # ---- helpers ------------------------------------------------------------------------
 
@@ -493,7 +554,7 @@ class Orchestrator:
             "task.id": task.id,
             "task.title": task.title,
             "task.body": task.body,
-            "task.path": str(self.tasks.path(task.id, "running").resolve()),
+            "task.path": str(self.tasks.path(task.id, running_of(stage_of(side))).resolve()),
             "workspace": str(ws),
             "branch": branch_name(task.id),
             "base_branch": self.config.base_branch,

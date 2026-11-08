@@ -19,7 +19,8 @@ Principles carried over from the original spec:
 - The task store is the source of truth. Restart recovery comes from the task folders, the worktrees
   and a few small JSON sidecar files. No database.
 - One isolated workspace per task, preserved across runs.
-- Reconcile before dispatch: if the human moves a task out of `running/`, its agent is stopped.
+- Reconcile before dispatch: if the human moves a task out of its running folder
+  (`plan-running/` or `work-running/`), its agent is stopped.
 - Policy lives in the repo (`WORKFLOW.md`), versioned with the code.
 
 Principles taken from harness engineering:
@@ -40,7 +41,7 @@ Principles taken from harness engineering:
 - Live reload of `WORKFLOW.md`. Restart to apply changes.
 - Sandboxing beyond what Claude Code's permission settings and git worktrees provide. This is meant
   for trusted, local repositories. A worktree is isolation for git state, not a security boundary.
-- Merging. The agent never merges; tasks stop at `review/` with a branch for the human.
+- Merging. The agent never merges; tasks stop at `work-review/` with a branch for the human.
 
 ## 2. Layout
 
@@ -52,13 +53,16 @@ Symphony is run from the root of a target git repository:
   CLAUDE.md                      # optional, the repo's own agent map; Claude Code loads it
   .symphony/                     # created by Symphony, added to .git/info/exclude
     tasks/
-      plan/        <id>.md           # optional planning phase (§14)
-      plan-review/ <id>.md
-      todo/        <id>.md
-      running/     <id>.md
-      review/      <id>.md
-      blocked/     <id>.md
-      done/        <id>.md
+      plan-todo/     <id>.md         # planning stage (§14): ready to be planned
+      plan-running/  <id>.md
+      plan-review/   <id>.md
+      work-todo/     <id>.md         # work stage: ready to run
+      work-running/  <id>.md
+      work-review/   <id>.md
+      question/      <id>.md         # needs an answer from the human
+      stuck/         <id>.md         # needs a decision from the human
+      done/          <id>.md         # accepted (merged)
+      discarded/     <id>.md         # abandoned
     state/         <id>.json     # orchestrator-owned sidecar per task
     runs/          <id>/<n>.jsonl # raw Claude Code event stream per turn
     symphony.log
@@ -68,7 +72,9 @@ Symphony is run from the root of a target git repository:
 ```
 
 On startup Symphony creates any missing folders and appends `.symphony/` to `.git/info/exclude`
-(never edits the repo's `.gitignore`).
+(never edits the repo's `.gitignore`). The folder name is the complete state of a task (§4.1).
+Earlier versions used the folders `plan`, `todo`, `running`, `review` and `blocked`; startup refuses
+to run while any of them still holds task files (§5.1).
 
 Worktrees live **outside** the repository on purpose. Claude Code loads `CLAUDE.md` files from its
 working directory and every parent directory, so a worktree nested inside the main checkout would
@@ -125,30 +131,47 @@ Free-form description written by the human: goal, context, acceptance criteria.
 
 ### 4.1 States
 
-States are folders. Moving a file is a state transition.
+A state is a folder, and the folder name is the complete state: the stage (`plan` or `work`) and
+the status (`todo`, `running`, `review`) are both in the name. Moving a file is a state transition.
 
-| Folder     | Meaning                                         | Who moves files in       |
-|------------|-------------------------------------------------|--------------------------|
-| `plan`        | Ready to be planned (new, or plan revision, §14) | Human, or Symphony (retry) |
-| `plan-review` | Plan written; waiting for the human (§14)      | Symphony                 |
-| `todo`     | Ready to run (new, retry, or rework)            | Human, or Symphony (retry) |
-| `running`  | Claimed; an agent is (or is about to be) running | Symphony only           |
-| `review`   | Validation passed; branch ready for the human   | Symphony                 |
-| `blocked`  | Needs the human: question, budget, gave up      | Symphony                 |
-| `done`     | Terminal; human accepted or abandoned it         | Human                    |
+| Folder         | Meaning                                              | Who moves files in         |
+|----------------|------------------------------------------------------|----------------------------|
+| `plan-todo`    | Ready to be planned (new, or plan revision, §14)     | Human, or Symphony (retry) |
+| `plan-running` | Claimed for planning; a planner is (about to be) running | Symphony only          |
+| `plan-review`  | Plan written; waiting for the human (§14)            | Symphony                   |
+| `work-todo`    | Ready to run (new, retry, rework, or plan approved)  | Human, or Symphony (retry) |
+| `work-running` | Claimed; an agent is (or is about to be) running     | Symphony only              |
+| `work-review`  | Validation passed; branch ready for the human        | Symphony                   |
+| `question`     | The agent needs an answer from the human             | Symphony                   |
+| `stuck`        | Budget exceeded or gave up; needs a human decision   | Symphony                   |
+| `done`         | Terminal: accepted (merged)                          | Human                      |
+| `discarded`    | Terminal: abandoned                                  | Human                      |
+
+`question` and `stuck` have no stage in their name. The sidecar records where the task came from
+(`last_stage`, §4.2) and why it is there (`blocked_cause`, §4.2).
+
+`done` and `discarded` both remove the task's worktree and neither deletes its branch (§5.2).
 
 Transitions:
 
 ```
-todo ──dispatch──> running ──DONE + validate ok──> review ──human──> done
-                     │  ├──BLOCKED / budget / gave up──> blocked ──human answers──> todo
-                     │  └──failure, attempts left──> todo (with retry delay)
-                     └──human moves it elsewhere──> agent stopped
-review / blocked ──human adds Feedback──> todo   (resumes the same session)
-plan ──> running (phase plan) ──> plan-review ──human approves──> todo   (planning flow: §14.2)
+work-todo ──dispatch──> work-running ──DONE + validate ok──> work-review ──human──> done
+                           │  ├──BLOCKED──> question ──human answers──> work-todo
+                           │  ├──budget / gave up──> stuck ──human decides──> work-todo
+                           │  └──failure, attempts left──> work-todo (with retry delay)
+                           └──human moves it elsewhere──> agent stopped
+work-review ──human adds Feedback──> work-todo   (resumes the same session)
+any state ──human──> discarded
+plan-todo ──dispatch──> plan-running ──planned──> plan-review ──human approves──> work-todo
+                           │  ├──BLOCKED──> question ──human answers──> plan-todo
+                           │  ├──budget / gave up──> stuck
+                           │  └──failure, attempts left──> plan-todo (with retry delay)
+plan-review ──human adds Feedback──> plan-todo   (revises the same plan, §14.2)
 ```
 
-A task file deleted by the human is treated like `done`.
+A task file deleted by the human is treated like `done`. Hand moves are not checked against the
+diagram above in this version; the sidecar and the dispatch rules (§5.2, §14.3) decide what a task
+in a todo folder does next.
 
 ### 4.2 Sidecar state (`state/<id>.json`)
 
@@ -156,18 +179,27 @@ Owned by Symphony. Fields:
 
 - `session_id` (string or null): Claude Code session UUID, generated by Symphony and written here
   before launch (§9.1), used for `--resume`.
-- `attempts` (int): failed attempts so far (reset to 0 when the task reaches `review`).
+- `attempts` (int): failed attempts so far (reset to 0 when the task reaches `work-review` or
+  `plan-review`).
 - `not_before` (ISO timestamp or null): retry delay; the task is not dispatched before this.
 - `last_error` (string or null)
 - `last_outcome` (`done` | `blocked` | `failed` | `validate_failed` | `retrying` | `planned` |
-  `approved` | null)
-- `phase`, `plan_session_id`, `plan_approved` (planning, §14.8)
+  null): what the last run ended with. It is a log of the run, never used to decide where a task
+  goes. Old sidecars may hold `approved`; it is ignored.
+- `last_stage` (`plan` | `work` | null): the stage of the last dispatch, set at dispatch. Tells a
+  task in `question` or `stuck`, or one that is stopped or retried, which stage it belongs to.
+- `blocked_cause` (string or null): why the task is in `question` or `stuck`. Values now:
+  `question` (the agent asked), `budget`, `gave_up`. It is an open string, not a closed set: later
+  versions add values. Cleared at dispatch.
+- `plan_session_id`, `plan_approved` (planning, §14.8)
 - `turns_total` (int)
 - `cost_usd_total` (float), `input_tokens_total`, `output_tokens_total` (ints)
 - `branch` (string), `workspace` (absolute path)
 - `updated_at` (ISO timestamp)
 
-If the sidecar is missing or unreadable it is recreated empty (attempts 0, no session).
+If the sidecar is missing or unreadable it is recreated empty (attempts 0, no session). Unknown
+fields (for example the removed `phase` of older versions) are ignored on load and dropped on the
+next save.
 
 ### 4.3 In-memory orchestrator state
 
@@ -190,24 +222,35 @@ later:
 
 1. Load and validate `WORKFLOW.md` (§6). Fail fast on errors.
 2. Check `git` and the Claude command are on `PATH`, and the cwd is a git repo root.
-3. Create folders, update `.git/info/exclude`.
-4. **Recover:** every file in `running/` has no live agent (we just started). Move each back to
-   `todo/` without incrementing `attempts`; its session will be resumed.
-5. Start ticking every `poll_interval_s`.
+3. **Refuse the old layout:** if any of the old folders `plan/`, `todo/`, `running/`, `review/` or
+   `blocked/` under `tasks/` still holds `*.md` files, exit non-zero before touching anything
+   (no folder created, no file moved, no agent started). The message names the folders and prints
+   an `mv` recipe, for example `mv .symphony/tasks/todo/*.md .symphony/tasks/work-todo/`
+   (`plan` to `plan-todo`, `todo` to `work-todo`, `running` to the matching todo folder,
+   `review` to `work-review`, `blocked` to `question` or `stuck`). Symphony never migrates
+   automatically. Empty old folders do not block.
+4. Create folders, update `.git/info/exclude`.
+5. **Recover:** every file in `plan-running/` and `work-running/` has no live agent (we just
+   started). Move each back to the todo folder of its own stage (`plan-todo/`, `work-todo/`)
+   without incrementing `attempts`; its session will be resumed.
+6. Start ticking every `poll_interval_s`.
 
 ### 5.2 Tick
 
 1. **Reconcile** each live agent:
-   - Task file no longer in `running/` (human moved or deleted it): kill the agent process. If the
-     new state is `done` or the file is gone, remove the worktree (keep the branch).
+   - Task file no longer in the running folder it was dispatched into (human moved or deleted it):
+     kill the agent process. If the new state is `done` or `discarded`, or the file is gone,
+     remove the worktree (keep the branch).
    - (Stalls are detected by the Claude runner itself while reading the stream, §9.2.)
-2. **Clean up** worktrees whose task is in `done/` or no longer exists: remove the worktree (keep
-   the branch).
-3. **Dispatch:** list `todo/`, drop tasks with `not_before` in the future, sort by `priority`
-   (missing last), then file mtime (oldest first), then id. While
-   `len(running) < max_concurrent`: move the task to `running/` and start a worker.
+2. **Clean up** worktrees whose task is in `done/` or `discarded/` or no longer exists: remove the
+   worktree (keep the branch). `done` means accepted and `discarded` means abandoned; the worktree
+   and branch contract is the same for both.
+3. **Dispatch:** list `plan-todo/` and `work-todo/`, drop tasks with `not_before` in the future,
+   sort by `priority` (missing last), then file mtime (oldest first), then id. While
+   `len(running) < max_concurrent`: decide the stage (§14.3), record it as `last_stage`, clear
+   `blocked_cause`, move the task to `plan-running/` or `work-running/`, and start a worker.
 
-### 5.3 Worker (one per running task)
+### 5.3 Worker (one per running task, work stage)
 
 ```
 ensure_workspace(task)              # §7
@@ -215,19 +258,19 @@ for turn in 1..max_turns:
     prompt = first_prompt or continuation prompt (§8)
     result = run_claude(prompt)     # §9, resumes session if one exists
     record usage/cost in sidecar; log any permission_denials
-    if budget exceeded: -> blocked ("budget exceeded")
+    if budget exceeded: -> stuck ("budget exceeded", blocked_cause budget)
     match structured outcome in result (§9.3):
       done:
         v = run_validate()          # §7.3
-        if v.ok: -> review
+        if v.ok: -> work-review
         else: next prompt = validate_failed(v.output_tail); continue
-      blocked: -> blocked
+      blocked: -> question (blocked_cause question)
       continue / missing: next prompt = continue; continue
 max_turns reached -> failure ("max_turns exhausted")
 ```
 
 Every exit path appends one line to the task's `## Log`, for example:
-`- 2026-11-06 21:40 symphony: validate passed after 4 turns ($0.83), moved to review`.
+`- 2026-11-06 21:40 symphony: validate passed after 4 turns ($0.83), moved to work-review`.
 
 ### 5.4 Failures and retries
 
@@ -240,13 +283,15 @@ On failure:
 1. `attempts += 1`, store `last_error`.
 2. If `attempts < max_attempts`: set
    `not_before = now + min(retry_base_s * 2^(attempts-1), max_retry_backoff_s)`, set
-   `last_outcome = "retrying"`, move to `todo/`.
-3. Else (**give up**): if `reflect_on_give_up` is true and a session exists, run one final short turn
-   with the `give_up` prompt (§8), ignoring its outcome. Then move to `blocked/` with
-   `last_error`.
+   `last_outcome = "retrying"`, move to the todo folder of the task's stage (`last_stage`:
+   `plan-todo/` or `work-todo/`).
+3. Else (**give up**): if `reflect_on_give_up` is true and a session exists (work stage only), run
+   one final short turn with the `give_up` prompt (§8), ignoring its outcome. Then set
+   `last_outcome = "failed"`, `blocked_cause = "gave_up"` and move to `stuck/` with `last_error`.
 
-Moving a task from `blocked/` to `todo/` by hand resets `attempts` to 0 (Symphony detects this at
-dispatch because `last_outcome` is `blocked` or `failed`, not `retrying`).
+Moving a task from `question/` or `stuck/` to a todo folder by hand resets `attempts` to 0
+(Symphony detects this at dispatch because `last_outcome` is `blocked` or `failed`, not `retrying`,
+or because `blocked_cause` is set).
 
 ## 6. `WORKFLOW.md`
 
@@ -274,7 +319,7 @@ hooks:
   timeout_s: 300
 
 validate:
-  command: null                 # e.g. "make check"; null = outcome done goes straight to review
+  command: null                 # e.g. "make check"; null = outcome done goes straight to work-review
   timeout_s: 900
   output_tail_lines: 200        # lines of output fed back to the agent on failure
 
@@ -381,7 +426,8 @@ Symphony never deletes branches.
 `{{ name }}` substitution only. Unknown variables are an error (fails the attempt). Variables:
 
 - `task.id`, `task.title`, `task.body` (file content without front matter), `task.path` (absolute
-  path of the task file, in `running/`)
+  path of the task file, in the running folder of the current stage: `work-running/` or
+  `plan-running/`)
 - `workspace`, `branch`, `base_branch`
 - `attempt` (0 on first run, otherwise number of previous failures)
 - `validate_command` (empty string if none)
@@ -576,20 +622,25 @@ If a repo needs MCP servers, a later version can pass them explicitly with `--mc
 - `runs/`: raw event streams and validation outputs for debugging.
 - Task `## Log`: the human-readable summary, one line per worker exit.
 - `symphony status`: prints a table from folders and sidecars: id, state, attempts, turns, cost,
-  last outcome, last error, and for running tasks the phase (shown as `running (plan)` or
-  `running (execute)`).
+  last outcome, last error. The STATE column is the folder name; for `question` and `stuck` it is
+  followed by the `blocked_cause` in parentheses, for example `stuck (budget)`. A task waiting for a
+  retry delay shows `(retry in Ns)` in the last-outcome column.
 
 ## 11. CLI
 
 ```
 symphony run      [--repo PATH] [--exit-when-idle]
                   # start the loop (foreground; Ctrl-C stops agents and exits).
-                  # --exit-when-idle: exit once nothing is running and todo/ is empty.
+                  # --exit-when-idle: exit once nothing is running and plan-todo/ and
+                  # work-todo/ are empty. Exits 1 with an `mv` recipe if old-layout folders
+                  # still hold tasks (§5.1).
 symphony status   [--repo PATH]
-symphony new "Title" [--priority N] [--plan]  # create todo/<slug>.md (plan/<slug>.md with --plan)
+symphony new "Title" [--priority N] [--plan]
+                  # create work-todo/<slug>.md (plan-todo/<slug>.md with --plan)
 ```
 
-On Ctrl-C: kill all agent processes, move their tasks back to `todo/` (no attempt increment), exit.
+On Ctrl-C: kill all agent processes, move their tasks back to the todo folder of their stage
+(`plan-todo/` or `work-todo/`, no attempt increment), exit.
 
 ## 12. Implementation notes
 
@@ -637,10 +688,10 @@ Tested with throwaway repos and `--model haiku`:
 
 ## 13. Later (explicitly out of v0)
 
-- Reviewer pass: a second Claude run with a review prompt before moving to `review/`.
-- Gardening: scheduled tasks that drop cleanup tickets into `todo/` (stale docs, drift, tech debt).
+- Reviewer pass: a second Claude run with a review prompt before moving to `work-review/`.
+- Gardening: scheduled tasks that drop cleanup tickets into `work-todo/` (stale docs, drift, tech debt).
 - Other task stores behind §4.4 (GitHub Issues, Jira, Linear).
-- PR creation on `review` and feeding PR comments or CI results back as `## Feedback`.
+- PR creation on `work-review` and feeding PR comments or CI results back as `## Feedback`.
 - Claude Agent SDK runner, if in-process permission callbacks become useful.
 - Live reload of `WORKFLOW.md`.
 - Automatic subtask creation from a plan, with dependency tracking ("blocked by").
@@ -650,17 +701,18 @@ Tested with throwaway repos and `--model haiku`:
 
 Status: implemented. Details settled during implementation:
 
-- `--exit-when-idle` also waits while `plan/` is non-empty (`plan-review/` is the human's, like
-  `review/`).
-- On approval (rule 2) Symphony sets `last_outcome = "approved"` so a later stop or retry does not
-  clear the execution session again.
+- `--exit-when-idle` also waits while `plan-todo/` is non-empty (`plan-review/` is the human's,
+  like `work-review/`).
+- On approval (rule 2) Symphony sets `plan_approved = true`, so a later stop or retry does not
+  clear the execution session again (rule 2 no longer matches).
 - Headings `#` and `##` inside `plan` and `questions` are written as `###`, so they cannot be
   mistaken for task sections when the `## Plan` section is replaced.
 - A configured `prompts.plan` replaces the default whole (the default is the `WORKFLOW.md` body
   rendered, then the sentence in §14.5); `prompts.plan_revise` replaces the revise prompt.
 - The planning variant of the execution protocol lives in `prompts.PLAN_PROTOCOL`; budget caps apply
   to planning like to execution (§9.1).
-- In `symphony status` the running phase appears in the STATE column.
+- In `symphony status` the folder name is the STATE column (`plan-running` or `work-running` says
+  which stage a running task is in).
 
 ### 14.1 Goal
 
@@ -671,42 +723,43 @@ structured output and Symphony writes it into the task file.
 
 ### 14.2 States and flow
 
-Two new state folders, added to §2 layout, §4.1 and to `STATES` (order matters for `status`
-output): `plan`, `plan-review`, `todo`, `running`, `review`, `blocked`, `done`.
-
-| Folder        | Meaning                                         | Who moves files in |
-|---------------|-------------------------------------------------|--------------------|
-| `plan`        | Ready to be planned (new, or plan revision)     | Human              |
-| `plan-review` | Plan written; waiting for the human             | Symphony           |
+The planning stage is the three folders `plan-todo`, `plan-running` and `plan-review` of the layout
+in §2 and §4.1 (the same order is used by `STATES` and so by `status` output). The stage is part of
+the folder name, so no sidecar field says "which phase a running task is in".
 
 ```
-plan ──dispatch──> running (phase plan) ──planned──> plan-review
-                         │  ├──blocked──> blocked
-                         │  └──failure──> plan (retry) / blocked (gave up)
-plan-review ──human approves: move to todo──> todo ──> running (phase execute) ──> review ...
-plan-review ──human adds ## Feedback, moves to plan──> plan   (revises the same plan)
+plan-todo ──dispatch──> plan-running ──planned──> plan-review
+                           │  ├──blocked──> question
+                           │  ├──budget / gave up──> stuck
+                           │  └──failure, attempts left──> plan-todo (retry)
+plan-review ──human approves: move to work-todo──> work-todo ──> work-running ──> work-review ...
+plan-review ──human adds ## Feedback, moves to plan-todo──> plan-todo   (revises the same plan)
 ```
 
-- `running/` is shared by both phases. The sidecar field `phase` (`"plan"` or `"execute"`) says
-  which one a running task is in. Reconcile, stop, shutdown and recovery work unchanged: on
-  recovery or shutdown a running task goes back to the folder it was dispatched from (`plan/` when
-  `phase == "plan"`, else `todo/`).
-- Retries of a failed planning run go back to `plan/` (same backoff and `max_attempts` as §5.4,
-  and the give-up reflection turn is skipped for planning runs).
+- Reconcile, stop, shutdown and recovery work per running folder: on recovery a file in
+  `plan-running/` goes back to `plan-todo/`; on shutdown or retry a task goes back to the todo
+  folder of its `last_stage` (`plan-todo/` when `last_stage == "plan"`, else `work-todo/`).
+- Retries of a failed planning run go back to `plan-todo/` (same backoff and `max_attempts` as
+  §5.4, and the give-up reflection turn is skipped for planning runs). Giving up goes to `stuck/`.
 
 ### 14.3 Dispatch rules
 
-Dispatch candidates come from both `plan/` and `todo/`, in one list sorted as in §5.2, limited by
-the same `max_concurrent`. For each candidate, the phase is decided at dispatch:
+Dispatch candidates come from both `plan-todo/` and `work-todo/`, in one list sorted as in §5.2,
+limited by the same `max_concurrent`. For each candidate, the stage is decided at dispatch and
+stored as `last_stage`:
 
-1. File in `plan/` → phase `plan`.
-2. File in `todo/` and sidecar `last_outcome == "planned"` → the human approved the plan: set
-   `plan_approved = true`, clear `session_id` (execution starts a fresh session, §14.6), phase
-   `execute`.
-3. File in `todo/`, `planning.require_plan` is true, and `plan_approved` is false → phase `plan`.
-4. Otherwise → phase `execute` (v0 behavior).
+1. File in `plan-todo/` → stage `plan` (claimed into `plan-running/`).
+2. File in `work-todo/`, sidecar `plan_session_id` set and `plan_approved` false → the human
+   approved the plan by moving the file out of `plan-review/`: set `plan_approved = true`, clear
+   `session_id` (execution starts a fresh session, §14.6), stage `work`. This reads durable facts
+   (a plan exists and was never approved), not `last_outcome`. It is still an inference: a task
+   whose plan was rejected into `plan-todo/` and then moved by hand to `work-todo/` is read as
+   approved. The explicit transition table of a later version (`plan.accept`) replaces it.
+3. File in `work-todo/`, `planning.require_plan` is true, and `plan_approved` is false (and rule 2
+   did not match) → stage `plan`: the task is claimed into `plan-running/`.
+4. Otherwise → stage `work` (v0 behavior, claimed into `work-running/`).
 
-The attempt reset rule of §5.4 also applies to planning (`last_outcome` of `blocked` or `failed`).
+The attempt reset rule of §5.4 also applies to planning.
 
 ### 14.4 The planning run
 
@@ -745,8 +798,9 @@ logged), with these differences:
     (create it if missing, before `## Log` if present, else at the end). Never duplicate it.
   - If `questions` is non-empty, replace the `## Questions` section the same way.
   - Append a `## Log` line as in §5.3, including `summary`.
-- **Transitions:** `planned` → `plan-review/`, `last_outcome = "planned"`. `blocked` → `blocked/`,
-  `last_outcome = "blocked"`. Missing or invalid structured output, or no `plan` text with outcome
+- **Transitions:** `planned` → `plan-review/`, `last_outcome = "planned"`. `blocked` →
+  `question/`, `last_outcome = "blocked"`, `blocked_cause = "question"`, `last_stage` stays
+  `plan`. Budget exceeded → `stuck/` (cause `budget`). Missing or invalid structured output, or no `plan` text with outcome
   `planned` → a failure (§5.4).
 
 ### 14.5 Prompts
@@ -765,8 +819,8 @@ Added to §8.3 defaults and overridable in `prompts:` like the others:
 - When `plan_approved` is true, the execution protocol prompt (§8.5) gets one extra rule: "An
   approved plan is in the `## Plan` section of your task file. Follow it. If you must deviate,
   record what and why in `## Log`. Tick the plan's checkboxes as you complete steps."
-- Everything else is v0 behavior (continue loop, validation, review).
-- Rework from `review/` (move to `todo/`) keeps `plan_approved = true` and resumes the execution
+- Everything else is v0 behavior (continue loop, validation, `work-review`).
+- Rework from `work-review/` (move to `work-todo/`) keeps `plan_approved = true` and resumes the execution
   session, as in v0.
 
 ### 14.7 Config
@@ -775,17 +829,19 @@ Added to §6.1:
 
 ```yaml
 planning:
-  require_plan: false         # true: todo/ tasks are planned (and reviewed) before execution
+  require_plan: false         # true: work-todo/ tasks are planned (and reviewed) before execution
   model: null                 # defaults to claude.model
   allow: ["Read", "Grep", "Glob"]
 ```
 
 ### 14.8 Sidecar and status
 
-- New sidecar fields: `phase` (`"plan" | "execute" | null`), `plan_session_id` (string or null),
-  `plan_approved` (bool, default false). Old sidecars without them load with defaults.
-- `symphony status` shows the two new states; for running tasks it shows the phase.
-- `symphony new --plan` creates the task in `plan/` instead of `todo/`.
+- Planning sidecar fields: `plan_session_id` (string or null), `plan_approved` (bool, default
+  false), plus `last_stage` and `blocked_cause` (§4.2). The former `phase` field is gone: the
+  running folder says which stage a task is in. Old sidecars load with defaults and their `phase`
+  is ignored.
+- `symphony status` shows the folder name as the state of each task (§10).
+- `symphony new --plan` creates the task in `plan-todo/` instead of `work-todo/`.
 
 ### 14.9 Fake claude additions
 
@@ -797,26 +853,29 @@ planning:
 
 All in the style of `tests/test_blackbox.py` (CLI subprocess, assert on files and recorded calls):
 
-1. A task in `plan/` ends in `plan-review/` with the plan text under `## Plan`; the call used
+1. A task in `plan-todo/` ends in `plan-review/` with the plan text under `## Plan`; the call used
    `--permission-mode dontAsk`, `--allowedTools` exactly `planning.allow`, a schema whose outcome
    enum is `["planned", "blocked"]`, and no execution-only flags' values (no `Edit` in the allow
    list); no commits were added to `symphony/<id>`.
-2. Approval: moving it to `todo/` runs execution with a **new** `--session-id` (not the plan
-   session), the system prompt mentions the approved plan, and it ends in `review/`.
-3. Rejection: adding `## Feedback` and moving it to `plan/` resumes `plan_session_id` with the
+2. Approval: moving it to `work-todo/` runs execution with a **new** `--session-id` (not the plan
+   session), the system prompt mentions the approved plan, and it ends in `work-review/`.
+3. Rejection: adding `## Feedback` and moving it to `plan-todo/` resumes `plan_session_id` with the
    revise prompt; afterwards the task file has exactly one `## Plan` section, containing the
    revised plan.
-4. `planning.require_plan: true`: a task in `todo/` goes to `plan-review/` first, then executes
-   after approval.
-5. Default config: a task in `todo/` executes directly (no planning call).
-6. Planner `blocked` with `questions`: task in `blocked/`, `## Questions` contains them; moving it
-   back to `plan/` replans with attempts reset.
-7. Planner failure then success: retried from `plan/`, ends in `plan-review/`; with
-   `max_attempts: 1` it ends in `blocked/` and no give-up reflection call is made.
+4. `planning.require_plan: true`: a task in `work-todo/` goes to `plan-review/` first, then
+   executes after approval.
+5. Default config: a task in `work-todo/` executes directly (no planning call).
+6. Planner `blocked` with `questions`: task in `question/` with `last_stage: "plan"`,
+   `## Questions` contains them; moving it back to `plan-todo/` replans with attempts reset.
+7. Planner failure then success: retried from `plan-todo/`, ends in `plan-review/`; with
+   `max_attempts: 1` it ends in `stuck/` and no give-up reflection call is made.
 8. `planning.model` is passed as `--model` for planning and `claude.model` for execution.
-9. Recovery: a task in `running/` with sidecar `phase: "plan"` at startup is re-planned from
-   `plan/`, not executed.
-10. Moving a task out of `running/` during planning stops the planner (as in v0).
-11. `symphony new --plan` creates the file in `plan/`.
+9. Recovery: a task in `plan-running/` at startup is re-planned from `plan-todo/`, not executed.
+10. Moving a task out of `plan-running/` during planning stops the planner (as in v0).
+11. `symphony new --plan` creates the file in `plan-todo/`.
+
+Layout tests (`tests/test_layout.py`): question versus stuck routing and `blocked_cause`,
+`done` versus `discarded` (worktree removed, branch kept), `last_stage` routing of retries,
+shutdown and recovery, the old-folder startup refusal, and loading an old sidecar.
 
 All existing tests must keep passing unchanged; `uv run pyright` must stay at 0 errors.

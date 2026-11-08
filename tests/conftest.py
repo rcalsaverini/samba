@@ -21,7 +21,8 @@ import pytest
 import yaml
 
 FAKE_CLAUDE = Path(__file__).parent / "fake_claude.py"
-STATES = ("plan", "plan-review", "todo", "running", "review", "blocked", "done")
+STATES = ("plan-todo", "plan-running", "plan-review", "work-todo", "work-running", "work-review",
+          "question", "stuck", "done", "discarded")
 
 
 def symphony_cmd() -> list[str]:
@@ -78,7 +79,7 @@ class Sandbox:
         text = "---\n" + yaml.safe_dump(config, sort_keys=False) + "---\n" + body + "\n"
         (self.repo / "WORKFLOW.md").write_text(text)
 
-    def add_task(self, task_id: str, body: str = "Do the thing.", state: str = "todo",
+    def add_task(self, task_id: str, body: str = "Do the thing.", state: str = "work-todo",
                  priority: int | None = None, title: str | None = None) -> Path:
         d = self.tasks_dir / state
         d.mkdir(parents=True, exist_ok=True)
