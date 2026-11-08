@@ -167,6 +167,12 @@ class Sandbox:
             return []
         return [json.loads(line)["argv"] for line in p.read_text().splitlines()]
 
+    def pids(self, task_id: str) -> list[int]:
+        p = self.plan_dir / f"{task_id}.calls.jsonl"
+        if not p.exists():
+            return []
+        return [json.loads(line)["pid"] for line in p.read_text().splitlines()]
+
     @property
     def repo_key(self) -> str:
         resolved = self.repo.resolve()

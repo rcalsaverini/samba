@@ -129,7 +129,11 @@ Free-form description written by the human: goal, context, acceptance criteria.
   `## Log` (creating the section if missing).
 - Orchestrator bookkeeping goes to the sidecar (§4.2), not to the markdown.
 - A command (§11) may also write a task file, only to append feedback to `## Feedback` of a task in
-  a review folder, where no agent runs.
+  a review or `question` folder, where no agent runs. The exception is `task stop` and
+  `task discard` on a running task: `fire` moves the file first, so the command writes its `## Log`
+  line to the new path (a todo folder or `discarded/`), which the agent does not hold, and the
+  orchestrator's next tick cancels the worker. A read-modify-write race with an agent that has
+  already rewritten its file is accepted.
 - **Repo lock.** `.symphony/lock` is an advisory `flock`. Every state-changing command holds it for
   its whole resolve, check, write, `fire` sequence (blocking up to about 10 s, then exit 1). The
   orchestrator takes it non-blocking at the start of each tick and **skips the whole tick** when it
@@ -777,9 +781,14 @@ symphony plan accept ID [--repo PATH]
 symphony plan reject ID [--feedback TEXT | --edit] [--repo PATH]
 symphony work reject ID [--feedback TEXT | --edit] [--fresh] [--repo PATH]
 symphony work accept ID [--no-merge] [--no-validate] [--yes] [--dry-run] [--repo PATH]
+symphony question answer ID (TEXT | --edit) [--repo PATH]
+symphony task retry ID   [--repo PATH]
+symphony task stop ID    [--repo PATH]
+symphony task discard ID [--yes] [--repo PATH]
 ```
 
-State-changing commands (`plan accept`, `plan reject`, `work reject`, `work accept`) follow one **command
+State-changing commands (`plan accept`, `plan reject`, `work reject`, `work accept`,
+`question answer`, `task retry`, `task stop`, `task discard`) follow one **command
 pattern**: resolve the id, take the repo lock (§3.3), check that the task's folder has a human row
 for the event, do the **outside effect** (here: write the feedback into the task file), then
 **fire** the event through `Machine.fire` (§4.1). Table rows only change Symphony's state, and no
@@ -787,7 +796,8 @@ command moves a task or writes the sidecar except through `fire`. Later commands
 
 - Exit codes: 0 done; 1 wrong state, lock timeout, editor failure, failed preflight, merge or
   validation failure, declined prompt, or a `fire` that did not apply; 2 usage error, unknown or
-  ambiguous id, config error, or `work accept` without `--yes` and without a TTY. A refusal
+  ambiguous id, config error, empty `question answer` text, or `work accept` or `task discard`
+  without `--yes` and without a TTY. A refusal
   changes nothing.
 - On success the command prints only the task file's new path on stdout. The `## Log` line names
   the event, with `feedback round N` when feedback was written.
@@ -803,6 +813,29 @@ command moves a task or writes the sidecar except through `fire`. Later commands
 - `plan accept` fires `plan.accept` (§14). `plan reject` fires `plan.reject` and leaves
   `plan_session_id` alone. `work reject` fires `work.reject`; with `--fresh` it fires
   `work.reject_fresh`, which also clears `session_id`.
+- `question answer` fires `question.answer`. The answer is a positional TEXT or `--edit` (exactly
+  one; both or neither is a usage error, and so is empty text, exit 2, nothing changed). It is
+  written with the feedback rules above (`feedback round N` in the `## Log` line). The task goes
+  to the todo folder of `last_stage`; with `last_stage` unset the table's first row applies, so it
+  goes to `plan-todo/` (move by hand to choose `work-todo/`).
+- `task retry` fires `task.retry` (`stuck` only), same destinations as `question answer`. After
+  the move, a hint goes to stderr (stdout stays the path; exit 0) according to the
+  `blocked_cause` it had: `budget` says to raise the cap in `WORKFLOW.md` first
+  (`max_turns`, `max_attempts`, `max_cost_usd_per_task`) or the task goes straight back to
+  `stuck`; `dependency_discarded` and `dependency_cycle` say to edit `depends_on` first. Other
+  causes print nothing. The command never changes the config.
+- `task stop` fires `task.stop` (only `plan-running` and `work-running`): the task goes to the
+  todo folder of its stage, no attempt increment. With the orchestrator running, its next tick
+  sees the task left its running folder and cancels the agent, as for a hand move, and the task is
+  dispatched again like any todo task. Without an orchestrator the file and sidecar are moved and
+  nothing else happens: the next `symphony run` sees a normal todo task. An agent process left
+  behind by a crashed orchestrator is not killed.
+- `task discard` fires `task.discard` (every state but `done` and `discarded`) and is dangerous:
+  it uses the confirmation policy of `work accept` (after the legality check and before the lock;
+  `--yes` skips it; prompt `Discard task <id>? [y/N]` on a TTY, anything but `y`/`yes` is exit 1;
+  no TTY and no `--yes` is exit 2; nothing changes in either case). Discarding a running task
+  moves it at once and the orchestrator then stops the agent; the worktree is removed afterwards
+  and the branch is kept (§5.2).
 
 **`work accept`** merges a reviewed task's branch and fires `work.accept` (`work-review -> done`).
 It is the first dangerous command. Moving the file to `done/` by hand stays a plain observed

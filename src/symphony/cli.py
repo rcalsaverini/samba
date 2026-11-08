@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from symphony import merge, workspace
 from symphony.config import Config, ConfigError, load_config
@@ -108,13 +108,43 @@ def _edit_feedback() -> str | None:
         return path.read_text().strip()
 
 
+def confirm(prompt: str, command: str, yes: bool) -> int | None:
+    """The confirmation policy of dangerous commands (SPEC §11). Returns the exit code to stop
+    with, or None to proceed: `--yes` skips; without a terminal exit 2; else ask `[y/N]`."""
+    if yes:
+        return None
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        print(f"symphony: {command} needs confirmation: run it on a terminal or pass --yes; "
+              "nothing changed", file=sys.stderr)
+        return 2
+    print(f"{prompt}? [y/N] ", end="", flush=True)
+    if sys.stdin.readline().strip().lower() not in ("y", "yes"):
+        print("symphony: not confirmed; nothing changed", file=sys.stderr)
+        return 1
+    return None
+
+
+def _retry_hint(cause: str | None) -> str | None:
+    if cause == "budget":
+        return ("hint: raise the budget cap in WORKFLOW.md first (max_turns, max_attempts or "
+                "max_cost_usd_per_task), or the task will go straight back to stuck")
+    if cause in ("dependency_discarded", "dependency_cycle"):
+        return ("hint: edit depends_on in the task file first, or the dependency check will "
+                "send it back to stuck")
+    return None
+
+
 def cmd_transition(config: Config, text: str, event: str, label: str, *,
                    feedback: str | None = None, edit: bool = False,
-                   takes_feedback: bool = False) -> int:
+                   feedback_mode: Literal["none", "optional", "required"] = "none",
+                   confirm_plan: str | None = None, yes: bool = False,
+                   hints: bool = False) -> int:
     """The command pattern (SPEC §11): resolve, check the event is legal, do the outside effect
-    (feedback text), then `Machine.fire`. Nothing else moves a task. Holds the repo lock."""
+    (feedback text), then `Machine.fire`. Nothing else moves a task. Holds the repo lock.
+    `confirm_plan` marks a dangerous command (asks after the legality check, before the lock)."""
     tasks = TaskStore(config.symphony_dir / "tasks")
     sidecars = SidecarStore(config.symphony_dir / "state")
+    takes_feedback = feedback_mode != "none"
 
     def legal(task_id: str) -> State | None:
         """The task's state if `event` is legal there, else report and return None."""
@@ -142,8 +172,16 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
         if feedback is None:
             return 1
     feedback = (feedback or "").strip()
-    if takes_feedback and not feedback:
+    if not feedback and feedback_mode == "optional":
         print("warning: rejecting without feedback", file=sys.stderr)
+    if not feedback and feedback_mode == "required":
+        print(f"symphony: {label} needs text (argument or --edit); nothing changed",
+              file=sys.stderr)
+        return 2
+    if confirm_plan is not None:
+        code = confirm(confirm_plan, label, yes)
+        if code is not None:
+            return code
 
     with repo_lock(config.symphony_dir) as held:
         if not held:
@@ -152,6 +190,7 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
             return 1
         if legal(task_id) is None:  # re-check: a hand move may have raced in
             return 1
+        cause = sidecars.load(task_id).blocked_cause  # the row clears it
         tasks.ensure()  # the destination folder may not exist yet
         message = ""
         if feedback:
@@ -164,6 +203,9 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
     state = tasks.state_of(task_id)
     if state is not None:
         print(tasks.path(task_id, state))
+    hint = _retry_hint(cause) if hints else None
+    if hint:
+        print(hint, file=sys.stderr)
     return 0
 
 
@@ -220,15 +262,9 @@ def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: b
         print(f"validate: {config.validate_command if do_validate else 'skipped'}")
         print("final state: done")
         return 0
-    if not yes:
-        if not (sys.stdin.isatty() and sys.stdout.isatty()):
-            err("work accept needs confirmation: run it on a terminal or pass --yes; "
-                "nothing changed")
-            return 2
-        print(f"{plan}? [y/N] ", end="", flush=True)
-        if sys.stdin.readline().strip().lower() not in ("y", "yes"):
-            err("not confirmed; nothing changed")
-            return 1
+    code = confirm(plan, "work accept", yes)
+    if code is not None:
+        return code
 
     with repo_lock(config.symphony_dir) as held:
         if not held:
@@ -320,7 +356,7 @@ def main(argv: list[str] | None = None) -> int:
     add_list_args(p_list)
     p_show = sub.add_parser("show", help="alias of `task show`")
     add_show_args(p_show)
-    p_task = sub.add_parser("task", help="task commands: list, show")
+    p_task = sub.add_parser("task", help="task commands: list, show, retry, stop, discard")
     task_sub = p_task.add_subparsers(dest="task_command", required=True)
     p_tlist = task_sub.add_parser("list", help="list tasks, optionally filtered by state")
     add_list_args(p_tlist)
@@ -361,11 +397,26 @@ def main(argv: list[str] | None = None) -> int:
     p_wacc.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     p_wacc.add_argument("--dry-run", action="store_true",
                         help="print what would happen, change nothing")
+    p_ques = sub.add_parser("question", help="question commands: answer")
+    ques_sub = p_ques.add_subparsers(dest="question_command", required=True)
+    p_qans = ques_sub.add_parser("answer", help="answer the agent's question; the task resumes")
+    p_qans.add_argument("id", help="task id or unique prefix")
+    p_qans.add_argument("text", nargs="?", help="the answer (or use --edit)")
+    p_qans.add_argument("--edit", action="store_true", help="write the answer in $EDITOR")
+    p_tretry = task_sub.add_parser("retry", help="send a stuck task back to its todo folder")
+    p_tretry.add_argument("id", help="task id or unique prefix")
+    p_tstop = task_sub.add_parser("stop", help="stop a running task; it goes back to its todo")
+    p_tstop.add_argument("id", help="task id or unique prefix")
+    p_tdisc = task_sub.add_parser("discard", help="discard a task (asks for confirmation)")
+    p_tdisc.add_argument("id", help="task id or unique prefix")
+    p_tdisc.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     for p in (p_run, p_status, p_new, p_trans, p_list, p_show, p_tlist, p_tshow, p_pacc, p_prej,
-              p_wrej, p_wacc):
+              p_wrej, p_wacc, p_qans, p_tretry, p_tstop, p_tdisc):
         p.add_argument("--repo", type=Path, default=Path.cwd(),
                        help="repository root (default: current directory)")
     args = parser.parse_args(argv)
+    if args.command == "question" and args.text is not None and args.edit:
+        p_qans.error("give the answer text or --edit, not both")
 
     if args.command == "transitions":
         print(render_markdown_table())
@@ -385,7 +436,7 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_transition(config, str(args.id), f"plan.{verb}", f"plan.{verb}",
                               feedback=cast(str | None, getattr(args, "feedback", None)),
                               edit=bool(getattr(args, "edit", False)),
-                              takes_feedback=verb == "reject")
+                              feedback_mode="optional" if verb == "reject" else "none")
     if command == "work" and args.work_command == "accept":
         return cmd_work_accept(config, str(args.id), no_merge=bool(args.no_merge),
                                no_validate=bool(args.no_validate), yes=bool(args.yes),
@@ -394,9 +445,20 @@ def main(argv: list[str] | None = None) -> int:
         fresh = bool(args.fresh)
         return cmd_transition(config, str(args.id), "work.reject_fresh" if fresh else "work.reject",
                               "work.reject", feedback=cast(str | None, args.feedback),
-                              edit=bool(args.edit), takes_feedback=True)
+                              edit=bool(args.edit), feedback_mode="optional")
+    if command == "question":
+        return cmd_transition(config, str(args.id), "question.answer", "question.answer",
+                              feedback=cast(str | None, args.text), edit=bool(args.edit),
+                              feedback_mode="required")
     if command == "task":
         command = str(args.task_command)
+    if command == "retry":
+        return cmd_transition(config, str(args.id), "task.retry", "task.retry", hints=True)
+    if command == "stop":
+        return cmd_transition(config, str(args.id), "task.stop", "task.stop")
+    if command == "discard":
+        return cmd_transition(config, str(args.id), "task.discard", "task.discard",
+                              confirm_plan=f"Discard task {args.id}", yes=bool(args.yes))
     if command == "status":
         return cmd_task_list(config, [])
     if command == "list":

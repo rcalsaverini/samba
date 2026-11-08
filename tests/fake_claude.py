@@ -70,7 +70,7 @@ def main() -> int:
     plan_dir = plan_path.parent
 
     with (plan_dir / f"{task_id}.calls.jsonl").open("a") as f:
-        f.write(json.dumps({"argv": argv, "cwd": str(cwd)}) + "\n")
+        f.write(json.dumps({"argv": argv, "cwd": str(cwd), "pid": os.getpid()}) + "\n")
 
     counter = plan_dir / f"{task_id}.count"
     n = int(counter.read_text()) if counter.exists() else 0
