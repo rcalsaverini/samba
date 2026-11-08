@@ -15,6 +15,7 @@ import tempfile
 from pathlib import Path
 from typing import cast
 
+from symphony import merge, workspace
 from symphony.config import Config, ConfigError, load_config
 from symphony.lock import repo_lock
 from symphony.orchestrator import Orchestrator, StartupError
@@ -166,6 +167,121 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
     return 0
 
 
+def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: bool, yes: bool,
+                    dry_run: bool) -> int:
+    """`work accept` (SPEC §11): the command pattern with a merge as the outside effect."""
+    tasks = TaskStore(config.symphony_dir / "tasks")
+    sidecars = SidecarStore(config.symphony_dir / "state")
+    event = "work.accept"
+
+    def err(msg: str) -> None:
+        print(f"symphony: {msg}", file=sys.stderr)
+
+    def check(task_id: str) -> bool:
+        """State and preflight checks; reports the failure."""
+        state = tasks.state_of(task_id)
+        if state is None:
+            err(f"task {task_id!r} has no file")
+            return False
+        events = [r.event for r in human_events(state, sidecars.load(task_id))]
+        if event not in events:
+            err(f"{task_id} is in {state}; {event} not allowed. Legal events: "
+                f"{', '.join(events) or 'none'}")
+            return False
+        if not no_merge:
+            problem = merge.preflight(config.repo, config.base_branch, branch)
+            if problem:
+                err(f"{problem}; nothing changed")
+                return False
+        return True
+
+    try:
+        task_id = resolve_task_id(tasks, text)
+    except ResolveError as e:
+        err(e.render())
+        return 2
+    branch = workspace.branch_name(task_id)
+    base = config.base_branch
+    if not check(task_id):
+        return 1
+    do_validate = not no_merge and not no_validate and config.validate_command is not None
+    count = 0 if no_merge else merge.commit_count(config.repo, base, branch)
+    plural = "" if count == 1 else "s"
+    if no_merge:
+        plan = f"Mark {task_id} done without merging (--no-merge)"
+    else:
+        plan = f"Merge {branch} into {base} ({count} commit{plural})"
+        if do_validate:
+            plan += f", then validate with `{config.validate_command}`"
+    if dry_run:
+        print(f"{plan}")
+        print(f"branch: {branch}\nbase: {base}\ncommits: {count}")
+        print(f"merge: {'no' if no_merge else 'yes (--no-ff)'}")
+        print(f"validate: {config.validate_command if do_validate else 'skipped'}")
+        print("final state: done")
+        return 0
+    if not yes:
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            err("work accept needs confirmation: run it on a terminal or pass --yes; "
+                "nothing changed")
+            return 2
+        print(f"{plan}? [y/N] ", end="", flush=True)
+        if sys.stdin.readline().strip().lower() not in ("y", "yes"):
+            err("not confirmed; nothing changed")
+            return 1
+
+    with repo_lock(config.symphony_dir) as held:
+        if not held:
+            err("another command or the orchestrator holds .symphony/lock; try again")
+            return 1
+        if not check(task_id):
+            return 1
+        message = "validation skipped" if no_validate else ""
+        if no_merge:
+            message = "no merge"
+        else:
+            task = tasks.find(task_id)
+            title = task.title if task else task_id
+            res = merge.merge_branch(
+                config.repo, branch, f"Merge {branch}: {title}", shell=config.shell,
+                validate_command=config.validate_command if do_validate else None,
+                timeout_s=config.validate_timeout_s, tail_lines=config.validate_tail_lines,
+                log_path=config.symphony_dir / "runs" / task_id / "accept-validate.log")
+            if res.status == "conflict":
+                tasks.append_log(task_id, f"work.accept: merge failed (conflicts: {res.detail})")
+                err(f"merge conflict in: {res.detail}; merge aborted, task stays in work-review")
+                return 1
+            if res.status == "error":
+                tasks.append_log(task_id, f"work.accept: merge failed ({res.detail})")
+                err(f"merge failed: {res.detail}; merge aborted, task stays in work-review")
+                return 1
+            if res.status == "validation_failed":
+                tasks.append_log(task_id,
+                                 f"work.accept: validation failed after merge: {res.detail}")
+                err(f"validation failed after merge; merge aborted, task stays in work-review: "
+                    f"{res.detail}")
+                err(f"full output: {res.log_path}")
+                return 1
+            if res.status == "already":
+                err(f"{branch} is already merged into {base}; nothing to merge")
+                message = "already merged"
+            else:
+                message = f"merged {res.detail}" + (
+                    ", validated" if res.validated else ", validation skipped" if no_validate
+                    else "")
+                if config.validate_command is None:
+                    err("no validate.command; merged without validation")
+        tasks.ensure()
+        if not Machine(tasks, sidecars).fire(task_id, event, message=message):
+            err(f"{event} did not apply to {task_id}"
+                + ("" if no_merge else f" after the merge ({message}); the merge is in {base}"))
+            return 1
+    state = tasks.state_of(task_id)
+    if state is not None:
+        print(tasks.path(task_id, state))
+    return 0
+
+
 def slugify(title: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
     return slug[:60].strip("-") or "task"
@@ -232,12 +348,21 @@ def main(argv: list[str] | None = None) -> int:
     p_pacc.add_argument("id", help="task id or unique prefix")
     p_prej = plan_sub.add_parser("reject", help="send the plan back; the task goes to plan-todo")
     add_reject_args(p_prej)
-    p_work = sub.add_parser("work", help="work review commands: reject")
+    p_work = sub.add_parser("work", help="work review commands: accept, reject")
     work_sub = p_work.add_subparsers(dest="work_command", required=True)
     p_wrej = work_sub.add_parser("reject", help="send the work back; the task goes to work-todo")
     add_reject_args(p_wrej, fresh=True)
+    p_wacc = work_sub.add_parser("accept", help="merge the task branch; the task goes to done")
+    p_wacc.add_argument("id", help="task id or unique prefix")
+    p_wacc.add_argument("--no-merge", action="store_true",
+                        help="mark done without merging (already merged by hand)")
+    p_wacc.add_argument("--no-validate", action="store_true",
+                        help="skip validate.command on the merged result")
+    p_wacc.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    p_wacc.add_argument("--dry-run", action="store_true",
+                        help="print what would happen, change nothing")
     for p in (p_run, p_status, p_new, p_trans, p_list, p_show, p_tlist, p_tshow, p_pacc, p_prej,
-              p_wrej):
+              p_wrej, p_wacc):
         p.add_argument("--repo", type=Path, default=Path.cwd(),
                        help="repository root (default: current directory)")
     args = parser.parse_args(argv)
@@ -261,6 +386,10 @@ def main(argv: list[str] | None = None) -> int:
                               feedback=cast(str | None, getattr(args, "feedback", None)),
                               edit=bool(getattr(args, "edit", False)),
                               takes_feedback=verb == "reject")
+    if command == "work" and args.work_command == "accept":
+        return cmd_work_accept(config, str(args.id), no_merge=bool(args.no_merge),
+                               no_validate=bool(args.no_validate), yes=bool(args.yes),
+                               dry_run=bool(args.dry_run))
     if command == "work":
         fresh = bool(args.fresh)
         return cmd_transition(config, str(args.id), "work.reject_fresh" if fresh else "work.reject",

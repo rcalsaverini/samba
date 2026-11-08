@@ -7,7 +7,9 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
 - `SPEC.md`: the source of truth for behavior. Read the sections relevant to your task before
   changing code, and update the spec in the same change when behavior changes.
 - `src/symphony/`
-  - `cli.py`: `run`, `status`, `new`, `task list|show` (aliases `list`, `show`) commands.
+  - `cli.py`: `run`, `status`, `new`, `task list|show` (aliases `list`, `show`), `plan`/`work`
+    review commands (including `work accept`).
+  - `merge.py`: git steps of `work accept`: preflight, `--no-commit` merge, validate, commit/abort.
   - `views.py`: read-only shared helpers: table printer, state-prefix matcher, task id resolver
     (`resolve_task_id`, reused by every command taking an id), `task show` renderer.
   - `config.py`: loads and validates `WORKFLOW.md` (front matter + prompt body).

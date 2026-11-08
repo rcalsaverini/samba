@@ -525,7 +525,7 @@ should pin their tools rather than rely on `PATH` (`uv run pytest`, `make check`
 and the agent should be allowed to run the exact same command. Exit code
 0 = pass. Output (stdout+stderr combined) is saved to `runs/<id>/validate-<n>.log`; the last
 `output_tail_lines` lines are fed back on failure. A timeout counts as a validation failure, not a
-worker failure.
+worker failure. `work accept` runs the same command again on the merged result (§11).
 
 ### 7.4 Removal
 
@@ -776,16 +776,19 @@ symphony new "Title" [--priority N] [--plan]
 symphony plan accept ID [--repo PATH]
 symphony plan reject ID [--feedback TEXT | --edit] [--repo PATH]
 symphony work reject ID [--feedback TEXT | --edit] [--fresh] [--repo PATH]
+symphony work accept ID [--no-merge] [--no-validate] [--yes] [--dry-run] [--repo PATH]
 ```
 
-State-changing commands (`plan accept`, `plan reject`, `work reject`) follow one **command
+State-changing commands (`plan accept`, `plan reject`, `work reject`, `work accept`) follow one **command
 pattern**: resolve the id, take the repo lock (§3.3), check that the task's folder has a human row
 for the event, do the **outside effect** (here: write the feedback into the task file), then
 **fire** the event through `Machine.fire` (§4.1). Table rows only change Symphony's state, and no
 command moves a task or writes the sidecar except through `fire`. Later commands reuse the pattern.
 
-- Exit codes: 0 done; 1 wrong state, lock timeout, editor failure or a `fire` that did not apply;
-  2 usage error, unknown or ambiguous id, config error. A refusal changes nothing.
+- Exit codes: 0 done; 1 wrong state, lock timeout, editor failure, failed preflight, merge or
+  validation failure, declined prompt, or a `fire` that did not apply; 2 usage error, unknown or
+  ambiguous id, config error, or `work accept` without `--yes` and without a TTY. A refusal
+  changes nothing.
 - On success the command prints only the task file's new path on stdout. The `## Log` line names
   the event, with `feedback round N` when feedback was written.
 - Wrong state: stderr says `<id> is in <state>; <event> not allowed. Legal events: a, b` (`none`
@@ -800,6 +803,46 @@ command moves a task or writes the sidecar except through `fire`. Later commands
 - `plan accept` fires `plan.accept` (§14). `plan reject` fires `plan.reject` and leaves
   `plan_session_id` alone. `work reject` fires `work.reject`; with `--fresh` it fires
   `work.reject_fresh`, which also clears `session_id`.
+
+**`work accept`** merges a reviewed task's branch and fires `work.accept` (`work-review -> done`).
+It is the first dangerous command. Moving the file to `done/` by hand stays a plain observed
+event and never merges.
+
+- Order: resolve the id; check the state and preflight; `--dry-run` or confirmation; take the
+  lock; re-check; merge; fire. The prompt is outside the lock so a slow human never blocks
+  ticks. The lock is held while validation runs (up to `validate.timeout_s`), so ticks and other
+  commands wait or fail with the lock-busy message meanwhile.
+- Preflight, before any change (exit 1, nothing changed): the task is in `work-review`; the main
+  checkout is on `base_branch`; it has no uncommitted changes to tracked files (untracked files
+  are fine); branch `symphony/<id>` exists. With `--no-merge` only the state is checked.
+- Confirmation: `--yes` skips it. On a TTY (stdin and stdout) it prints
+  `Merge symphony/<id> into <base> (N commits)? [y/N]` (naming the validate command when one will
+  run; `Mark <id> done without merging` for `--no-merge`); anything but `y`/`yes` is exit 1.
+  With no TTY and no `--yes`: exit 2, nothing changed. `--dry-run` runs after preflight, prints
+  branch, base, commit count, merge, validate (command or `skipped`) and final state, never runs
+  validation, needs no confirmation, exits 0.
+- Merge: `git merge --no-ff --no-commit -m "Merge symphony/<id>: <title>"`. If
+  `validate.command` is set and `--no-validate` is absent, it runs in the main checkout with the
+  §7.3 shell and timeout, on the merged but uncommitted result; only a pass runs
+  `git commit --no-edit`. This catches a branch that passes alone but fails after merging a main
+  that moved on. No `validate.command`: a note on stderr, the merge is committed unvalidated.
+  Git identity comes from the user's git config. Full validation output goes to
+  `runs/<id>/accept-validate.log`. The branch is kept (deleting branches is a later command);
+  the orchestrator's cleanup removes the worktree.
+- Conflict: `git merge --abort`, the task stays in `work-review`, exit 1 with the conflicting
+  files on stderr, `## Log` line `work.accept: merge failed (conflicts: a, b)`. Other merge or
+  commit failures are handled the same way with git's message in the line.
+- Validation failure or timeout: merge aborted (`git reset --hard` to the pre-merge HEAD if abort
+  fails, safe because preflight proved the tracked tree clean), task stays in `work-review`, exit
+  1, `## Log` line `work.accept: validation failed after merge: <last lines joined with " | ">`
+  (at most 10 lines, plus `(timed out after Ns)` on timeout). Untracked files left by the command
+  are not removed, and tracked edits it makes after a pass stay uncommitted.
+- `--no-merge` fires the event without merging or validating (the human already merged);
+  `--no-validate` skips validation only. The `## Log` message is `merged <sha>` with
+  `, validated` or `, validation skipped`, `no merge`, or `already merged` when the branch has
+  nothing to merge (git reports up to date): that is a success, noted on stderr.
+- If the commit succeeds but `fire` does not apply, exit 1 with a message that the merge is
+  already in the base branch.
 
 Read-only commands (`task list`, `task show`, `status`) read folders and sidecars only. They never
 need a running orchestrator and change nothing.
