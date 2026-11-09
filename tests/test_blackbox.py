@@ -271,7 +271,8 @@ def test_work_protocol_requires_the_spec_step(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.run_idle()
     system = flag(sb.calls("t1")[0], "--append-system-prompt") or ""
-    assert "docs/spec" in system
+    assert "project's spec" in system
+    assert "docs/spec" not in system
     assert "before reporting `done`" in system
     assert "docs/adr/" in system
     assert "status `proposed`" in system
@@ -280,6 +281,7 @@ def test_work_protocol_requires_the_spec_step(sb: Sandbox) -> None:
 def test_repo_workflow_body_has_the_spec_step() -> None:
     text = (Path(__file__).resolve().parent.parent / "WORKFLOW.md").read_text()
     assert "Spec changes" in text
+    assert "docs/spec" in text
     assert "docs/adr" in text
 
 

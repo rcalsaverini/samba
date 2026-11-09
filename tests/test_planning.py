@@ -43,6 +43,7 @@ def test_plan_protocol_requires_spec_changes_section(sb: Sandbox) -> None:
     system = flag(sb.calls("t1")[0], "--append-system-prompt") or ""
     assert "Spec changes" in system
     assert "none, because" in system
+    assert "docs/spec" not in system
 
 
 def test_allow_list_is_exactly_planning_allow(sb: Sandbox) -> None:
@@ -76,7 +77,7 @@ def test_approval_runs_execution_in_a_new_session(sb: Sandbox) -> None:
     system = flag(run, "--append-system-prompt") or ""
     assert "approved plan" in system
     assert "Spec changes" in system
-    assert "docs/spec" in system and "docs/adr/" in system
+    assert "spec" in system and "docs/spec" not in system and "docs/adr/" in system
     assert flag(run, "--permission-mode") == "dontAsk"
     assert "Edit" in run
     side = sb.sidecar("t1")

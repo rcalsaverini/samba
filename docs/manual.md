@@ -246,8 +246,8 @@ people working on Samba itself, not part of the daily loop; you can ignore it.
    State arguments are exact names or unique prefixes (`work` matches all three work folders).
 
 4. **Review the plan.** A task in `plan-review` has a `## Plan` section (and maybe
-   `## Assumptions`) in its file. The plan has a "Spec changes" section: the `docs/spec`
-   chapters the task will change, or "none, because ...". Check that it is right, since the work
+   `## Assumptions`) in its file. The plan has a "Spec changes" section: the parts of
+   your project's spec the task will change, or "none, because ...". Check that it is right, since the work
    agent owes exactly those edits. Then:
 
    ```

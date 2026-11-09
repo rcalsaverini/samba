@@ -56,8 +56,9 @@ the body does not need to repeat the outcome format or task-file rules. A good f
 - Describes how this repo wants work done: commit granularity, testing expectations, what "done"
   means beyond `{{ validate_command }}`, when to ask instead of guess.
 - Keeps the spec step: edit the spec chapters listed in the plan's Spec changes section before
-  reporting done, and propose an ADR for a real decision (the protocol prompt carries the rule
-  too; the body states the repo's own form of it).
+  reporting done, and propose an ADR for a real decision. The protocol prompt carries the generic
+  rule and never names a path (it goes to every repo that uses Samba, and says "the project's
+  spec"); only the body names where the spec lives, for example `docs/spec/` and its README.
 
 ## Protocol prompt (Samba-owned)
 
@@ -87,7 +88,7 @@ workflow. Content (rendered with the same variables as prompts, Template renderi
 - After your work, the system runs `{{ validate_command }}` (if set). Run it yourself first when you
   can; if you cannot, still report `done` once the work is complete, because the system validates
   it. (Smoke test: without this, the agent reported `blocked` when it could not run the validator.)
-- Spec step: before reporting `done`, make the edits to `docs/spec/` that the task requires, on the
+- Spec step: before reporting `done`, make the edits to the project's spec that the task requires, on the
   task branch, and say in `## Log` what changed in the spec (or why nothing did). The human reviews
   the spec diff next to the code diff at `work accept`.
 - If the task made a real decision (a choice between alternatives with a lasting reason), also add
@@ -102,8 +103,8 @@ A planning run (running-claude, Planning run) gets a variant of the protocol pro
 Samba-owned and appended with `--append-system-prompt` (`prompts.PLAN_PROTOCOL` in code; the same
 budget caps apply). Content: you are planning unattended under Samba; you cannot edit files and
 must not try; read whatever you need; return the plan in `plan` as Markdown with the sections
-*Approach*, *Steps* (checkboxes), *Files to change*, *Spec changes* (the `docs/spec` chapters the
-task will change with one line of intent each, or "none, because ..."), *Risks*, *How to verify*,
+*Approach*, *Steps* (checkboxes), *Files to change*, *Spec changes* (the parts of the project's
+spec the task will change with one line of intent each, or "none, because ..."), *Risks*, *How to verify*,
 and, if useful, *Suggested subtasks*; put non-blocking assumptions in `assumptions` (the human checks them in
 plan review, through `plan accept` or `plan reject`, not through `question`); use outcome
 `blocked` only when the plan cannot be written without answers, and then put the questions in the
