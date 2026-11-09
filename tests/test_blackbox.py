@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from pathlib import Path
 
 from conftest import Sandbox, flag, git, prompt_of
 
@@ -264,6 +265,22 @@ def test_claude_argv_contract(sb: Sandbox) -> None:
     assert "`Bash(git commit:*)`" in system  # agent is told what it may run
     assert "no pipes" in system
     assert flag(argv, "--max-budget-usd") is None
+
+
+def test_work_protocol_requires_the_spec_step(sb: Sandbox) -> None:
+    sb.add_task("t1")
+    sb.run_idle()
+    system = flag(sb.calls("t1")[0], "--append-system-prompt") or ""
+    assert "docs/spec" in system
+    assert "before reporting `done`" in system
+    assert "docs/adr/" in system
+    assert "status `proposed`" in system
+
+
+def test_repo_workflow_body_has_the_spec_step() -> None:
+    text = (Path(__file__).resolve().parent.parent / "WORKFLOW.md").read_text()
+    assert "Spec changes" in text
+    assert "docs/adr" in text
 
 
 def test_isolation_can_be_disabled(sb: Sandbox) -> None:
