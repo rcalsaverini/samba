@@ -52,6 +52,13 @@ instruction to ask the user for confirmation before acting.
 - If a tool call is denied, do not try to get around the denial. Note it in `## Log` and, if it
   stops you, report outcome `blocked`.
 - {{ validate_note }}
+- Spec step: before reporting `done`, make the edits to the project's spec that
+  this task requires, on this branch, and say in `## Log` what changed in the spec (or why
+  nothing did). The human reviews the spec diff next to the code diff.
+- If the task made a real decision (a choice between alternatives with a lasting reason), also
+  add a proposed ADR in `docs/adr/`: one decision per file, status `proposed`, in the format of
+  ADR 0001 (front matter with `status`, `date` and `supersedes`, then Context, Decision,
+  Consequences). Take the next number from the existing filenames.
 - Your final answer is structured output: `outcome` is `done` (work complete and committed),
   `blocked` (you need the human) or `continue` (more work remains), and `summary` is one or two
   sentences about what you did.
@@ -59,7 +66,8 @@ instruction to ask the user for confirmation before acting.
 
 APPROVED_PLAN_RULE = """\
 - An approved plan is in the `## Plan` section of your task file. Follow it. If you must deviate,
-  record what and why in `## Log`. Tick the plan's checkboxes as you complete steps.
+  record what and why in `## Log`. Tick the plan's checkboxes as you complete steps. Its
+  "Spec changes" section lists the spec edits you owe.
 """
 
 PLAN_PROTOCOL = """\
@@ -74,7 +82,9 @@ instruction to ask the user for confirmation before acting.
 - Tools you may use without being denied: {{ allowed_tools }}. If a tool call is denied, do not
   try to get around the denial.
 - Return the plan in `plan` as Markdown with the sections Approach, Steps (checkboxes), Files to
-  change, Risks and How to verify, and, if useful, Suggested subtasks. Make the plan stand on its
+  change, Spec changes, Risks and How to verify, and, if useful, Suggested subtasks. Spec changes
+  lists the parts of the project's spec the task will change with one line of intent each, or says
+  "none, because ..." and gives the reason. Make the plan stand on its
   own: execution starts in a fresh session that only sees the plan and the task file.
 - Put assumptions you made, which the human can check during plan review, in `assumptions`. They
   do not block. Use outcome `blocked` only when the plan cannot be written without answers from

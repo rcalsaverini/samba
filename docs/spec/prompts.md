@@ -55,6 +55,10 @@ the body does not need to repeat the outcome format or task-file rules. A good f
 - Points to the repo's map (`CLAUDE.md`, `docs/`) rather than repeating it.
 - Describes how this repo wants work done: commit granularity, testing expectations, what "done"
   means beyond `{{ validate_command }}`, when to ask instead of guess.
+- Keeps the spec step: edit the spec chapters listed in the plan's Spec changes section before
+  reporting done, and propose an ADR for a real decision. The protocol prompt carries the generic
+  rule and never names a path (it goes to every repo that uses Samba, and says "the project's
+  spec"); only the body names where the spec lives, for example `docs/spec/` and its README.
 
 ## Protocol prompt (Samba-owned)
 
@@ -84,6 +88,12 @@ workflow. Content (rendered with the same variables as prompts, Template renderi
 - After your work, the system runs `{{ validate_command }}` (if set). Run it yourself first when you
   can; if you cannot, still report `done` once the work is complete, because the system validates
   it. (Smoke test: without this, the agent reported `blocked` when it could not run the validator.)
+- Spec step: before reporting `done`, make the edits to the project's spec that the task requires, on the
+  task branch, and say in `## Log` what changed in the spec (or why nothing did). The human reviews
+  the spec diff next to the code diff at `work accept`.
+- If the task made a real decision (a choice between alternatives with a lasting reason), also add
+  a proposed ADR in `docs/adr/`: one decision per file, status `proposed`, in the format of
+  ADR 0001. Nothing checks this prose; the review does.
 - Your final answer is structured output (running-claude, Outcome): `outcome` is `done`, `blocked` or `continue`, and
   `summary` is one or two sentences.
 
@@ -93,8 +103,9 @@ A planning run (running-claude, Planning run) gets a variant of the protocol pro
 Samba-owned and appended with `--append-system-prompt` (`prompts.PLAN_PROTOCOL` in code; the same
 budget caps apply). Content: you are planning unattended under Samba; you cannot edit files and
 must not try; read whatever you need; return the plan in `plan` as Markdown with the sections
-*Approach*, *Steps* (checkboxes), *Files to change*, *Risks*, *How to verify*, and, if useful,
-*Suggested subtasks*; put non-blocking assumptions in `assumptions` (the human checks them in
+*Approach*, *Steps* (checkboxes), *Files to change*, *Spec changes* (the parts of the project's
+spec the task will change with one line of intent each, or "none, because ..."), *Risks*, *How to verify*,
+and, if useful, *Suggested subtasks*; put non-blocking assumptions in `assumptions` (the human checks them in
 plan review, through `plan accept` or `plan reject`, not through `question`); use outcome
 `blocked` only when the plan cannot be written without answers, and then put the questions in the
 structured `questions` list, as the work agent does (states, Questions).
@@ -105,7 +116,7 @@ Execution after approval starts a **new** session (states, States: `plan.accept`
 `session_id`). The plan must stand on its own; if a fresh session cannot follow it, the plan was
 incomplete. When `plan_approved` is true, the execution protocol prompt gets one extra rule: "An
 approved plan is in the `## Plan` section of your task file. Follow it. If you must deviate,
-record what and why in `## Log`. Tick the plan's checkboxes as you complete steps." Everything
+record what and why in `## Log`. Tick the plan's checkboxes as you complete steps. Its Spec changes section lists the spec edits you owe." Everything
 else is as for any work run (continue loop, validation, `work-review`). Rework from `work-review/`
 keeps `plan_approved = true` and resumes the execution session.
 

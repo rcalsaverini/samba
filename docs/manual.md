@@ -246,7 +246,9 @@ people working on Samba itself, not part of the daily loop; you can ignore it.
    State arguments are exact names or unique prefixes (`work` matches all three work folders).
 
 4. **Review the plan.** A task in `plan-review` has a `## Plan` section (and maybe
-   `## Assumptions`) in its file. Read it, then:
+   `## Assumptions`) in its file. The plan has a "Spec changes" section: the parts of
+   your project's spec the task will change, or "none, because ...". Check that it is right, since the work
+   agent owes exactly those edits. Then:
 
    ```
    $ samba plan accept <id>
@@ -266,6 +268,10 @@ people working on Samba itself, not part of the daily loop; you can ignore it.
    $ samba work reject <id> --edit
    $ samba work reject <id> --feedback "Start over with a simpler approach." --fresh
    ```
+
+   The diff includes the spec edits the agent made on the branch, which you review next to the
+   code. If the task made a real decision, it also contains a new ADR in `docs/adr/` with status
+   `proposed`. To accept it, change its status to `accepted` in a follow-up commit of your own.
 
    Rework resumes the agent's session, so it remembers its earlier turns; `--fresh` clears the
    session so it starts a new conversation (the feedback is still in the task file).

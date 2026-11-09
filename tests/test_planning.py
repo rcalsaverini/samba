@@ -37,6 +37,15 @@ def test_plan_task_ends_in_plan_review_read_only(sb: Sandbox) -> None:
     assert sb.sidecar("t1")["last_outcome"] == "planned"
 
 
+def test_plan_protocol_requires_spec_changes_section(sb: Sandbox) -> None:
+    sb.add_task("t1", state="plan-todo")
+    sb.run_idle()
+    system = flag(sb.calls("t1")[0], "--append-system-prompt") or ""
+    assert "Spec changes" in system
+    assert "none, because" in system
+    assert "docs/spec" not in system
+
+
 def test_allow_list_is_exactly_planning_allow(sb: Sandbox) -> None:
     sb.write_workflow(planning={"allow": ["Read", "Glob"]},
                       claude={"permission_mode": "bypassPermissions", "allow": ["Edit"]})
@@ -65,7 +74,10 @@ def test_approval_runs_execution_in_a_new_session(sb: Sandbox) -> None:
     session = flag(run, "--session-id")
     assert session and session != plan_session
     assert flag(run, "--resume") is None
-    assert "approved plan" in (flag(run, "--append-system-prompt") or "")
+    system = flag(run, "--append-system-prompt") or ""
+    assert "approved plan" in system
+    assert "Spec changes" in system
+    assert "spec" in system and "docs/spec" not in system and "docs/adr/" in system
     assert flag(run, "--permission-mode") == "dontAsk"
     assert "Edit" in run
     side = sb.sidecar("t1")

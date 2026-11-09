@@ -51,5 +51,11 @@ Task: {{ task.title }}
 
 Start by reading CLAUDE.md (the repo map) and the chapters of docs/spec/ the task points to
 (start at docs/spec/README.md). Write the black-box tests for the new behavior first, then the
-implementation. Keep existing tests passing and pyright at 0 errors. Update the spec in docs/spec/ in the same change if your implementation had to settle a detail
-the spec left open, and say so in your task file's `## Log`.
+implementation. Keep existing tests passing and pyright at 0 errors.
+
+Updating the spec is a step of every task, not an option. Before reporting done, make the edits
+listed in the plan's "Spec changes" section in docs/spec/ on this branch (or, without a plan,
+the edits your change needs), and say in your task file's `## Log` what changed. The spec diff is
+reviewed next to the code diff at `work accept`. If the task made a real decision (a choice
+between alternatives with a lasting reason), also propose an ADR in docs/adr/ with status
+proposed, one decision per file, as in ADR 0001.
