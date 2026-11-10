@@ -14,8 +14,7 @@ that has been holding the object for minutes.
 it. A `Tasks.create` writes `# title`, a blank line and `body` instead. Nothing writes `body` after
 that; if an aggregate changes it, the text is replaced as a whole and the sections are applied on top.
 
-Not yet used by the orchestrator and the CLI: they still use `samba.tasks` (a later part of the
-refactor moves them over).
+The orchestrator and the CLI use it through the `Tasks` port.
 """
 
 from __future__ import annotations

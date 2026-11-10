@@ -75,21 +75,25 @@ optional `agent` and defaults to `ClaudeCliRunner`, like the clock. The fake run
 `tests/fake_agent.py`.
 
 The clock is threaded through `Machine`, the transition effects (`not_before`,
-`first_dispatched_at`), the question helpers (`add_questions`, `answer_question`,
-`dismiss_open`), `log_line`, `SidecarStore.save` and the orchestrator. Timestamps written to task
+`first_dispatched_at`, `queued_at`), the question helpers (`add_questions`, `answer_question`,
+`dismiss_open`), `log_line`, `MarkdownTasks` and the orchestrator. Timestamps written to task
 files and sidecars are formatted by the clock (`iso_seconds`, `log_stamp`), because the domain may
 not import `datetime`. In the domain the clock is always a required parameter. Only the
-adapter-side constructors (`SidecarStore`, `Orchestrator`) still default to `SystemClock`, until the
-composition root exists.
+adapter-side constructors (`MarkdownTasks` takes one, `Orchestrator`) default to `SystemClock`,
+until the composition root exists.
 
 ## Where each concern lives today
 
 Moved into `domain/`: states and causes (`states.py`), question records (`questions.py`), the
-`Sidecar` dataclass (`sidecar.py`, an interim home), the transition table, effects, `find_row`,
-`human_row`, `human_events` and the markdown renderer (`transitions.py`), and dependency
-evaluation (`deps.py`). `evaluate` takes a snapshot (`TaskRef` per task id, an absent id is
-unknown); `TaskStore.deps_snapshot` builds it from the task and its `depends_on` closure.
-`samba/transitions.py` keeps only `Machine` (`fire`, `observe`), the file IO around the table.
+`Task` aggregate and `TaskId`, the transition table, effects, `find_row`, `human_row`,
+`human_events` and the markdown renderer (`transitions.py`), and dependency evaluation
+(`deps.py`). The effects, `apply_row` and the row helpers work on a `Task`; `apply_row` sets
+`status`, stamps `queued_at` when the destination is a todo status (the dispatch order key) and
+tells whether the questions changed. `evaluate` takes a snapshot (`TaskRef` per task id, an absent
+id is unknown); `deps_snapshot(task, get)` in `deps.py` builds it from the task and its
+`depends_on` closure. `Machine` (`fire`, `observe`) is the use case `app/machine.py`: it loads the
+task through the `Tasks` port, applies a row, adds the log line and saves once. The orchestrator
+holds a `Tasks` (default `MarkdownTasks`) and no sidecar store.
 
 Policy is in `domain/policy.py`: `Budget` (cap, spent, `left`, `exceeded`), `RetryPolicy` (`decide`
 gives `Retry` with the delay or `GiveUp`), `should_reflect` (the give-up turn) and
@@ -97,17 +101,18 @@ gives `Retry` with the delay or `GiveUp`), `should_reflect` (the give-up turn) a
 `RunValidation`, `RecordQuestions` or `Continue`. A failure wins over the budget, the budget over
 the outcome. The turn flow shared by planning and work is the use case `app/turn.py` (`TurnFlow`):
 it drives the `AgentRunner` port, executes the action and returns `Finish` or `Fail` to the
-orchestrator, which fires the transition. Its persistence (`TurnStore`) is interim until the Tasks
-port.
+orchestrator, which fires the transition. It mutates the `Task` it is given (plan, assumptions,
+questions, denial log lines, counters) and calls `Tasks.save` after each step.
 
 Not yet behind a port, and not yet moved:
 
-- Task store and sidecars: `tasks.py`.
 - Subprocess helpers: `proc.py` (the Claude runner moved to `adapters/claude_cli.py`).
 - Git: `workspace.py` and `merge.py`.
 - Repo lock: `lock.py` (monotonic deadline and sleep).
-- Terminal output: `cli.py` and `views.py` (`views.py` still reads `time.time`).
-- `Machine.fire` keeps the `time.sleep` of the test-only `SAMBA_DEBUG_FIRE_DELAY` knob.
+- Terminal output: `cli.py` and `views.py` (`views.py` still reads `time.time`). Both use the
+  `Tasks` port; `cli.py` still builds `MarkdownTasks` itself until the composition root exists.
+- The test-only `SAMBA_DEBUG_FIRE_DELAY` sleep is in `MarkdownTasks.save`, between the rename and
+  the sidecar write.
 
 More ports and module moves arrive in later tasks of the chain.
 
@@ -115,23 +120,26 @@ More ports and module moves arrive in later tasks of the chain.
 
 The rules of the core are tested with data (ADR 0012). `tests/scenarios/*.json` holds the cases and
 `tests/test_scenarios.py` loads and runs them in-process, one pytest case per scenario. The runner
-imports the domain (and later the use cases) only: never an adapter and never `samba.tasks`, so the
-fake clock lives in the test file. A rewrite in another language can reuse the JSON unchanged.
+imports the domain and the use cases only: never an adapter (the in-memory `tests/fake_tasks.py`
+stands in for the store), so the fake clock lives in the test file. A rewrite in another language
+can reuse the JSON unchanged.
 
-Each file is `{"kind": "<kind>", "scenarios": [{"name": "...", ...}]}`. Sidecar fields are plain
-JSON named as in the `Sidecar` dataclass; omitted fields take their default.
+Each file is `{"kind": "<kind>", "scenarios": [{"name": "...", ...}]}`. The `task` key holds the
+fields of the `Task` aggregate as plain JSON, named as in the dataclass (it was `sidecar` before
+the aggregate); omitted fields take their default, and a question record may name only the fields
+it needs.
 
 | Kind | Scenario fields | Checks |
 |---|---|---|
-| `transition` | `given`: `state`, `sidecar` (fields), `deps_met` (default true), `plan_required` (default false); `event`; `actor`; optional `ctx` (`error`, `delay`), `clock_time`, `hand_move_to`; `expect` | The row is picked as `Machine.fire` picks it (`find_row`, first row for the event and state whose guards hold) and must belong to `actor`. `expect` is `{"fires": false}` or `{"fires": true, "state", "guards", "effects", "sidecar"}`: destination, the row's guard names and effect names, and the sidecar fields the effects changed (exactly those). `hand_move_to` picks the row by `human_row` instead, for rows `fire` cannot reach. |
-| `human_row` | `src`, `dst`, `sidecar`, `expect` | The event name of the human row for a hand move, or `null`. |
-| `human_events` | `state`, `sidecar`, `expect` | The ordered human event names legal in the state. |
+| `transition` | `given`: `state`, `task` (fields), `deps_met` (default true), `plan_required` (default false); `event`; `actor`; optional `ctx` (`error`, `delay`), `clock_time`, `hand_move_to`; `expect` | The row is picked as `Machine.fire` picks it (`find_row`, first row for the event and state whose guards hold) and must belong to `actor`. `expect` is `{"fires": false}` or `{"fires": true, "state", "guards", "effects", "task"}`: destination, the row's guard names and effect names, and the task fields the effects changed (exactly those; `status` and `queued_at` are not compared). `hand_move_to` picks the row by `human_row` instead, for rows `fire` cannot reach. |
+| `human_row` | `src`, `dst`, `task`, `expect` | The event name of the human row for a hand move, or `null`. |
+| `human_events` | `state`, `task`, `expect` | The ordered human event names legal in the state. |
 | `deps` | `tasks` (`id`, `status`, `depends_on`), `task`, `expect` | `evaluate` on a snapshot of `tasks` gives `kind`, `waiting` and `unknown`. |
 | `retry_policy` | `settings` (`max_attempts`, `base_s`, `max_backoff_s`), `failed_before`, `expect` | `RetryPolicy.decide`: `{"action": "retry", "attempts", "delay"}` or `{"action": "give_up", "attempts"}`. |
 | `budget` | `cap` (or null), `spent`, `expect` | `left` and `exceeded` of a `Budget`. |
 | `turn_decision` | `stage`, `validate`, optional `budget` (`cap`, `spent`), `report` (`AgentReport` fields), `expect` | `decide_after_turn`: `action` (`fail`, `finish`, `run_validation`, `record_questions`, `continue`) with its `error`, or `event`, `what`, `summary`. |
 | `turn_rule` | `rule` (`session_reset`, `budget_gate`, `exhausted`, `reflect`) and its inputs, `expect` | The small rules: session reset on a missing session, the pre-turn budget gate, `max_turns` exhaustion, the give-up reflection. |
-| `turn_flow` | `setup` (stage, prompts, limits), `sidecar`, `reports` (scripted `AgentRunner`), `validate` (results), `expect` | `TurnFlow.run` end to end with the fake runner and an in-memory store: the result, the requests sent, sections written, questions recorded, validation calls and sidecar fields. |
+| `turn_flow` | `setup` (stage, prompts, limits), `task`, `reports` (scripted `AgentRunner`), `validate` (results), `expect` | `TurnFlow.run` end to end with the fake runner and `FakeTasks`: the result, the requests sent, plan and assumptions set, questions recorded, validation calls and task fields. |
 
 Coverage rule: a test fails when a row of the transition table, keyed by `(src, event, guard,
 dst)`, is picked by no `transition` scenario that fires. Adding a row therefore needs a scenario.
@@ -140,10 +148,10 @@ dst)`, is picked by no `transition` scenario that fires. Adding a row therefore 
 
 `tests/test_architecture.py` reads source files with `ast` and never imports `samba`. It asserts
 that the modules in its `DOMAIN_MODULES` list import none of the forbidden modules and no adapter,
-that the `app/` modules import no adapter, that `orchestrator.py`, `transitions.py`, the `app/`
+that the `app/` modules (`turn.py`, `machine.py`) import no adapter, that `orchestrator.py`, the `app/`
 modules and the domain modules make no direct `time.time`,
 `time.monotonic`, `datetime.now` or `uuid` call, and that the scanner does flag an `adapters` or
 `datetime` import in a temporary module. It also asserts that `tests/test_scenarios.py` imports no
-adapter and not `samba.tasks`, and that no module but `adapters/claude_cli.py` mentions Claude's
+adapter, and that no module but `adapters/claude_cli.py` mentions Claude's
 JSON fields. The list holds `ports.py`, `template.py`, `prompts.py` and the
 modules of `domain/` (including `agent.py` and `policy.py`), and grows as more modules move in.
