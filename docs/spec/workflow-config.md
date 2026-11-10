@@ -56,7 +56,8 @@ prompts:                        # override the built-in continuation prompts (pr
 planning:                       # optional planning stage (states, Planning stage)
   require_plan: false           # true: work-todo/ tasks are planned (and reviewed) before execution
   model: null                   # defaults to claude.model
-  allow: ["Read", "Grep", "Glob"]   # always used with dontAsk (running-claude, Planning run)
+  allow: ["Read", "Grep", "Glob", "Bash(samba adr list:*)", "Bash(samba adr show:*)"]
+                                # default shown; always used with dontAsk (running-claude, Planning run)
 ---
 ```
 
@@ -82,5 +83,9 @@ Typical setups:
 
 - Default: `dontAsk` plus `claude.allow` listing edits, git commit, and the project's test/lint
   commands (`Bash(make:*)`, `Bash(uv run pytest:*)`).
+- The built-in default of `claude.allow` (and of `planning.allow`) includes the read-only
+  `Bash(samba adr list:*)` and `Bash(samba adr show:*)`, and never the status commands
+  (cli, `adr`). Setting `allow` replaces the default, so a list written in `WORKFLOW.md` must
+  add them itself, in the form the repo runs (for example `Bash(uv run samba adr list:*)`).
 - High trust, for throwaway repos: `permission_mode: bypassPermissions`.
 

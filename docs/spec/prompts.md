@@ -94,6 +94,9 @@ workflow. Content (rendered with the same variables as prompts, Template renderi
 - If the task made a real decision (a choice between alternatives with a lasting reason), also add
   a proposed ADR in `docs/adr/`: one decision per file, status `proposed`, in the format of
   ADR 0001. Nothing checks this prose; the review does.
+- Decisions that shape the architecture live in `docs/adr/`: before designing, run
+  `samba adr list` and read the relevant ones with `samba adr show N` (ADR 0003; cli, `adr`).
+  The default allow lists have these two commands, so they work without extra config.
 - Your final answer is structured output (running-claude, Outcome): `outcome` is `done`, `blocked` or `continue`, and
   `summary` is one or two sentences.
 
@@ -108,7 +111,9 @@ spec the task will change with one line of intent each, or "none, because ..."),
 and, if useful, *Suggested subtasks*; put non-blocking assumptions in `assumptions` (the human checks them in
 plan review, through `plan accept` or `plan reject`, not through `question`); use outcome
 `blocked` only when the plan cannot be written without answers, and then put the questions in the
-structured `questions` list, as the work agent does (states, Questions).
+structured `questions` list, as the work agent does (states, Questions). It carries the same
+ADR paragraph as the protocol prompt, and the default `planning.allow` has the two read commands
+so the planner can follow it.
 
 ### Executing an approved plan
 

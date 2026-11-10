@@ -7,12 +7,12 @@ import re
 from conftest import Sandbox
 
 
-def test_help_lists_only_the_six_nouns(sb: Sandbox) -> None:
+def test_help_lists_only_the_seven_nouns(sb: Sandbox) -> None:
     res = sb.run("--help")
     assert res.returncode == 0, res.stderr
     names = [n for n in re.findall(r"^ +(\S+)\s", res.stdout, flags=re.MULTILINE)
              if not n.startswith("-") and n != "COMMAND"]
-    assert names == ["run", "task", "plan", "work", "question", "dev"], res.stdout
+    assert names == ["run", "task", "plan", "work", "question", "adr", "dev"], res.stdout
     assert res.stdout.index("development commands:") > res.stdout.index("question")
     assert "Samba itself" in res.stdout
 

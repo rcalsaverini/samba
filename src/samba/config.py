@@ -21,7 +21,11 @@ DEFAULT_ALLOW = [
     "Bash(git status:*)",
     "Bash(git diff:*)",
     "Bash(git log:*)",
+    # Read-only ADR commands; accept, reject and supersede are the human's.
+    "Bash(samba adr list:*)",
+    "Bash(samba adr show:*)",
 ]
+DEFAULT_PLANNING_ALLOW = ["Read", "Grep", "Glob", "Bash(samba adr list:*)", "Bash(samba adr show:*)"]
 
 
 class ConfigError(Exception):
@@ -44,7 +48,7 @@ class ClaudeConfig:
 class PlanningConfig:
     require_plan: bool = False
     model: str | None = None
-    allow: list[str] = field(default_factory=lambda: ["Read", "Grep", "Glob"])
+    allow: list[str] = field(default_factory=lambda: list(DEFAULT_PLANNING_ALLOW))
 
 
 @dataclass(frozen=True)
@@ -237,7 +241,7 @@ def load_config(repo: Path) -> Config:
     planning_cfg = PlanningConfig(
         require_plan=planning_r.boolean("require_plan", False),
         model=planning_r.string("model", None),
-        allow=planning_r.string_list("allow", ["Read", "Grep", "Glob"]),
+        allow=planning_r.string_list("allow", DEFAULT_PLANNING_ALLOW),
     )
 
     config = Config(

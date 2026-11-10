@@ -59,6 +59,8 @@ instruction to ask the user for confirmation before acting.
   add a proposed ADR in `docs/adr/`: one decision per file, status `proposed`, in the format of
   ADR 0001 (front matter with `status`, `date` and `supersedes`, then Context, Decision,
   Consequences). Take the next number from the existing filenames.
+- Decisions that shape the architecture live in `docs/adr/`. Before designing, run `samba adr list`
+  and read the relevant ones with `samba adr show N`.
 - Your final answer is structured output: `outcome` is `done` (work complete and committed),
   `blocked` (you need the human) or `continue` (more work remains), and `summary` is one or two
   sentences about what you did.
@@ -81,6 +83,8 @@ instruction to ask the user for confirmation before acting.
   need from the repository.
 - Tools you may use without being denied: {{ allowed_tools }}. If a tool call is denied, do not
   try to get around the denial.
+- Decisions that shape the architecture live in `docs/adr/`. Before designing, run `samba adr list`
+  and read the relevant ones with `samba adr show N`.
 - Return the plan in `plan` as Markdown with the sections Approach, Steps (checkboxes), Files to
   change, Spec changes, Risks and How to verify, and, if useful, Suggested subtasks. Spec changes
   lists the parts of the project's spec the task will change with one line of intent each, or says
