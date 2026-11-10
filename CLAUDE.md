@@ -34,6 +34,13 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     action after a turn: fail, finish, run validation, record questions, continue).
   - `app/turn.py`: `TurnFlow`, the turn loop shared by planning and work, over the `AgentRunner`
     port; the orchestrator fires the transition for what it returns.
+  - `app/change_state.py`: `ChangeState` (the command pattern of plan/work reject, task
+    retry/stop/discard, plan accept) and `check_legal`, the single legality check;
+    `app/answer_question.py`: `AnswerQuestion`; `app/confirm.py`: the confirmation policy over the
+    `Terminal` port; `app/results.py`: `Refused` and message helpers. Use cases never print: the
+    CLI prints their results and maps `kind` to the exit code.
+  - `adapters/terminal.py` (`StdTerminal`, the `Terminal` port: tty, prompts, `$EDITOR`),
+    `adapters/repo_lock.py` (`FileRepoLock`, the `RepoLock` port over `lock.py`).
   - `adapters/markdown_tasks.py`: `MarkdownTasks`, the `Tasks` port over the task folders, the
     sidecar JSON and the `## Log`/`## Questions` sections (stale-save merge, hand-move detection).
   - `orchestrator.py`: poll loop, dispatch, workers, retries, transitions.

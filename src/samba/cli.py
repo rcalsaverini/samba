@@ -5,27 +5,29 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import os
-import shlex
 import shutil
 import signal
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
 from samba import adr as adr_mod
 from samba import merge, workspace
 from samba.adapters.markdown_tasks import MarkdownTasks
+from samba.adapters.repo_lock import FileRepoLock
 from samba.adapters.system import SystemClock
+from samba.adapters.terminal import StdTerminal
+from samba.app.answer_question import AnswerQuestion
+from samba.app.change_state import ChangeState, FeedbackMode
+from samba.app.confirm import confirm as confirm_policy
 from samba.app.machine import Machine
+from samba.app.results import Refused
 from samba.config import Config, ConfigError, load_config
-from samba.domain.questions import Question, open_questions, round_questions
-from samba.domain.states import STATES, State
+from samba.domain.questions import round_questions
+from samba.domain.states import STATES
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-from samba.domain.transitions import human_events, log_line, render_markdown_table
+from samba.domain.transitions import human_events, render_markdown_table
 from samba.lock import repo_lock
 from samba.orchestrator import Orchestrator, StartupError
 from samba.ports import Tasks
@@ -117,123 +119,43 @@ def cmd_task_show(config: Config, text: str) -> int:
     return 0
 
 
-def _edit_feedback() -> str | None:
-    """Collect text in `$EDITOR` (then `$VISUAL`, then `vi`). None if the editor failed."""
-    editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "feedback.md"
-        path.write_text("")
-        try:
-            res = subprocess.run([*shlex.split(editor), str(path)])
-        except OSError as e:
-            print(f"samba: cannot run editor {editor!r}: {e}", file=sys.stderr)
-            return None
-        if res.returncode != 0:
-            print(f"samba: editor exited with {res.returncode}; nothing changed",
-                  file=sys.stderr)
-            return None
-        return path.read_text().strip()
-
-
 def confirm(prompt: str, command: str, yes: bool) -> int | None:
-    """The confirmation policy of dangerous commands (spec: cli). Returns the exit code to stop
-    with, or None to proceed: `--yes` skips; without a terminal exit 2; else ask `[y/N]`."""
-    if yes:
+    """The confirmation policy for `work accept` (it moves in a later part), over the port."""
+    declined = confirm_policy(StdTerminal(), prompt, command, yes)
+    if declined is None:
         return None
-    if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        print(f"samba: {command} needs confirmation: run it on a terminal or pass --yes; "
-              "nothing changed", file=sys.stderr)
-        return 2
-    print(f"{prompt}? [y/N] ", end="", flush=True)
-    if sys.stdin.readline().strip().lower() not in ("y", "yes"):
-        print("samba: not confirmed; nothing changed", file=sys.stderr)
-        return 1
-    return None
+    return _report(declined)
 
 
-def _retry_hint(cause: str | None) -> str | None:
-    if cause == "budget":
-        return ("hint: raise the budget cap in WORKFLOW.md first (max_turns, max_attempts or "
-                "max_cost_usd_per_task), or the task will go straight back to stuck")
-    if cause in ("dependency_discarded", "dependency_cycle"):
-        return ("hint: edit depends_on in the task file first, or the dependency check will "
-                "send it back to stuck")
-    return None
+def _report(result: Refused) -> int:
+    for line in result.messages:
+        print(line, file=sys.stderr)
+    return 2 if result.kind == "usage" else 1
 
 
 def cmd_transition(config: Config, text: str, event: str, label: str, *,
                    feedback: str | None = None, edit: bool = False,
-                   feedback_mode: Literal["none", "optional", "required"] = "none",
+                   feedback_mode: FeedbackMode = "none",
                    confirm_plan: str | None = None, yes: bool = False,
                    hints: bool = False) -> int:
-    """The command pattern (spec: cli): resolve, check the event is legal, do the outside effect
-    (feedback text), then `Machine.fire`. Nothing else moves a task. Holds the repo lock.
-    `confirm_plan` marks a dangerous command (asks after the legality check, before the lock)."""
+    """Resolve the id, run the `ChangeState` use case, print its result (spec: cli)."""
     tasks = _store(config)
-    takes_feedback = feedback_mode != "none"
-
-    def legal(task_id: TaskId) -> State | None:
-        """The task's state if `event` is legal there, else report and return None."""
-        task = tasks.get(task_id)
-        if task is None:
-            print(f"samba: task {task_id!r} has no file", file=sys.stderr)
-            return None
-        state = task.status
-        events = [r.event for r in human_events(state, task)]
-        if event in events:
-            return state
-        names = ", ".join(events) or "none"
-        print(f"samba: {task_id} is in {state}; {label} not allowed. Legal events: {names}",
-              file=sys.stderr)
-        return None
-
     try:
         task_id = resolve_task_id(tasks, text)
     except ResolveError as e:
         print(f"samba: {e.render()}", file=sys.stderr)
         return 2
-    if legal(task_id) is None:
-        return 1
-    if takes_feedback and edit:  # before the lock: editing can take long
-        feedback = _edit_feedback()
-        if feedback is None:
-            return 1
-    feedback = (feedback or "").strip()
-    if not feedback and feedback_mode == "optional":
-        print("warning: rejecting without feedback", file=sys.stderr)
-    if not feedback and feedback_mode == "required":
-        print(f"samba: {label} needs text (argument or --edit); nothing changed",
-              file=sys.stderr)
-        return 2
-    if confirm_plan is not None:
-        code = confirm(confirm_plan.format(id=task_id), label, yes)
-        if code is not None:
-            return code
-
-    with repo_lock(config.layout.samba_dir) as held:
-        if not held:
-            print("samba: another command or the orchestrator holds .samba/lock; "
-                  "try again", file=sys.stderr)
-            return 1
-        if legal(task_id) is None:  # re-check: a hand move may have raced in
-            return 1
-        current = tasks.get(task_id)
-        if current is None:
-            return 1
-        cause = current.blocked_cause  # the row clears it
-        message = ""
-        if feedback:
-            message = f"feedback round {current.add_feedback(feedback)}"
-            tasks.save(current)  # written before the move, as the spec says
-        if not Machine(tasks, SystemClock()).fire(task_id, event, message=message):
-            note = "; the feedback was already written" if feedback else ""
-            print(f"samba: {event} did not apply to {task_id}{note}", file=sys.stderr)
-            return 1
-    if tasks.get(task_id) is not None:
-        print(tasks.location(task_id))
-    hint = _retry_hint(cause) if hints else None
-    if hint:
-        print(hint, file=sys.stderr)
+    use_case = ChangeState(tasks, Machine(tasks, SystemClock()), StdTerminal(),
+                           FileRepoLock(config.layout.samba_dir))
+    result = use_case.run(task_id, event, label, feedback=feedback, edit=edit,
+                          feedback_mode=feedback_mode, confirm_plan=confirm_plan, yes=yes,
+                          hints=hints)
+    if isinstance(result, Refused):
+        return _report(result)
+    if result.location is not None:
+        print(result.location)
+    for line in result.notes:
+        print(line, file=sys.stderr)
     return 0
 
 
@@ -279,109 +201,25 @@ def cmd_question_show(config: Config, target: str) -> int:
     return 0
 
 
-def _edit_answer(q: Question) -> str | None:
-    """Collect an answer in `$EDITOR` with the question quoted as `# ` comment lines, which are
-    stripped. None if the editor failed."""
-    editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
-    shown = f"{q.id}: {q.text}"
-    if q.context:
-        shown += f"\n\nContext: {q.context}"
-    head = "\n".join(f"# {ln}" if ln else "#" for ln in shown.splitlines())
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "answer.md"
-        path.write_text(head + "\n\n")
-        try:
-            res = subprocess.run([*shlex.split(editor), str(path)])
-        except OSError as e:
-            _err(f"cannot run editor {editor!r}: {e}")
-            return None
-        if res.returncode != 0:
-            _err(f"editor exited with {res.returncode}; nothing changed")
-            return None
-        kept = [ln for ln in path.read_text().splitlines() if ln != "#" and not ln.startswith("# ")]
-        return "\n".join(kept).strip()
-
-
 def cmd_question_answer(config: Config, target: str, text: str | None, edit: bool) -> int:
-    """`question answer` (spec: cli): records the answer at once; fires `question.answer` only when
-    no question of the round is still open."""
+    """`question answer` (spec: cli): resolve the id, run the `AnswerQuestion` use case."""
     tasks = _store(config)
-    event = "question.answer"
     name, qid = _split_target(target)
-
-    def check(task_id: TaskId) -> Question | int:
-        """The question to answer, or the exit code after reporting the problem."""
-        task = tasks.get(task_id)
-        if task is None:
-            _err(f"task {task_id!r} has no file")
-            return 1
-        state = task.status
-        events = [r.event for r in human_events(state, task)]
-        if event not in events:
-            _err(f"{task_id} is in {state}; question.answer not allowed. Legal events: "
-                 f"{', '.join(events) or 'none'}")
-            return 1
-        open_qs = open_questions(task.questions)
-        if qid is None:
-            if len(open_qs) == 1:
-                return open_qs[0]
-            if not open_qs:
-                _err(f"{task_id} has no open question; nothing changed")
-                return 1
-            _err(f"{task_id} has {len(open_qs)} open questions; name one as "
-                 f"{task_id}/QID. Open:\n" + "\n".join(f"  {task_id}/{q.id}"
-                                                       for q in open_qs))
-            return 2
-        found = next((q for q in task.questions if q.id == qid), None)
-        if found is None:
-            _err(f"unknown question {task_id}/{qid}")
-            return 2
-        if found.status != "open":
-            _err(f"{task_id}/{qid} is {found.status}, not open; nothing changed")
-            return 1
-        return found
-
     try:
         task_id = resolve_task_id(tasks, name)
     except ResolveError as e:
         _err(e.render())
         return 2
-    q = check(task_id)
-    if isinstance(q, int):
-        return q
-    answer = text
-    if edit:  # before the lock: editing can take long
-        answer = _edit_answer(q)
-        if answer is None:
-            return 1
-    answer = (answer or "").strip()
-    if not answer:
-        _err("question answer needs text (argument or --edit); nothing changed")
-        return 2
-
-    with repo_lock(config.layout.samba_dir) as held:
-        if not held:
-            _err("another command or the orchestrator holds .samba/lock; try again")
-            return 1
-        q = check(task_id)  # re-check: a hand move or another answer may have raced in
-        if isinstance(q, int):
-            return q
-        task = tasks.get(task_id)
-        assert task is not None  # check() just found it, under the same lock
-        clock = SystemClock()
-        task.answer_question(q.id, answer, clock)
-        task.add_log(log_line(f"{event}: {task_id}/{q.id} answered", clock))
-        tasks.save(task)
-        left = open_questions(round_questions(task.questions))
-        if not left:
-            if not Machine(tasks, clock).fire(task_id, event):
-                _err(f"{event} did not apply to {task_id}; the answer was recorded")
-                return 1
-    if tasks.get(task_id) is not None:
-        print(tasks.location(task_id))
-    if left:
-        _err(f"{len(left)} question(s) still open: " + ", ".join(
-            f"{task_id}/{r.id}" for r in left))
+    clock = SystemClock()
+    use_case = AnswerQuestion(tasks, Machine(tasks, clock), StdTerminal(),
+                              FileRepoLock(config.layout.samba_dir), clock)
+    result = use_case.run(task_id, qid, text, edit)
+    if isinstance(result, Refused):
+        return _report(result)
+    if result.location is not None:
+        print(result.location)
+    for line in result.notes:
+        print(line, file=sys.stderr)
     return 0
 
 
