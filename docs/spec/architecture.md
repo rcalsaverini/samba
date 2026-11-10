@@ -28,6 +28,12 @@ system adapters.
 |---|---|---|
 | `Clock` | `time()` wall seconds, `monotonic()`, `iso_seconds()` local ISO 8601 to the second, `log_stamp()` local `YYYY-MM-DD HH:MM` | `SystemClock` in `adapters/system.py` |
 | `IdGenerator` | `new_session_id()` | `UuidGenerator` in `adapters/system.py` |
+| `AgentRunner` | `run(AgentRequest) -> AgentReport`, `ready() -> Readiness` | `ClaudeCliRunner` in `adapters/claude_cli.py` |
+
+`AgentRequest`, `AgentReport`, `Failure`, `QuestionDraft` and `Readiness` are frozen dataclasses in
+`domain/agent.py` (running-claude, Adapter boundary and the report). The orchestrator takes an
+optional `agent` and defaults to `ClaudeCliRunner`, like the clock. The fake runner for tests is
+`tests/fake_agent.py`.
 
 The clock is threaded through `Machine`, the transition effects (`not_before`,
 `first_dispatched_at`), the question helpers (`add_questions`, `answer_question`,
@@ -49,7 +55,7 @@ unknown); `TaskStore.deps_snapshot` builds it from the task and its `depends_on`
 Not yet behind a port, and not yet moved:
 
 - Task store and sidecars: `tasks.py`.
-- Claude runner: `claude.py`; subprocess helpers: `proc.py`.
+- Subprocess helpers: `proc.py` (the Claude runner moved to `adapters/claude_cli.py`).
 - Git: `workspace.py` and `merge.py`.
 - Repo lock: `lock.py` (monotonic deadline and sleep).
 - Terminal output: `cli.py` and `views.py` (`views.py` still reads `time.time`).
@@ -84,5 +90,6 @@ that the modules in its `DOMAIN_MODULES` list import none of the forbidden modul
 that `orchestrator.py`, `transitions.py` and the domain modules make no direct `time.time`,
 `time.monotonic`, `datetime.now` or `uuid` call, and that the scanner does flag an `adapters` or
 `datetime` import in a temporary module. It also asserts that `tests/test_scenarios.py` imports no
-adapter and not `samba.tasks`. The list holds `ports.py`, `template.py`, `prompts.py` and the
-modules of `domain/`, and grows as more modules move in.
+adapter and not `samba.tasks`, and that no module but `adapters/claude_cli.py` mentions Claude's
+JSON fields. The list holds `ports.py`, `template.py`, `prompts.py` and the
+modules of `domain/` (including `agent.py`), and grows as more modules move in.

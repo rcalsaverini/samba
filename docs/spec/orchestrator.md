@@ -73,7 +73,7 @@ A task with `depends_on` (task-files, Format) is dispatched only when the `deps_
 ensure_workspace(task)              # workspaces
 for turn in 1..max_turns:
     prompt = first_prompt or continuation prompt (prompts)
-    result = run_claude(prompt)     # running-claude, resumes session if one exists
+    result = agent.run(request)     # running-claude, resumes session if one exists; returns an AgentReport
     record usage/cost in sidecar; log any permission_denials
     if budget exceeded: -> stuck ("budget exceeded", blocked_cause budget)
     match structured outcome in result (running-claude, Outcome):

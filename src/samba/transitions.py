@@ -20,6 +20,7 @@ from samba.domain.transitions import (
     find_row,
     stage_guard_ok,
 )
+from samba.logfmt import kv
 from samba.ports import Clock
 from samba.tasks import SidecarStore, TaskStore
 
@@ -29,18 +30,6 @@ log = logging.getLogger("samba")
 DEBUG_FIRE_DELAY = float(os.environ.get("SAMBA_DEBUG_FIRE_DELAY") or 0)
 
 GuardFn = Callable[[str, str, Sidecar], bool]  # (guard name, task id, sidecar) -> holds?
-
-
-def kv(event: str, **fields: object) -> str:
-    parts = [f"event={event}"]
-    for k, v in fields.items():
-        if v is None:
-            continue
-        s = str(v)
-        if any(c.isspace() for c in s) or "=" in s or '"' in s:
-            s = '"' + s.replace('"', "'") + '"'
-        parts.append(f"{k}={s}")
-    return " ".join(parts)
 
 
 class Machine:
