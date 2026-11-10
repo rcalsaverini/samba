@@ -3,18 +3,15 @@
 The table is plain data so a rewrite in another language can reuse it. Rows only change Samba's
 own state: the folder, the sidecar and the task's `## Log`. Effects outside Samba (a git merge,
 appending an answer) belong to the commands that fire an event, never to a row. The file IO of
-firing a row lives in `samba.transitions.Machine`.
+firing a row lives in `samba.app.machine.Machine`.
 """
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from samba.domain.legacy_questions import dismiss_open
-from samba.domain.sidecar import Sidecar
 from samba.domain.states import (
     CAUSE_BUDGET,
     CAUSE_DEPENDENCY_CYCLE,
@@ -22,8 +19,12 @@ from samba.domain.states import (
     CAUSE_GAVE_UP,
     CAUSE_QUESTION,
     CAUSE_STOPPED,
+    BlockedCause,
+    LastOutcome,
+    Stage,
     State,
 )
+from samba.domain.task import TODO_STATES, Task
 from samba.ports import Clock
 
 Actor = Literal["samba", "human"]
@@ -117,61 +118,92 @@ TRANSITIONS: tuple[Transition, ...] = (
 # ---- effects --------------------------------------------------------------------------------
 
 Ctx = dict[str, object]
-Effect = Callable[[Sidecar, Ctx, Clock], None]
+Effect = Callable[[Task, Ctx, Clock], None]
 
 
-def _set(**kw: object) -> Effect:
-    def apply(side: Sidecar, _ctx: Ctx, _clock: Clock) -> None:
-        for k, v in kw.items():
-            setattr(side, k, v)
+def _cause(value: BlockedCause | None) -> Effect:
+    def apply(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+        task.blocked_cause = value
     return apply
 
 
-def _attempts_inc(side: Sidecar, _ctx: Ctx, _clock: Clock) -> None:
-    side.attempts += 1
+def _outcome(value: LastOutcome) -> Effect:
+    def apply(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+        task.last_outcome = value
+    return apply
 
 
-def _error_from_ctx(side: Sidecar, ctx: Ctx, _clock: Clock) -> None:
-    side.last_error = str(ctx.get("error", ""))
+def _stage(value: Stage) -> Effect:
+    def apply(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+        task.last_stage = value
+    return apply
 
 
-def _retry_delay(side: Sidecar, ctx: Ctx, clock: Clock) -> None:
-    side.not_before = clock.time() + float(str(ctx.get("delay", 0)))
+def _attempts_zero(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+    task.attempts = 0
 
 
-def _first_dispatch(side: Sidecar, _ctx: Ctx, clock: Clock) -> None:
-    if side.first_dispatched_at is None:
-        side.first_dispatched_at = clock.time()
+def _attempts_inc(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+    task.attempts += 1
 
 
-def _dismiss_open(side: Sidecar, _ctx: Ctx, clock: Clock) -> None:
-    dismiss_open(side.questions, clock)
+def _not_before_none(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+    task.not_before = None
+
+
+def _last_error_none(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+    task.last_error = None
+
+
+def _plan_approved(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+    task.plan_approved = True
+
+
+def _session_none(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+    task.session_id = None
+
+
+def _error_from_ctx(task: Task, ctx: Ctx, _clock: Clock) -> None:
+    task.last_error = str(ctx.get("error", ""))
+
+
+def _retry_delay(task: Task, ctx: Ctx, clock: Clock) -> None:
+    task.not_before = clock.time() + float(str(ctx.get("delay", 0)))
+
+
+def _first_dispatch(task: Task, _ctx: Ctx, clock: Clock) -> None:
+    if task.first_dispatched_at is None:
+        task.first_dispatched_at = clock.time()
+
+
+def _dismiss_open(task: Task, _ctx: Ctx, clock: Clock) -> None:
+    task.dismiss_open(clock)
 
 
 EFFECTS: dict[str, Effect] = {
     "questions=dismiss_open": _dismiss_open,
-    "attempts=0": _set(attempts=0),
+    "attempts=0": _attempts_zero,
     "attempts+=1": _attempts_inc,
-    "not_before=None": _set(not_before=None),
+    "not_before=None": _not_before_none,
     "not_before=retry": _retry_delay,
-    "blocked_cause=None": _set(blocked_cause=None),
-    f"blocked_cause={CAUSE_QUESTION}": _set(blocked_cause=CAUSE_QUESTION),
-    f"blocked_cause={CAUSE_BUDGET}": _set(blocked_cause=CAUSE_BUDGET),
-    f"blocked_cause={CAUSE_GAVE_UP}": _set(blocked_cause=CAUSE_GAVE_UP),
-    f"blocked_cause={CAUSE_STOPPED}": _set(blocked_cause=CAUSE_STOPPED),
-    f"blocked_cause={CAUSE_DEPENDENCY_DISCARDED}": _set(blocked_cause=CAUSE_DEPENDENCY_DISCARDED),
-    f"blocked_cause={CAUSE_DEPENDENCY_CYCLE}": _set(blocked_cause=CAUSE_DEPENDENCY_CYCLE),
-    "last_error=None": _set(last_error=None),
+    "blocked_cause=None": _cause(None),
+    f"blocked_cause={CAUSE_QUESTION}": _cause(CAUSE_QUESTION),
+    f"blocked_cause={CAUSE_BUDGET}": _cause(CAUSE_BUDGET),
+    f"blocked_cause={CAUSE_GAVE_UP}": _cause(CAUSE_GAVE_UP),
+    f"blocked_cause={CAUSE_STOPPED}": _cause(CAUSE_STOPPED),
+    f"blocked_cause={CAUSE_DEPENDENCY_DISCARDED}": _cause(CAUSE_DEPENDENCY_DISCARDED),
+    f"blocked_cause={CAUSE_DEPENDENCY_CYCLE}": _cause(CAUSE_DEPENDENCY_CYCLE),
+    "last_error=None": _last_error_none,
     "last_error=ctx": _error_from_ctx,
-    "last_outcome=done": _set(last_outcome="done"),
-    "last_outcome=blocked": _set(last_outcome="blocked"),
-    "last_outcome=planned": _set(last_outcome="planned"),
-    "last_outcome=retrying": _set(last_outcome="retrying"),
-    "last_outcome=failed": _set(last_outcome="failed"),
-    "plan_approved=True": _set(plan_approved=True),
-    "session_id=None": _set(session_id=None),
-    "last_stage=plan": _set(last_stage="plan"),
-    "last_stage=work": _set(last_stage="work"),
+    "last_outcome=done": _outcome("done"),
+    "last_outcome=blocked": _outcome("blocked"),
+    "last_outcome=planned": _outcome("planned"),
+    "last_outcome=retrying": _outcome("retrying"),
+    "last_outcome=failed": _outcome("failed"),
+    "plan_approved=True": _plan_approved,
+    "session_id=None": _session_none,
+    "last_stage=plan": _stage("plan"),
+    "last_stage=work": _stage("work"),
     "first_dispatched_at=now": _first_dispatch,
 }
 
@@ -204,13 +236,13 @@ def guard_names(row: Transition) -> list[str]:
     return list(filter(None, row.guard.split(",")))
 
 
-def stage_guard_ok(guard: str, side: Sidecar) -> bool:
-    """`last_stage=plan|work|unset` against the sidecar (unset: no stage recorded)."""
-    return guard == f"last_stage={side.last_stage or 'unset'}"
+def stage_guard_ok(guard: str, task: Task) -> bool:
+    """`last_stage=plan|work|unset` against the task (unset: no stage recorded)."""
+    return guard == f"last_stage={task.last_stage or 'unset'}"
 
 
-def _own_guards_ok(row: Transition, side: Sidecar) -> bool:
-    return all(stage_guard_ok(g, side) for g in guard_names(row) if g.startswith("last_stage="))
+def _own_guards_ok(row: Transition, task: Task) -> bool:
+    return all(stage_guard_ok(g, task) for g in guard_names(row) if g.startswith("last_stage="))
 
 
 def find_row(event: str, src: State, guard_holds: Callable[[str], bool]) -> Transition | None:
@@ -220,32 +252,35 @@ def find_row(event: str, src: State, guard_holds: Callable[[str], bool]) -> Tran
                  and all(guard_holds(g) for g in guard_names(r))), None)
 
 
-def human_row(src: State, dst: State, side: Sidecar) -> Transition | None:
-    """The human row for a hand move `src -> dst`, if the table has one (guards on the sidecar)."""
+def human_row(src: State, dst: State, task: Task) -> Transition | None:
+    """The human row for a hand move `src -> dst`, if the table has one (guards on the task)."""
     for r in TRANSITIONS:
-        if r.actor == "human" and r.src == src and r.dst == dst and _own_guards_ok(r, side):
+        if r.actor == "human" and r.src == src and r.dst == dst and _own_guards_ok(r, task):
             return r
     return None
 
 
-def human_events(src: State, side: Sidecar) -> list[Transition]:
+def human_events(src: State, task: Task) -> list[Transition]:
     """The human events legal in `src`, one row per event name, in table order. Only the
     `last_stage=*` guards are checked: human rows have no other guards."""
     rows: list[Transition] = []
     for r in TRANSITIONS:
-        if (r.actor == "human" and r.src == src and _own_guards_ok(r, side)
+        if (r.actor == "human" and r.src == src and _own_guards_ok(r, task)
                 and all(r.event != x.event for x in rows)):
             rows.append(r)
     return rows
 
 
-def apply_row(row: Transition, side: Sidecar, ctx: Ctx, clock: Clock) -> bool:
-    """Apply the row's effects and the destination state. True if the question records changed."""
-    before = json.dumps(side.questions)
+def apply_row(row: Transition, task: Task, ctx: Ctx, clock: Clock) -> bool:
+    """Apply the row's effects and the destination status. True if the question records changed.
+    A todo destination stamps `queued_at`, the dispatch order key."""
+    before = task.questions
     for name in row.effects:
-        EFFECTS[name](side, ctx, clock)
-    side.state = row.dst
-    return json.dumps(side.questions) != before
+        EFFECTS[name](task, ctx, clock)
+    task.status = row.dst
+    if row.dst in TODO_STATES:
+        task.queued_at = clock.time()
+    return task.questions is not before
 
 
 # ---- rendering ------------------------------------------------------------------------------

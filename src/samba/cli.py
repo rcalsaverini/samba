@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import logging
 import os
-import re
 import shlex
 import shutil
 import signal
@@ -19,22 +17,18 @@ from typing import Literal, cast
 
 from samba import adr as adr_mod
 from samba import merge, workspace
+from samba.adapters.markdown_tasks import MarkdownTasks
 from samba.adapters.system import SystemClock
+from samba.app.machine import Machine
 from samba.config import Config, ConfigError, load_config
+from samba.domain.questions import Question, open_questions, round_questions
+from samba.domain.states import STATES, State
+from samba.domain.task import Task
+from samba.domain.task_id import TaskId
+from samba.domain.transitions import human_events, log_line, render_markdown_table
 from samba.lock import repo_lock
 from samba.orchestrator import Orchestrator, StartupError
-from samba.domain.legacy_questions import (
-    Question,
-    answer_question,
-    open_questions,
-    qint,
-    qstr,
-    round_questions,
-)
-from samba.domain.states import STATES, State
-from samba.domain.transitions import human_events, log_line, render_markdown_table
-from samba.tasks import SidecarStore, TaskStore
-from samba.transitions import Machine
+from samba.ports import Tasks
 from samba.views import (
     ResolveError,
     print_table,
@@ -90,24 +84,35 @@ def cmd_task_list(config: Config, states: list[str]) -> int:
     except ResolveError as e:
         print(f"samba: {e.render()}", file=sys.stderr)
         return 2
-    tasks = TaskStore(config.samba_dir / "tasks")
-    sidecars = SidecarStore(config.samba_dir / "state")
-    print_table(task_rows(tasks, sidecars, chosen), shutil.get_terminal_size().columns, flex=6)
+    tasks = _store(config)
+    print_table(task_rows(tasks, chosen), shutil.get_terminal_size().columns, flex=6)
     return 0
 
 
+def _store(config: Config) -> Tasks:
+    """The task store the commands use (the composition root arrives with a later task)."""
+    return MarkdownTasks(config.samba_dir / "tasks", config.samba_dir / "state", SystemClock())
+
+
+def _log(tasks: Tasks, task_id: TaskId, line: str) -> None:
+    """Append one `## Log` line to a stored task."""
+    task = tasks.get(task_id)
+    if task is not None:
+        task.add_log(line)
+        tasks.save(task)
+
+
 def cmd_task_show(config: Config, text: str) -> int:
-    tasks = TaskStore(config.samba_dir / "tasks")
-    sidecars = SidecarStore(config.samba_dir / "state")
+    tasks = _store(config)
     try:
-        task = tasks.find(resolve_task_id(tasks, text))
+        task = tasks.get(resolve_task_id(tasks, text))
     except ResolveError as e:
         print(f"samba: {e.render()}", file=sys.stderr)
         return 2
     if task is None:
         print(f"samba: unknown task {text!r}", file=sys.stderr)
         return 2
-    print("\n".join(render_show(tasks, task, sidecars.load(task.id))))
+    print("\n".join(render_show(tasks, task)))
     return 0
 
 
@@ -163,17 +168,17 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
     """The command pattern (spec: cli): resolve, check the event is legal, do the outside effect
     (feedback text), then `Machine.fire`. Nothing else moves a task. Holds the repo lock.
     `confirm_plan` marks a dangerous command (asks after the legality check, before the lock)."""
-    tasks = TaskStore(config.samba_dir / "tasks")
-    sidecars = SidecarStore(config.samba_dir / "state")
+    tasks = _store(config)
     takes_feedback = feedback_mode != "none"
 
-    def legal(task_id: str) -> State | None:
+    def legal(task_id: TaskId) -> State | None:
         """The task's state if `event` is legal there, else report and return None."""
-        state = tasks.state_of(task_id)
-        if state is None:
+        task = tasks.get(task_id)
+        if task is None:
             print(f"samba: task {task_id!r} has no file", file=sys.stderr)
             return None
-        events = [r.event for r in human_events(state, sidecars.load(task_id))]
+        state = task.status
+        events = [r.event for r in human_events(state, task)]
         if event in events:
             return state
         names = ", ".join(events) or "none"
@@ -211,19 +216,20 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
             return 1
         if legal(task_id) is None:  # re-check: a hand move may have raced in
             return 1
-        cause = sidecars.load(task_id).blocked_cause  # the row clears it
-        tasks.ensure()  # the destination folder may not exist yet
+        current = tasks.get(task_id)
+        if current is None:
+            return 1
+        cause = current.blocked_cause  # the row clears it
         message = ""
         if feedback:
-            n = tasks.append_feedback(task_id, feedback)
-            message = f"feedback round {n}"
-        if not Machine(tasks, sidecars, SystemClock()).fire(task_id, event, message=message):
+            message = f"feedback round {current.add_feedback(feedback)}"
+            tasks.save(current)  # written before the move, as the spec says
+        if not Machine(tasks, SystemClock()).fire(task_id, event, message=message):
             note = "; the feedback was already written" if feedback else ""
             print(f"samba: {event} did not apply to {task_id}{note}", file=sys.stderr)
             return 1
-    state = tasks.state_of(task_id)
-    if state is not None:
-        print(tasks.path(task_id, state))
+    if tasks.get(task_id) is not None:
+        print(tasks.location(task_id))
     hint = _retry_hint(cause) if hints else None
     if hint:
         print(hint, file=sys.stderr)
@@ -241,35 +247,32 @@ def _split_target(target: str) -> tuple[str, str | None]:
 
 
 def cmd_question_list(config: Config) -> int:
-    tasks = TaskStore(config.samba_dir / "tasks")
-    sidecars = SidecarStore(config.samba_dir / "state")
-    print_table(question_rows(tasks, sidecars), shutil.get_terminal_size().columns, flex=4)
+    print_table(question_rows(_store(config)), shutil.get_terminal_size().columns, flex=4)
     return 0
 
 
 def cmd_question_show(config: Config, target: str) -> int:
-    tasks = TaskStore(config.samba_dir / "tasks")
-    sidecars = SidecarStore(config.samba_dir / "state")
+    tasks = _store(config)
     name, qid = _split_target(target)
     try:
         task_id = resolve_task_id(tasks, name)
     except ResolveError as e:
         _err(e.render())
         return 2
-    questions = sidecars.load(task_id).questions
-    shown = [q for q in questions if qstr(q, "id") == qid] if qid else round_questions(questions)
+    task = tasks.get(task_id)
+    questions = task.questions if task is not None else ()
+    shown = [q for q in questions if q.id == qid] if qid else round_questions(questions)
     if not shown:
         _err(f"unknown question {task_id}/{qid}" if qid else f"{task_id} has no questions")
         return 2
     blocks: list[str] = []
     for q in shown:
-        lines = [f"{task_id}/{qstr(q, 'id')}  stage: {qstr(q, 'stage')}  round: {qint(q, 'round')}"
-                 f"  status: {qstr(q, 'status')}  asked: {qstr(q, 'asked_at')}",
-                 "", qstr(q, "text")]
-        if qstr(q, "context"):
-            lines += ["", "Context: " + qstr(q, "context")]
-        if q.get("status") == "answered":
-            lines += ["", "Answer: " + qstr(q, "answer")]
+        lines = [f"{task_id}/{q.id}  stage: {q.stage}  round: {q.round}"
+                 f"  status: {q.status}  asked: {q.asked_at}", "", q.text]
+        if q.context:
+            lines += ["", "Context: " + q.context]
+        if q.status == "answered":
+            lines += ["", "Answer: " + (q.answer or "")]
         blocks.append("\n".join(lines))
     print("\n\n".join(blocks))
     return 0
@@ -279,9 +282,9 @@ def _edit_answer(q: Question) -> str | None:
     """Collect an answer in `$EDITOR` with the question quoted as `# ` comment lines, which are
     stripped. None if the editor failed."""
     editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
-    shown = f"{qstr(q, 'id')}: {qstr(q, 'text')}"
-    if qstr(q, "context"):
-        shown += f"\n\nContext: {qstr(q, 'context')}"
+    shown = f"{q.id}: {q.text}"
+    if q.context:
+        shown += f"\n\nContext: {q.context}"
     head = "\n".join(f"# {ln}" if ln else "#" for ln in shown.splitlines())
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "answer.md"
@@ -301,24 +304,23 @@ def _edit_answer(q: Question) -> str | None:
 def cmd_question_answer(config: Config, target: str, text: str | None, edit: bool) -> int:
     """`question answer` (spec: cli): records the answer at once; fires `question.answer` only when
     no question of the round is still open."""
-    tasks = TaskStore(config.samba_dir / "tasks")
-    sidecars = SidecarStore(config.samba_dir / "state")
+    tasks = _store(config)
     event = "question.answer"
     name, qid = _split_target(target)
 
-    def check(task_id: str) -> Question | int:
+    def check(task_id: TaskId) -> Question | int:
         """The question to answer, or the exit code after reporting the problem."""
-        state = tasks.state_of(task_id)
-        if state is None:
+        task = tasks.get(task_id)
+        if task is None:
             _err(f"task {task_id!r} has no file")
             return 1
-        side = sidecars.load(task_id)
-        events = [r.event for r in human_events(state, side)]
+        state = task.status
+        events = [r.event for r in human_events(state, task)]
         if event not in events:
             _err(f"{task_id} is in {state}; question.answer not allowed. Legal events: "
                  f"{', '.join(events) or 'none'}")
             return 1
-        open_qs = open_questions(side.questions)
+        open_qs = open_questions(task.questions)
         if qid is None:
             if len(open_qs) == 1:
                 return open_qs[0]
@@ -326,15 +328,15 @@ def cmd_question_answer(config: Config, target: str, text: str | None, edit: boo
                 _err(f"{task_id} has no open question; nothing changed")
                 return 1
             _err(f"{task_id} has {len(open_qs)} open questions; name one as "
-                 f"{task_id}/QID. Open:\n" + "\n".join(f"  {task_id}/{qstr(q, 'id')}"
+                 f"{task_id}/QID. Open:\n" + "\n".join(f"  {task_id}/{q.id}"
                                                        for q in open_qs))
             return 2
-        found = next((q for q in side.questions if qstr(q, "id") == qid), None)
+        found = next((q for q in task.questions if q.id == qid), None)
         if found is None:
             _err(f"unknown question {task_id}/{qid}")
             return 2
-        if found.get("status") != "open":
-            _err(f"{task_id}/{qid} is {qstr(found, 'status')}, not open; nothing changed")
+        if found.status != "open":
+            _err(f"{task_id}/{qid} is {found.status}, not open; nothing changed")
             return 1
         return found
 
@@ -363,46 +365,42 @@ def cmd_question_answer(config: Config, target: str, text: str | None, edit: boo
         q = check(task_id)  # re-check: a hand move or another answer may have raced in
         if isinstance(q, int):
             return q
-        side = sidecars.load(task_id)
-        record = next(r for r in side.questions if qstr(r, "id") == qstr(q, "id"))
+        task = tasks.get(task_id)
+        assert task is not None  # check() just found it, under the same lock
         clock = SystemClock()
-        answer_question(record, answer, clock)
-        sidecars.save(task_id, side)
-        tasks.render_questions(task_id, side.questions)
-        tasks.append_log(task_id, log_line(f"{event}: {task_id}/{qstr(record, 'id')} answered",
-                                           clock))
-        left = [r for r in open_questions(round_questions(side.questions))]
+        task.answer_question(q.id, answer, clock)
+        task.add_log(log_line(f"{event}: {task_id}/{q.id} answered", clock))
+        tasks.save(task)
+        left = open_questions(round_questions(task.questions))
         if not left:
-            tasks.ensure()
-            if not Machine(tasks, sidecars, clock).fire(task_id, event):
+            if not Machine(tasks, clock).fire(task_id, event):
                 _err(f"{event} did not apply to {task_id}; the answer was recorded")
                 return 1
-    state = tasks.state_of(task_id)
-    if state is not None:
-        print(tasks.path(task_id, state))
+    if tasks.get(task_id) is not None:
+        print(tasks.location(task_id))
     if left:
         _err(f"{len(left)} question(s) still open: " + ", ".join(
-            f"{task_id}/{qstr(r, 'id')}" for r in left))
+            f"{task_id}/{r.id}" for r in left))
     return 0
 
 
 def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: bool, yes: bool,
                     dry_run: bool) -> int:
     """`work accept` (spec: cli): the command pattern with a merge as the outside effect."""
-    tasks = TaskStore(config.samba_dir / "tasks")
-    sidecars = SidecarStore(config.samba_dir / "state")
+    tasks = _store(config)
     event = "work.accept"
 
     def err(msg: str) -> None:
         print(f"samba: {msg}", file=sys.stderr)
 
-    def check(task_id: str) -> bool:
+    def check(task_id: TaskId) -> bool:
         """State and preflight checks; reports the failure."""
-        state = tasks.state_of(task_id)
-        if state is None:
+        task = tasks.get(task_id)
+        if task is None:
             err(f"task {task_id!r} has no file")
             return False
-        events = [r.event for r in human_events(state, sidecars.load(task_id))]
+        state = task.status
+        events = [r.event for r in human_events(state, task)]
         if event not in events:
             err(f"{task_id} is in {state}; {event} not allowed. Legal events: "
                 f"{', '.join(events) or 'none'}")
@@ -453,24 +451,24 @@ def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: b
         if no_merge:
             message = "no merge"
         else:
-            task = tasks.find(task_id)
-            title = task.title if task else task_id
+            found = tasks.get(task_id)
+            title = found.title if found else task_id
             res = merge.merge_branch(
                 config.repo, branch, f"Merge {branch}: {title}", shell=config.shell,
                 validate_command=config.validate_command if do_validate else None,
                 timeout_s=config.validate_timeout_s, tail_lines=config.validate_tail_lines,
                 log_path=config.samba_dir / "runs" / task_id / "accept-validate.log")
             if res.status == "conflict":
-                tasks.append_log(task_id, f"work.accept: merge failed (conflicts: {res.detail})")
+                _log(tasks, task_id, f"work.accept: merge failed (conflicts: {res.detail})")
                 err(f"merge conflict in: {res.detail}; merge aborted, task stays in work-review")
                 return 1
             if res.status == "error":
-                tasks.append_log(task_id, f"work.accept: merge failed ({res.detail})")
+                _log(tasks, task_id, f"work.accept: merge failed ({res.detail})")
                 err(f"merge failed: {res.detail}; merge aborted, task stays in work-review")
                 return 1
             if res.status == "validation_failed":
-                tasks.append_log(task_id,
-                                 f"work.accept: validation failed after merge: {res.detail}")
+                _log(tasks, task_id,
+                     f"work.accept: validation failed after merge: {res.detail}")
                 err(f"validation failed after merge; merge aborted, task stays in work-review: "
                     f"{res.detail}")
                 err(f"full output: {res.log_path}")
@@ -484,28 +482,21 @@ def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: b
                     else "")
                 if config.validate_command is None:
                     err("no validate.command; merged without validation")
-        tasks.ensure()
-        if not Machine(tasks, sidecars, SystemClock()).fire(task_id, event, message=message):
+        if not Machine(tasks, SystemClock()).fire(task_id, event, message=message):
             err(f"{event} did not apply to {task_id}"
                 + ("" if no_merge else f" after the merge ({message}); the merge is in {base}"))
             return 1
-    state = tasks.state_of(task_id)
-    if state is not None:
-        print(tasks.path(task_id, state))
+    if tasks.get(task_id) is not None:
+        print(tasks.location(task_id))
     return 0
-
-
-def slugify(title: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
-    return slug[:60].strip("-") or "task"
 
 
 DEPENDS_PROMPT = "Depends on (ids or prefixes, comma separated, empty for none): "
 
 
-def _resolve_deps(tasks: TaskStore, text: str) -> list[str]:
+def _resolve_deps(tasks: Tasks, text: str) -> list[TaskId]:
     """Comma separated ids or prefixes to full ids, in order, without repeats. Raises ResolveError."""
-    ids: list[str] = []
+    ids: list[TaskId] = []
     for part in text.split(","):
         part = part.strip()
         if part:
@@ -527,14 +518,14 @@ def _ask(prompt: str) -> str:
 def cmd_task_new(config: Config, title: str | None, body: str | None, depends: str | None,
                  priority: int, skip_plan: bool) -> int:
     """`task new` (spec: cli): flags give every field; on a terminal the missing ones are asked."""
-    tasks = TaskStore(config.samba_dir / "tasks")
+    tasks = _store(config)
     tty = sys.stdin.isatty() and sys.stdout.isatty()
     if title is None and not tty:
         print("samba: task new needs a TITLE (or run it on a terminal to be asked); "
               "usage: samba task new TITLE [--body TEXT] [--depends-on IDS] [--priority N] "
               "[--skip-plan]", file=sys.stderr)
         return 2
-    dep_ids: list[str] = []
+    dep_ids: list[TaskId] = []
     if depends is not None:  # by flag: errors are fatal
         try:
             dep_ids = _resolve_deps(tasks, depends)
@@ -568,21 +559,13 @@ def cmd_task_new(config: Config, title: str | None, body: str | None, depends: s
             return 1
     assert title is not None
     title = title.strip()
-    tasks.ensure()
-    base = slugify(title)
+    base = TaskId.slug(title)
     task_id, n = base, 2
-    while tasks.state_of(task_id) is not None:
-        task_id, n = f"{base}-{n}", n + 1
-    front: dict[str, object] = {"priority": priority}
-    if dep_ids:
-        front["depends_on"] = dep_ids
-    text = "---\n" + "".join(f"{k}: {json.dumps(v)}\n" for k, v in front.items()) + "---\n"
-    text += f"# {title}\n\n"
-    if body and body.strip():
-        text += body.rstrip("\n") + "\n"
-    path = tasks.path(task_id, "work-todo" if skip_plan else "plan-todo")
-    path.write_text(text)
-    print(path)
+    while tasks.get(task_id) is not None:
+        task_id, n = TaskId(f"{base}-{n}"), n + 1
+    tasks.create(Task.new(task_id, title, body or "", priority, tuple(dep_ids),
+                          "work-todo" if skip_plan else "plan-todo", SystemClock()))
+    print(tasks.location(task_id))
     return 0
 
 

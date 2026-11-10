@@ -311,7 +311,7 @@ class MarkdownTasks:
 
     def location(self, id: TaskId) -> str:
         status = self._locate(id)
-        return str(self._md(id, status or "work-todo"))
+        return str(self._md(id, status or "work-todo").resolve())
 
     # ---- port: reading ------------------------------------------------------------------
 
@@ -420,7 +420,8 @@ class MarkdownTasks:
         text += f"# {task.title}\n\n"
         if task.body.strip():
             text += task.body.rstrip("\n") + "\n"
-        (self.root / task.status).mkdir(parents=True, exist_ok=True)
+        for s in STATES:  # as `prepare` does, without its legacy-layout refusal
+            (self.root / s).mkdir(parents=True, exist_ok=True)
         self._md(task.id, task.status).write_text(text)
         blank = _blank(task)
         if any(getattr(task, f) != getattr(blank, f) for f in SIDE_SCALARS if f != "queued_at") \
@@ -462,6 +463,7 @@ class MarkdownTasks:
         recorded = _str(side.get("state"))
         folder = cur.status
         if status_changed:
+            (self.root / task.status).mkdir(parents=True, exist_ok=True)
             try:
                 os.rename(self._md(task.id, cur.status), self._md(task.id, task.status))
             except FileNotFoundError:
