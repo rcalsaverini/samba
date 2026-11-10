@@ -7,14 +7,14 @@ import contextlib
 import functools
 import logging
 import re
-import time
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from samba.adapters.system import SystemClock, UuidGenerator
 from samba.claude import Invocation, RunResult, logged_in, run_claude
 from samba.config import Config
+from samba.ports import Clock, IdGenerator
 from samba.proc import git, run_shell
 from samba.prompts import (
     APPROVED_PLAN_RULE,
@@ -77,18 +77,21 @@ class Running:
 
 
 class Orchestrator:
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, clock: Clock | None = None,
+                 ids: IdGenerator | None = None) -> None:
         self.config = config
+        self.clock: Clock = clock or SystemClock()
+        self.ids: IdGenerator = ids or UuidGenerator()
         self.sym = config.samba_dir
         self.tasks = TaskStore(self.sym / "tasks")
-        self.sidecars = SidecarStore(self.sym / "state")
+        self.sidecars = SidecarStore(self.sym / "state", self.clock)
         self.runs_dir = self.sym / "runs"
         self.workspaces = Workspaces(config)
         self.running: dict[str, Running] = {}
         self.logged_init = False
         self.warned_invalid: set[str] = set()
         self.warned_deps: set[tuple[str, str]] = set()
-        self.machine = Machine(self.tasks, self.sidecars, self._guard)
+        self.machine = Machine(self.tasks, self.sidecars, self._guard, self.clock)
         self.pending_notes: dict[str, list[str]] = {}  # `## Log` lines held while an agent runs
         self.held: dict[str, tuple[str, ...]] = {}  # todo tasks waiting on dependencies
 
@@ -220,7 +223,7 @@ class Orchestrator:
                     continue
                 log.warning(kv("illegal_move", task=task_id, src=src, dst=folder))
                 self._note(task_id, log_line(
-                    f"illegal move: {src} -> {folder}, moved back to {src}"))
+                    f"illegal move: {src} -> {folder}, moved back to {src}", self.clock))
 
     def reconcile(self) -> None:
         for task_id, entry in list(self.running.items()):
@@ -249,7 +252,7 @@ class Orchestrator:
                     self.warned_invalid.add(name)
                     log.warning(kv("invalid_task_name", file=name,
                                    hint="use only letters, digits, '.', '_' and '-'"))
-        now = time.time()
+        now = self.clock.time()
         self.held = {}
         candidates: list[tuple[Task, Sidecar, State]] = []
         for folder in ("plan-todo", "work-todo"):
@@ -276,7 +279,7 @@ class Orchestrator:
                         resume=bool(side.plan_session_id if stage == "plan"
                                     else side.session_id)))
             worker = asyncio.create_task(self.work(task.id))
-            self.running[task.id] = Running(task=worker, started_at=time.monotonic(),
+            self.running[task.id] = Running(task=worker, started_at=self.clock.monotonic(),
                                             folder=running_folder)
             worker.add_done_callback(functools.partial(self._on_worker_done, task.id))
 
@@ -379,7 +382,7 @@ class Orchestrator:
                 prompt, resume = render(cfg.prompt_template, variables), False
                 res = await self._invoke(task_id, side, ws, prompt, resume, system_prompt)
             for denial in res.denials:
-                self.tasks.append_log(task_id, log_line(f"permission denied: {denial}"))
+                self.tasks.append_log(task_id, log_line(f"permission denied: {denial}", self.clock))
             if not res.ok:
                 await self._fail(task_id, side, res.error())
                 return
@@ -446,7 +449,7 @@ class Orchestrator:
             res = await self._invoke(task_id, side, ws, first, False, system_prompt,
                                      planning=True)
         for denial in res.denials:
-            self.tasks.append_log(task_id, log_line(f"permission denied: {denial}"))
+            self.tasks.append_log(task_id, log_line(f"permission denied: {denial}", self.clock))
         if not res.ok:
             await self._fail(task_id, side, res.error())
             return
@@ -483,7 +486,7 @@ class Orchestrator:
                       system_prompt: str, planning: bool = False) -> RunResult:
         session = side.plan_session_id if planning else side.session_id
         if not resume or not session:
-            session = str(uuid.uuid4())
+            session = self.ids.new_session_id()
             resume = False
         if planning:
             side.plan_session_id = session
@@ -614,7 +617,7 @@ class Orchestrator:
             if res.denials:
                 context += " Permission denied: " + ", ".join(res.denials) + "."
             items = [(res.summary or "The agent reported blocked without a question", context)]
-        add_questions(side.questions, stage, items)
+        add_questions(side.questions, stage, items, self.clock)
         self.tasks.render_questions(task_id, side.questions)
 
     def _budget_left(self, side: Sidecar) -> float | None:

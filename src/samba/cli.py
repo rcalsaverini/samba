@@ -19,6 +19,7 @@ from typing import Literal, cast
 
 from samba import adr as adr_mod
 from samba import merge, workspace
+from samba.adapters.system import SystemClock
 from samba.config import Config, ConfigError, load_config
 from samba.lock import repo_lock
 from samba.orchestrator import Orchestrator, StartupError
@@ -365,7 +366,7 @@ def cmd_question_answer(config: Config, target: str, text: str | None, edit: boo
             return q
         side = sidecars.load(task_id)
         record = next(r for r in side.questions if qstr(r, "id") == qstr(q, "id"))
-        answer_question(record, answer)
+        answer_question(record, answer, SystemClock())
         sidecars.save(task_id, side)
         tasks.render_questions(task_id, side.questions)
         tasks.append_log(task_id, log_line(f"{event}: {task_id}/{qstr(record, 'id')} answered"))

@@ -7,7 +7,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
 - `docs/spec/`: the specification, the source of truth for behavior. Start at `docs/spec/README.md`,
   the index: one line per chapter saying when to read it. Chapters are named by topic (`overview`,
   `layout`, `task-files`, `states`, `orchestrator`, `workflow-config`, `workspaces`, `prompts`,
-  `running-claude`, `observability`, `cli`, `implementation-notes`, `backlog`) and are referenced by name, not by number. Read the chapters relevant to your task
+  `running-claude`, `observability`, `cli`, `architecture`, `implementation-notes`, `backlog`) and are referenced by name, not by number. Read the chapters relevant to your task
   before changing code, and update the spec in the same change when behavior changes.
 - `README.md`: entry point with a short quickstart; links to the manual and the spec.
 - `docs/manual.md`: the user manual (setup, daily loop, troubleshooting), for people using Samba.
@@ -33,6 +33,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `lock.py`: `repo_lock`, the `.samba/lock` flock shared by commands and orchestrator ticks.
   - `deps.py`: `depends_on` evaluation (`docs/spec/orchestrator.md`, Dependencies).
   - `claude.py`: builds the `claude` argv, runs it, parses stream-json (`RunResult`).
+  - `ports.py`: the ports (Protocols `Clock`, `IdGenerator`); `adapters/system.py`: the system
+    clock and uuid generator. The layers and the dependency rule are in the `architecture` chapter.
   - `workspace.py`: git worktrees outside the repo; `proc.py`: subprocess helpers (process groups).
   - `prompts.py`: built-in prompts, the protocol prompt, the outcome schema.
   - `template.py`: strict `{{ name }}` rendering.
@@ -43,6 +45,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `conftest.py`: the `Sandbox` fixture (temp git repo, WORKFLOW.md, tasks, helpers).
   - `test_manual.py`: drift check for `docs/manual.md`. Runs the CLI's `--help` and reads files,
     never imports `samba`.
+  - `test_architecture.py`: guards the dependency rule. Reads sources with `ast`, never imports
+    `samba`; append moved domain modules to its `DOMAIN_MODULES`.
   - `fake_claude.py`: scripted fake of the `claude` CLI. Standard library only.
 
 ## Checks
