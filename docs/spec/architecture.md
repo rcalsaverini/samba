@@ -37,8 +37,9 @@ system adapters.
 title, body, priority, `depends_on`, `status` (a `State`), the counters, the session ids, the closed
 `last_stage`, `blocked_cause` and `last_outcome`, `queued_at`, `branch` and `workspace` (opaque
 strings), and the plan, assumptions, feedback rounds, log lines and question records. The store
-behind the port is the adapter's business. Until the orchestrator and the CLI are moved onto the
-port, `MarkdownTasks` exists next to the old `tasks.py` and nothing calls it.
+behind the port is the adapter's business. The orchestrator, the CLI and the views all go through
+the port; the folder helpers of the old `tasks.py` are gone, and front matter of task files is read
+and written only by `MarkdownTasks`.
 
 A worker holds a `Task` for minutes while commands (`task stop`, `question answer`, `work reject`)
 write the same record, and the agent edits its own task file. So `save` is not "write what I
@@ -154,4 +155,8 @@ modules and the domain modules make no direct `time.time`,
 `datetime` import in a temporary module. It also asserts that `tests/test_scenarios.py` imports no
 adapter, and that no module but `adapters/claude_cli.py` mentions Claude's
 JSON fields. The list holds `ports.py`, `template.py`, `prompts.py` and the
-modules of `domain/` (including `agent.py` and `policy.py`), and grows as more modules move in.
+modules of `domain/` (including `agent.py`, `policy.py`, `task.py` and `task_id.py`), and grows as
+more modules move in. With comments stripped, the code of `domain/` and `app/` must also match none
+of `Path`, `mtime`, `sidecar`, `front matter`: storage vocabulary stays in the adapter (the check is
+itself tested against a temporary module). Finally, `samba.tasks` must not exist, and `orchestrator.py`
+and `cli.py` import `samba.adapters.markdown_tasks` and no folder helper.

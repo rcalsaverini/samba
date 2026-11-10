@@ -1,7 +1,7 @@
 """The transition table and its pure helpers (spec: states).
 
 The table is plain data so a rewrite in another language can reuse it. Rows only change Samba's
-own state: the folder, the sidecar and the task's `## Log`. Effects outside Samba (a git merge,
+own state: the task's status, its fields and its log. Effects outside Samba (a git merge,
 appending an answer) belong to the commands that fire an event, never to a row. The file IO of
 firing a row lives in `samba.app.machine.Machine`.
 """

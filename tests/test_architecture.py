@@ -97,6 +97,40 @@ def test_only_the_claude_adapter_reads_claude_json() -> None:
     assert not (SRC / "claude.py").exists(), "claude.py moved to adapters/claude_cli.py"
 
 
+STORAGE_WORDS = re.compile(r"Path|mtime|sidecar|front matter")
+
+
+def test_domain_and_app_code_has_no_storage_vocabulary() -> None:
+    # Only domain/ and app/: prompts.py talks to the agent about its task file's front matter.
+    for rel in [r for r in [*DOMAIN_MODULES, *APP_MODULES] if "/" in r]:
+        hits = STORAGE_WORDS.findall(code_without_comments(SRC / rel))
+        assert not hits, f"{rel} mentions storage details: {hits}"
+
+
+def test_the_storage_check_catches_path_and_sidecar(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("x = Path('a')  # fine here\ny = 'sidecar'\n# mtime in a comment is fine\n")
+    assert STORAGE_WORDS.findall(code_without_comments(bad)) == ["Path", "sidecar"]
+
+
+def test_the_old_task_store_is_gone_and_the_adapter_is_used() -> None:
+    assert not (SRC / "tasks.py").exists(), "tasks.py moved to adapters/markdown_tasks.py"
+    assert not (SRC / "transitions.py").exists(), "transitions.py moved to app/machine.py"
+    assert not (SRC / "domain" / "sidecar.py").exists()
+    for rel in ["orchestrator.py", "cli.py"]:
+        names = imported_modules(SRC / rel)
+        assert "samba.adapters.markdown_tasks" in names, f"{rel} must use the markdown adapter"
+        assert "samba.tasks" not in names, f"{rel} imports the old folder helpers"
+
+
+def test_only_the_adapter_splits_task_front_matter() -> None:
+    for path in sorted(SRC.rglob("*.py")):
+        rel = path.relative_to(SRC).as_posix()
+        if rel in ("adapters/markdown_tasks.py", "config.py", "adr.py"):
+            continue  # config reads WORKFLOW.md, adr reads ADR files: their own front matter
+        assert "split_front_matter" not in code_without_comments(path), rel
+
+
 def test_no_direct_clock_or_uuid_calls() -> None:
     pattern = re.compile(r"\btime\.(time|monotonic)\(|\bdatetime\.now\(|\buuid\.")
     for rel in ["orchestrator.py", *APP_MODULES, *DOMAIN_MODULES]:

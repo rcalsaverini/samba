@@ -31,8 +31,8 @@
    and branch contract is the same for both.
 3. **Dispatch:** list `plan-todo/` and `work-todo/`, drop tasks whose dependencies are not all
    `done` (below, Dependencies, which also fires `dependency_discarded` and `dependency_cycle`) and
-   tasks with `not_before` in the future, sort by `priority` (missing last), then file mtime (oldest
-   first), then id. Both folders form one list, limited by the same `max_concurrent`. While
+   tasks with `not_before` in the future, sort by `priority` (missing last), then `queued_at` (oldest
+   first; set when the task entered its todo status, states, Task fields and how the markdown adapter stores them), then id. Both folders form one list, limited by the same `max_concurrent`. While
    `len(running) < max_concurrent`, decide the stage of each candidate (stored as `last_stage` by
    the dispatch row) and start a worker:
    1. File in `plan-todo/`: `dispatch_plan` (claimed into `plan-running/`).
