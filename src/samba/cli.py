@@ -1,4 +1,4 @@
-"""Command line: `samba run`, and `<noun> <verb>` for task, plan, work, question, dev (spec: cli)."""
+"""Command line: `samba run`, and `<noun> <verb>` for task, plan, work, question, adr, dev (spec: cli)."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 from typing import Literal, cast
 
+from samba import adr as adr_mod
 from samba import merge, workspace
 from samba.config import Config, ConfigError, load_config
 from samba.lock import repo_lock
@@ -583,6 +584,42 @@ def cmd_task_new(config: Config, title: str | None, body: str | None, depends: s
     return 0
 
 
+def cmd_adr(args: argparse.Namespace) -> int:
+    """`adr list|show|accept|reject|supersede` (spec: cli, ADR commands). Plain file edits: no
+    config, no lock, no confirmation, never a commit."""
+    repo = cast(Path, args.repo)
+    verb = str(args.adr_command)
+    try:
+        if verb == "list":
+            adrs = adr_mod.load_all(repo)
+            if not args.all:
+                adrs = [a for a in adrs if a.status == "accepted"]
+            if args.all:
+                rows = [["NUMBER", "STATUS", "TITLE", "SUMMARY"]] + [
+                    [f"{a.number:04d}", a.status, a.title, a.summary] for a in adrs]
+            else:
+                rows = [["NUMBER", "TITLE", "SUMMARY"]] + [
+                    [f"{a.number:04d}", a.title, a.summary] for a in adrs]
+            print_table(rows, shutil.get_terminal_size().columns, flex=len(rows[0]) - 1)
+            return 0
+        if verb == "show":
+            sys.stdout.write(adr_mod.find(repo, adr_mod.parse_number(str(args.number))).text)
+            return 0
+        number = adr_mod.parse_number(str(args.number))
+        if verb == "supersede":
+            written = adr_mod.supersede(repo, number, adr_mod.parse_number(str(args.new)))
+        elif verb == "accept":
+            written = adr_mod.set_status(repo, number, "accept", "proposed", "accepted")
+        else:
+            written = adr_mod.set_status(repo, number, "reject", "proposed", "rejected")
+    except adr_mod.AdrError as e:
+        _err(str(e))
+        return e.code
+    for path in written:
+        print(path)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="samba", formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -660,7 +697,22 @@ def main(argv: list[str] | None = None) -> int:
                         help="task id or prefix; /QID may be left out with one open question")
     p_qans.add_argument("text", nargs="?", help="the answer (or use --edit)")
     p_qans.add_argument("--edit", action="store_true", help="write the answer in $EDITOR")
-    p_tretry = task_sub.add_parser("retry", help="send a stuck task back to its todo folder")
+    p_adr = sub.add_parser("adr", help="ADR commands: list, show, accept, reject, supersede")
+    adr_sub = p_adr.add_subparsers(dest="adr_command", required=True)
+    p_alist = adr_sub.add_parser("list", help="list accepted ADRs (--all: every status)")
+    p_alist.add_argument("--all", action="store_true",
+                         help="also show proposed, superseded and rejected ADRs")
+    adr_parsers = [p_alist]
+    for verb, text in (("show", "print one ADR"),
+                       ("accept", "mark a proposed ADR accepted (edits the file, no commit)"),
+                       ("reject", "mark a proposed ADR rejected (edits the file, no commit)"),
+                       ("supersede", "mark an accepted ADR superseded by NEW (no commit)")):
+        p_a = adr_sub.add_parser(verb, help=text)
+        p_a.add_argument("number", metavar="N", help="ADR number: 3, 03 or 0003")
+        if verb == "supersede":
+            p_a.add_argument("new", metavar="NEW", help="number of the ADR that replaces N")
+        adr_parsers.append(p_a)
+    p_tretry = task_sub.add_parser("retry",help="send a stuck task back to its todo folder")
     p_tretry.add_argument("id", help="task id or unique prefix")
     p_tstop = task_sub.add_parser("stop", help="stop a running task; it goes to stuck until `task retry`")
     p_tstop.add_argument("id", help="task id or unique prefix")
@@ -668,7 +720,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tdisc.add_argument("id", help="task id or unique prefix")
     p_tdisc.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     for p in (p_run, p_tnew, p_trans, p_tlist, p_tshow, p_pacc, p_prej,
-              p_wrej, p_wacc, p_qlist, p_qshow, p_qans, p_tretry, p_tstop, p_tdisc):
+              p_wrej, p_wacc, p_qlist, p_qshow, p_qans, p_tretry, p_tstop, p_tdisc, *adr_parsers):
         p.add_argument("--repo", type=Path, default=Path.cwd(),
                        help="repository root (default: current directory)")
     args = parser.parse_args(argv)
@@ -679,6 +731,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "dev":  # only `transitions`; needs no repo or config
         print(render_markdown_table())
         return 0
+
+    if args.command == "adr":  # plain files under docs/adr/: no WORKFLOW.md needed
+        return cmd_adr(args)
 
     try:
         config = load_config(args.repo)

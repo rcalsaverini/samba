@@ -33,6 +33,9 @@ claude:
     - "Bash(uv run samba plan:*)"
     - "Bash(uv run samba question:*)"
     - "Bash(uv run samba dev:*)"
+    # Read-only ADR commands. Not accept, reject or supersede: accepting is a human decision.
+    - "Bash(uv run samba adr list:*)"
+    - "Bash(uv run samba adr show:*)"
     - "Bash(uv run samba work reject:*)"
     - "Bash(uv run samba work --help)"
     - "Bash(uv run samba work accept --help)"
@@ -59,3 +62,6 @@ the edits your change needs), and say in your task file's `## Log` what changed.
 reviewed next to the code diff at `work accept`. If the task made a real decision (a choice
 between alternatives with a lasting reason), also propose an ADR in docs/adr/ with status
 proposed, one decision per file, as in ADR 0001.
+
+Decisions that shape the architecture live in docs/adr/. Before designing, run
+`uv run samba adr list` and read the relevant ones with `uv run samba adr show N`.

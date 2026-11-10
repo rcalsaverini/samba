@@ -80,6 +80,7 @@ Run these from the root of the target git repository.
 | `samba plan accept\|reject` | review a plan |
 | `samba work accept\|reject` | review finished work; `accept` merges the branch |
 | `samba question list\|show\|answer` | answer questions the agent asked |
+| `samba adr list\|show\|accept\|reject\|supersede` | read and decide on the ADRs in `docs/adr/` |
 
 Task ids can be abbreviated to any unique prefix.
 

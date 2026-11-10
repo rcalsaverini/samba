@@ -24,14 +24,19 @@ samba work accept ID [--no-merge] [--no-validate] [--yes] [--dry-run] [--repo PA
 samba question list [--repo PATH]
 samba question show TASK[/QID] [--repo PATH]
 samba question answer TASK[/QID] (TEXT | --edit) [--repo PATH]
+samba adr list [--all] [--repo PATH]
+samba adr show N [--repo PATH]
+samba adr accept N [--repo PATH]
+samba adr reject N [--repo PATH]
+samba adr supersede N NEW [--repo PATH]
 samba task retry ID   [--repo PATH]
 samba task stop ID    [--repo PATH]
 samba task discard ID [--yes] [--repo PATH]
 ```
 
-Every command is `run` or `<noun> <verb>`, with nouns `task`, `plan`, `work`, `question` and `dev`.
+Every command is `run` or `<noun> <verb>`, with nouns `task`, `plan`, `work`, `question`, `adr` and `dev`.
 There are no top-level `new`, `list`, `show`, `status` or `transitions`, and no aliases: they are
-usage errors (exit 2). `samba --help` lists `run`, `task`, `plan`, `work` and `question`, then
+usage errors (exit 2). `samba --help` lists `run`, `task`, `plan`, `work`, `question` and `adr`, then
 `dev` apart under "development commands" (its help says it is for working on Samba itself).
 `dev transitions` accepts `--repo` and ignores it; it loads no config.
 
@@ -122,6 +127,38 @@ command moves a task or writes the sidecar except through `fire`. Later commands
   no TTY and no `--yes` is exit 2; nothing changes in either case). Discarding a running task
   moves it at once and the orchestrator then stops the agent; the worktree is removed afterwards
   and the branch is kept (orchestrator, Tick).
+
+**`adr`** commands work on the ADR files `docs/adr/NNNN-title.md` of the repo (ADRs 0001 and
+0003). They are plain file operations: no `WORKFLOW.md` (like `dev`), no repo lock, no orchestrator,
+and they never commit. Only the front matter of ADR 0001 is parsed (`status`, `date`,
+`supersedes`); the number is the filename's.
+
+- **Number forms:** `N` is digits only, so `3`, `03` and `0003` are the same ADR. Anything else
+  is exit 2, and so is a number with no file. A file without front matter or without `status` is
+  exit 1 naming the file (it also stops `list`). A missing `docs/adr/` is the same as no ADRs.
+- `adr list` prints a table with columns NUMBER (four digits), TITLE and SUMMARY, in number order.
+  It shows only `accepted` ADRs; `--all` shows every status and adds a STATUS column after
+  NUMBER. TITLE is the `# NNNN: Title` heading without the number. No ADR prints the header only.
+  SUMMARY takes the width left over, with the truncation rule of `question list`.
+- **Summary source** (the open point of ADR 0003, settled here): the first sentence of the
+  Decision section, with no extra front matter field. Rule: take the first paragraph or bullet
+  of `## Decision`, drop the bullet marker, join wrapped lines with spaces, and cut after the
+  first `.` followed by whitespace and a capital letter or backtick, or at the end of that
+  paragraph or bullet.
+- `adr show N` prints the file unchanged, whatever its status.
+- `adr accept N` and `adr reject N` are legal only from `proposed` and set `accepted` or
+  `rejected`. `adr supersede N NEW` reads "N is superseded by NEW": N must be `accepted` and NEW
+  must be another ADR, `proposed` or `accepted`. It sets N to `superseded` and adds N to the
+  `supersedes` list of NEW if absent, leaving NEW's status alone. Both files are checked before
+  either is written. An illegal status is exit 1 (`ADR 0003 is accepted; accept not allowed ...`)
+  and changes nothing; `supersede N N` is exit 2.
+- The edit rewrites only the `status:` line (and the `supersedes:` line, as `[1, 2]`, adding it
+  when absent), so the diff is small and the rest of the file is byte-identical. stdout is the
+  path of each file written.
+- **No confirmation prompt:** unlike `work accept` and `task discard`, these are edits to tracked
+  files that `git diff` shows and `git checkout` undoes, and the human reviews them as a diff.
+- The default agent allow lists have `adr list` and `adr show` but not the status commands
+  (workflow-config, Permissions): accepting is a human decision.
 
 **`work accept`** merges a reviewed task's branch and fires `work.accept` (`work-review -> done`).
 It is the first dangerous command. Moving the file to `done/` by hand stays a plain observed

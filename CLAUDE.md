@@ -16,7 +16,9 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
 - `src/samba/`
   - `cli.py`: `run` and `<noun> <verb>` commands, no aliases: `task new|list|show|retry|stop|discard`,
     `plan`/`work` review commands (including `work accept`), `question list|show|answer`
-    (answers are recorded per question, `cmd_question_answer`), `dev transitions`.
+    (answers are recorded per question, `cmd_question_answer`), `adr list|show|accept|reject|supersede`
+    (`cmd_adr`, needs no WORKFLOW.md), `dev transitions`.
+  - `adr.py`: ADR files under `docs/adr/`: front matter parsing, summary line, status edits.
   - `merge.py`: git steps of `work accept`: preflight, `--no-commit` merge, validate, commit/abort.
   - `views.py`: read-only shared helpers: table printer, state-prefix matcher, task id resolver
     (`resolve_task_id`, reused by every command taking an id), `task show` renderer.

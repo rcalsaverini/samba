@@ -431,6 +431,30 @@ Where to look when you want more:
 
 Spec chapter observability.
 
+### Decision records (ADRs)
+
+Decisions that shape the architecture live as files in `docs/adr/` (format: ADR 0001). Agents
+are told to check them before designing; you review and accept them.
+
+```
+$ samba adr list
+$ samba adr list --all
+$ samba adr show 3
+$ samba adr accept 12
+$ samba adr reject 12
+$ samba adr supersede 3 12
+```
+
+- `adr list` shows the accepted ADRs with number, title and a one-line summary (the first
+  sentence of the Decision section). `--all` adds superseded, rejected and proposed ones, with
+  their status. `adr show N` prints one ADR; `N` may be `3`, `03` or `0003`.
+- `adr accept N` and `adr reject N` work on a `proposed` ADR. `adr supersede N NEW` marks the
+  accepted ADR `N` as superseded and lists it in the `supersedes` of `NEW`.
+- The status commands only edit the file: review the diff and commit it yourself. They do not
+  ask for confirmation. Agents may run `adr list` and `adr show`, not the status commands.
+
+Spec chapter cli.
+
 ## 10. Worktrees and branches
 
 Each task works in its own git worktree, outside your repo:
