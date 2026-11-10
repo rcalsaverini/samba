@@ -1,5 +1,35 @@
 # Running Claude Code
 
+## Adapter boundary and the report
+
+The core talks to the agent only through the port `AgentRunner` (`ports.py`), with the types in
+`domain/agent.py`. Everything else in this chapter happens inside the adapter
+`adapters/claude_cli.py`, the only module that reads Claude's stream-json (`init`, `result`,
+`structured_output`, `permission_denials`, `total_cost_usd`, `usage`). `tests/test_architecture.py`
+fails if another module mentions those fields.
+
+- `run(AgentRequest) -> AgentReport`. It never raises for an agent failure; cancelling it kills the
+  process group.
+- `ready() -> Readiness(ok, detail)` replaces the startup login check. The Claude adapter runs
+  `claude auth status` in the repo; `detail` is the output (first 500 characters) when not ready.
+  The orchestrator builds the startup refusal text from it.
+- **`AgentRequest`** (frozen): `prompt`, `session_id`, `resume`, `system_prompt`,
+  `max_budget_usd` (remaining task budget or none), `kind` (`plan` or `work`), `location` (opaque
+  string, the workspace; the adapter reads it as the cwd) and `log_name` (opaque string
+  `<task id>/<turn number>`; the adapter writes the stream to `runs/<log_name>.jsonl`). No provider
+  or config type: permissions, model, schema, the tasks folder and the runs folder are adapter
+  settings. The planning run is `kind == "plan"`, not a config object (Planning run below).
+- **`AgentReport`** (frozen): `outcome` (`done`, `blocked`, `continue`, `planned` or `missing`),
+  `summary` (whitespace collapsed), `plan` and `assumptions` (stripped), `questions` (drafts of
+  `text` and `context`, malformed ones dropped), `denials` (one text per permission denial, such as
+  `Bash (rm -rf x)`), `cost_usd`, `input_tokens`, `output_tokens`, `failure` and `session_missing`.
+  `missing` means there was no valid structured outcome (Outcome below).
+- **`failure`** is none on success (Success below) or `Failure(kind, detail)`. `detail` is the text
+  that goes to `## Log` and `last_error`: `agent stalled (no output)` (kind `stalled`),
+  `turn timeout` (`timeout`), `claude exited N without a result <last stderr line>`,
+  `claude reported an error: <result text, 300 characters>` or `claude exited N` (all `error`).
+- The adapter also logs `claude_context` (once per runner), `malformed_lines` and `claude_stderr`.
+
 ## Invocation
 
 ```
@@ -72,7 +102,7 @@ Claude Code returns the parsed object in `result.structured_output` (verified). 
 - `blocked`: needs the human; the questions are in `questions` (states, Questions).
 - `continue`: more work left.
 
-If `structured_output` is missing or invalid, treat as `continue` and log a warning. `summary` is
+If `structured_output` is missing or invalid, the report's outcome is `missing`: the orchestrator treats it as `continue` and logs a warning. `summary` is
 written into the task's `## Log` line for that run.
 
 ## Planning run

@@ -1,34 +1,36 @@
-"""Run Claude Code headless and read its stream-json output (spec: running-claude)."""
+"""The Claude Code CLI as an AgentRunner (spec: running-claude).
+
+The only module that reads Claude's stream-json. It maps one run into an `AgentReport`.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from samba.config import ClaudeConfig, PlanningConfig
+from samba.domain.agent import (
+    AgentReport,
+    AgentRequest,
+    Failure,
+    Outcome,
+    QuestionDraft,
+    Readiness,
+)
+from samba.logfmt import kv
 from samba.proc import kill_group, run_cmd
 from samba.prompts import OUTCOME_SCHEMA_JSON, PLAN_OUTCOME_SCHEMA_JSON
 
-Outcome = Literal["done", "blocked", "continue", "planned"]
+log = logging.getLogger("samba")
+
 LINE_LIMIT = 10 * 1024 * 1024
 STDERR_KEEP = 20_000
-
-
-@dataclass(frozen=True)
-class Invocation:
-    prompt: str
-    session_id: str
-    resume: bool
-    tasks_dir: Path
-    system_prompt: str
-    max_budget_usd: float | None
-    planning: PlanningConfig | None = None  # set for a planning run (spec: running-claude, Planning run)
-
 
 MEMORY_FILE_NAMES = ("CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md", ".claude/CLAUDE.local.md")
 
@@ -43,24 +45,25 @@ def ancestor_memory_files(cwd: Path) -> list[str]:
     return [str(parent / name) for parent in cwd.resolve().parents for name in MEMORY_FILE_NAMES]
 
 
-def build_argv(cfg: ClaudeConfig, inv: Invocation, cwd: Path) -> list[str]:
+def build_argv(cfg: ClaudeConfig, planning: PlanningConfig, req: AgentRequest, tasks_dir: Path,
+               cwd: Path) -> list[str]:
     # The prompt comes right after -p: several flags below are variadic and would swallow a
     # positional argument placed after them.
-    argv = [*cfg.command, "-p", inv.prompt, "--output-format", "stream-json", "--verbose"]
-    argv += ["--resume", inv.session_id] if inv.resume else ["--session-id", inv.session_id]
-    argv += ["--add-dir", str(inv.tasks_dir)]
-    argv += ["--append-system-prompt", inv.system_prompt]
-    plan = inv.planning
+    argv = [*cfg.command, "-p", req.prompt, "--output-format", "stream-json", "--verbose"]
+    argv += ["--resume", req.session_id] if req.resume else ["--session-id", req.session_id]
+    argv += ["--add-dir", str(tasks_dir)]
+    argv += ["--append-system-prompt", req.system_prompt]
+    plan = req.kind == "plan"
     argv += ["--json-schema", PLAN_OUTCOME_SCHEMA_JSON if plan else OUTCOME_SCHEMA_JSON]
     argv += ["--permission-mode", "dontAsk" if plan else cfg.permission_mode]
-    allow = plan.allow if plan else cfg.allow
+    allow = planning.allow if plan else cfg.allow
     if allow:
         argv += ["--allowedTools", *allow]
-    model = (plan.model or cfg.model) if plan else cfg.model
+    model = (planning.model or cfg.model) if plan else cfg.model
     if model:
         argv += ["--model", model]
-    if inv.max_budget_usd is not None:
-        argv += ["--max-budget-usd", f"{inv.max_budget_usd:.4f}"]
+    if req.max_budget_usd is not None:
+        argv += ["--max-budget-usd", f"{req.max_budget_usd:.4f}"]
     if cfg.isolate_user_config:
         argv += ["--setting-sources", "project,local", "--strict-mcp-config"]
         excludes = {"claudeMdExcludes": ancestor_memory_files(cwd)}
@@ -70,7 +73,7 @@ def build_argv(cfg: ClaudeConfig, inv: Invocation, cwd: Path) -> list[str]:
 
 
 @dataclass
-class RunResult:
+class _RunResult:
     exit_code: int | None = None
     init: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
@@ -110,15 +113,15 @@ class RunResult:
         return (i if isinstance(i, int) else 0, o if isinstance(o, int) else 0)
 
     @property
-    def outcome(self) -> Outcome | None:
+    def outcome(self) -> Outcome:
         structured = (self.result or {}).get("structured_output")
         if isinstance(structured, dict):
             value = cast(dict[str, Any], structured).get("outcome")
             if value == "done" or value == "blocked" or value == "continue" or value == "planned":
                 return value
-        return None
+        return "missing"
 
-    def _structured_text(self, key: str) -> str:
+    def structured_text(self, key: str) -> str:
         structured = (self.result or {}).get("structured_output")
         if isinstance(structured, dict):
             value = cast(dict[str, Any], structured).get(key)
@@ -127,19 +130,11 @@ class RunResult:
         return ""
 
     @property
-    def plan_text(self) -> str:
-        return self._structured_text("plan").strip()
-
-    @property
-    def assumptions(self) -> str:
-        return self._structured_text("assumptions").strip()
-
-    @property
-    def question_items(self) -> list[tuple[str, str]]:
-        """The `questions` of the outcome as (text, context). Malformed entries are dropped."""
+    def question_items(self) -> tuple[QuestionDraft, ...]:
+        """The `questions` of the outcome. Malformed entries are dropped."""
         structured = (self.result or {}).get("structured_output")
         raw = cast(dict[str, Any], structured).get("questions") if isinstance(structured, dict) else None
-        items: list[tuple[str, str]] = []
+        items: list[QuestionDraft] = []
         if isinstance(raw, list):
             for item in cast(list[object], raw):
                 if not isinstance(item, dict):
@@ -147,36 +142,90 @@ class RunResult:
                 d = cast(dict[str, Any], item)
                 text, context = d.get("text"), d.get("context")
                 if isinstance(text, str) and text.strip():
-                    items.append((text.strip(), context.strip() if isinstance(context, str) else ""))
-        return items
+                    items.append(QuestionDraft(
+                        text.strip(), context.strip() if isinstance(context, str) else ""))
+        return tuple(items)
 
-    @property
-    def summary(self) -> str:
-        structured = (self.result or {}).get("structured_output")
-        if isinstance(structured, dict):
-            value = cast(dict[str, Any], structured).get("summary")
-            if isinstance(value, str):
-                return " ".join(value.split())
-        return ""
-
-    def error(self) -> str:
+    def failure(self) -> Failure | None:
+        if self.ok:
+            return None
         if self.stalled:
-            return "agent stalled (no output)"
+            return Failure("stalled", "agent stalled (no output)")
         if self.timed_out:
-            return "turn timeout"
+            return Failure("timeout", "turn timeout")
         if self.result is None:
             tail = self.stderr.strip().splitlines()[-1:] or [""]
-            return f"claude exited {self.exit_code} without a result {tail[0][:200]}".strip()
+            return Failure(
+                "error", f"claude exited {self.exit_code} without a result {tail[0][:200]}".strip())
         if self.result.get("is_error"):
             text = self.result.get("result")
-            return f"claude reported an error: {str(text)[:300]}"
-        return f"claude exited {self.exit_code}"
+            return Failure("error", f"claude reported an error: {str(text)[:300]}")
+        return Failure("error", f"claude exited {self.exit_code}")
 
 
-async def run_claude(cfg: ClaudeConfig, inv: Invocation, cwd: Path, stream_log: Path) -> RunResult:
-    """Run one Claude invocation. Cancelling the coroutine kills the process group."""
-    argv = build_argv(cfg, inv, cwd)
-    res = RunResult()
+def _to_report(res: _RunResult) -> AgentReport:
+    tin, tout = res.tokens()
+    summary = " ".join(res.structured_text("summary").split())
+    return AgentReport(
+        outcome=res.outcome,
+        summary=summary,
+        plan=res.structured_text("plan").strip(),
+        assumptions=res.structured_text("assumptions").strip(),
+        questions=res.question_items,
+        denials=tuple(res.denials),
+        cost_usd=res.cost_usd,
+        input_tokens=tin,
+        output_tokens=tout,
+        failure=res.failure(),
+        session_missing=res.session_missing,
+    )
+
+
+class ClaudeCliRunner:
+    """Runs `claude -p` per request. Stream logs go to `<runs_dir>/<request.log_name>.jsonl`."""
+
+    def __init__(self, cfg: ClaudeConfig, planning: PlanningConfig, tasks_dir: Path,
+                 runs_dir: Path, check_dir: Path) -> None:
+        self.cfg = cfg
+        self.planning = planning
+        self.tasks_dir = tasks_dir
+        self.runs_dir = runs_dir
+        self.check_dir = check_dir
+        self._logged_init = False
+
+    async def run(self, request: AgentRequest) -> AgentReport:
+        cwd = Path(request.location)
+        stream_log = self.runs_dir / f"{request.log_name}.jsonl"
+        argv = build_argv(self.cfg, self.planning, request, self.tasks_dir, cwd)
+        res = await _run_claude(self.cfg, argv, cwd, stream_log)
+        task = request.log_name.split("/", 1)[0]
+        if res.init and not self._logged_init:
+            self._logged_init = True
+            init = res.init
+            log.info(kv("claude_context", permission_mode=init.get("permissionMode"),
+                        skills=len(init.get("skills") or []),
+                        plugins=len(init.get("plugins") or []),
+                        mcp_servers=len(init.get("mcp_servers") or [])))
+        if res.malformed_lines:
+            log.warning(kv("malformed_lines", task=task, count=res.malformed_lines))
+        if res.stderr.strip():
+            log.debug(kv("claude_stderr", task=task, text=res.stderr.strip()[-2000:]))
+        return _to_report(res)
+
+    async def ready(self) -> Readiness:
+        res = await run_cmd([*self.cfg.command, "auth", "status"], self.check_dir, timeout=60)
+        try:
+            raw: Any = json.loads(res.output)
+            if isinstance(raw, dict) and cast(dict[str, Any], raw).get("loggedIn") is True:
+                return Readiness(True)
+        except ValueError:
+            pass
+        return Readiness(False, res.output.strip()[:500])
+
+
+async def _run_claude(cfg: ClaudeConfig, argv: list[str], cwd: Path, stream_log: Path) -> _RunResult:
+    """Run one Claude process. Cancelling the coroutine kills the process group."""
+    res = _RunResult()
     started = time.monotonic()
     stream_log.parent.mkdir(parents=True, exist_ok=True)
     proc = await asyncio.create_subprocess_exec(
@@ -193,7 +242,7 @@ async def run_claude(cfg: ClaudeConfig, inv: Invocation, cwd: Path, stream_log: 
     stderr_task = asyncio.create_task(drain_stderr())
     deadline = started + cfg.turn_timeout_s
     try:
-        with stream_log.open("ab") as log:
+        with stream_log.open("ab") as log_file:
             while True:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -213,7 +262,7 @@ async def run_claude(cfg: ClaudeConfig, inv: Invocation, cwd: Path, stream_log: 
                     continue
                 if not line:
                     break
-                log.write(line)
+                log_file.write(line)
                 _handle_line(line, res)
         if res.timed_out or res.stalled:
             await kill_group(proc)
@@ -232,7 +281,7 @@ async def run_claude(cfg: ClaudeConfig, inv: Invocation, cwd: Path, stream_log: 
     return res
 
 
-def _handle_line(line: bytes, res: RunResult) -> None:
+def _handle_line(line: bytes, res: _RunResult) -> None:
     try:
         raw: Any = json.loads(line)
     except ValueError:
@@ -261,14 +310,3 @@ def _handle_line(line: bytes, res: RunResult) -> None:
                         if cmd:
                             detail = f" ({str(cmd)[:120]})"
                     res.denials.append(tool + detail)
-
-
-async def logged_in(cfg: ClaudeConfig, cwd: Path) -> tuple[bool, str]:
-    res = await run_cmd([*cfg.command, "auth", "status"], cwd, timeout=60)
-    try:
-        raw: Any = json.loads(res.output)
-        if isinstance(raw, dict) and cast(dict[str, Any], raw).get("loggedIn") is True:
-            return True, ""
-    except ValueError:
-        pass
-    return False, res.output.strip()[:500]

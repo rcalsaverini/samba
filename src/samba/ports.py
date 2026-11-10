@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from samba.domain.agent import AgentReport, AgentRequest, Readiness
+
 
 class Clock(Protocol):
     def time(self) -> float:
@@ -29,4 +31,15 @@ class Clock(Protocol):
 class IdGenerator(Protocol):
     def new_session_id(self) -> str:
         """A fresh Claude session id."""
+        ...
+
+
+class AgentRunner(Protocol):
+    async def run(self, request: AgentRequest) -> AgentReport:
+        """One agent turn. Never raises for an agent failure: it is in `report.failure`.
+        Cancelling the coroutine stops the agent."""
+        ...
+
+    async def ready(self) -> Readiness:
+        """Whether the agent can run (for Claude, logged in)."""
         ...

@@ -35,8 +35,10 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `transitions.py`: `Machine.fire` and `observe`, the only path that moves a task
     (`docs/spec/states.md`): the file IO around the domain table.
   - `lock.py`: `repo_lock`, the `.samba/lock` flock shared by commands and orchestrator ticks.
-  - `claude.py`: builds the `claude` argv, runs it, parses stream-json (`RunResult`).
-  - `ports.py`: the ports (Protocols `Clock`, `IdGenerator`); `adapters/system.py`: the system
+  - `adapters/claude_cli.py`: `ClaudeCliRunner`, the only reader of Claude's stream-json: builds
+    the argv, runs `claude`, maps the output into an `AgentReport`. `domain/agent.py`:
+    `AgentRequest`, `AgentReport`, `Readiness`. `logfmt.py`: the `kv` log line format.
+  - `ports.py`: the ports (Protocols `Clock`, `IdGenerator`, `AgentRunner`); `adapters/system.py`: the system
     clock and uuid generator. The layers and the dependency rule are in the `architecture` chapter.
   - `workspace.py`: git worktrees outside the repo; `proc.py`: subprocess helpers (process groups).
   - `prompts.py`: built-in prompts, the protocol prompt, the outcome schema.
@@ -53,6 +55,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `test_architecture.py`: guards the dependency rule. Reads sources with `ast`, never imports
     `samba`; append moved domain modules to its `DOMAIN_MODULES`.
   - `fake_claude.py`: scripted fake of the `claude` CLI. Standard library only.
+  - `fake_agent.py`: in-memory fake `AgentRunner` (scripted reports), tested in `test_agent_port.py`.
 
 ## Checks
 

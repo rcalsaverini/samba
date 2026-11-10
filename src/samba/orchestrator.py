@@ -12,9 +12,11 @@ from pathlib import Path
 from typing import Literal
 
 from samba.adapters.system import SystemClock, UuidGenerator
-from samba.claude import Invocation, RunResult, logged_in, run_claude
+from samba.adapters.claude_cli import ClaudeCliRunner
 from samba.config import Config
-from samba.ports import Clock, IdGenerator
+from samba.domain.agent import AgentReport, AgentRequest
+from samba.logfmt import kv
+from samba.ports import AgentRunner, Clock, IdGenerator
 from samba.proc import git, run_shell
 from samba.prompts import (
     APPROVED_PLAN_RULE,
@@ -32,7 +34,7 @@ from samba.domain.transitions import human_row, log_line
 from samba.lock import repo_lock
 from samba.tasks import SidecarStore, Task, TaskStore
 from samba.template import TemplateError, render
-from samba.transitions import Machine, kv
+from samba.transitions import Machine
 from samba.workspace import WorkspaceError, Workspaces, branch_name
 
 log = logging.getLogger("samba")
@@ -69,7 +71,7 @@ class Running:
 
 class Orchestrator:
     def __init__(self, config: Config, clock: Clock | None = None,
-                 ids: IdGenerator | None = None) -> None:
+                 ids: IdGenerator | None = None, agent: AgentRunner | None = None) -> None:
         self.config = config
         self.clock: Clock = clock or SystemClock()
         self.ids: IdGenerator = ids or UuidGenerator()
@@ -77,9 +79,10 @@ class Orchestrator:
         self.tasks = TaskStore(self.sym / "tasks")
         self.sidecars = SidecarStore(self.sym / "state", self.clock)
         self.runs_dir = self.sym / "runs"
+        self.agent: AgentRunner = agent or ClaudeCliRunner(
+            config.claude, config.planning, self.tasks.root.resolve(), self.runs_dir, config.repo)
         self.workspaces = Workspaces(config)
         self.running: dict[str, Running] = {}
-        self.logged_init = False
         self.warned_invalid: set[str] = set()
         self.warned_deps: set[tuple[str, str]] = set()
         self.machine = Machine(self.tasks, self.sidecars, self.clock, self._guard)
@@ -118,10 +121,10 @@ class Orchestrator:
                          f"refs/heads/{cfg.base_branch}")
         if not base.ok:
             raise StartupError(f"base_branch '{cfg.base_branch}' does not exist")
-        ok, detail = await logged_in(cfg.claude, cfg.repo)
-        if not ok:
+        readiness = await self.agent.ready()
+        if not readiness.ok:
             raise StartupError(
-                f"claude auth status says not logged in; run `claude auth login`. {detail}")
+                f"claude auth status says not logged in; run `claude auth login`. {readiness.detail}")
         for w in cfg.warnings:
             log.warning(kv("config_warning", message=w))
 
@@ -374,8 +377,8 @@ class Orchestrator:
                 res = await self._invoke(task_id, side, ws, prompt, resume, system_prompt)
             for denial in res.denials:
                 self.tasks.append_log(task_id, log_line(f"permission denied: {denial}", self.clock))
-            if not res.ok:
-                await self._fail(task_id, side, res.error())
+            if res.failure is not None:
+                await self._fail(task_id, side, res.failure.detail)
                 return
             left = self._budget_left(side)
             if left is not None and left <= 0:
@@ -384,9 +387,9 @@ class Orchestrator:
                 return
 
             outcome = res.outcome
-            if outcome is None:
+            if outcome == "missing":
                 log.warning(kv("no_structured_output", task=task_id))
-            log.info(kv("turn_end", task=task_id, turn=turn, outcome=outcome or "missing",
+            log.info(kv("turn_end", task=task_id, turn=turn, outcome=outcome,
                         cost=f"{res.cost_usd:.4f}"))
             if outcome == "done":
                 if not cfg.validate_command:
@@ -441,8 +444,8 @@ class Orchestrator:
                                      planning=True)
         for denial in res.denials:
             self.tasks.append_log(task_id, log_line(f"permission denied: {denial}", self.clock))
-        if not res.ok:
-            await self._fail(task_id, side, res.error())
+        if res.failure is not None:
+            await self._fail(task_id, side, res.failure.detail)
             return
         left = self._budget_left(side)
         if left is not None and left <= 0:
@@ -450,12 +453,12 @@ class Orchestrator:
                                f"budget exceeded (${side.cost_usd_total:.2f})", res.summary)
             return
         outcome = res.outcome
-        log.info(kv("turn_end", task=task_id, turn=1, outcome=outcome or "missing",
+        log.info(kv("turn_end", task=task_id, turn=1, outcome=outcome,
                     cost=f"{res.cost_usd:.4f}"))
-        if outcome not in ("planned", "blocked") or not res.plan_text:
+        if outcome not in ("planned", "blocked") or not res.plan:
             await self._fail(task_id, side, "planning run returned no valid outcome and plan")
             return
-        self.tasks.set_section(task_id, "Plan", res.plan_text)
+        self.tasks.set_section(task_id, "Plan", res.plan)
         if res.assumptions:
             self.tasks.set_section(task_id, "Assumptions", res.assumptions)
         if outcome == "planned":
@@ -474,7 +477,7 @@ class Orchestrator:
         return running_of(stage_of(self.sidecars.load(task_id)))
 
     async def _invoke(self, task_id: str, side: Sidecar, ws: Path, prompt: str, resume: bool,
-                      system_prompt: str, planning: bool = False) -> RunResult:
+                      system_prompt: str, planning: bool = False) -> AgentReport:
         session = side.plan_session_id if planning else side.session_id
         if not resume or not session:
             session = self.ids.new_session_id()
@@ -485,30 +488,17 @@ class Orchestrator:
             side.session_id = session
         side.turns_total += 1
         self.sidecars.save(task_id, side)
-        inv = Invocation(prompt=prompt, session_id=session, resume=resume,
-                         tasks_dir=self.tasks.root.resolve(), system_prompt=system_prompt,
-                         max_budget_usd=self._budget_left(side),
-                         planning=self.config.planning if planning else None)
-        stream_log = self.runs_dir / task_id / f"{side.turns_total:03d}.jsonl"
+        request = AgentRequest(
+            prompt=prompt, session_id=session, resume=resume, system_prompt=system_prompt,
+            max_budget_usd=self._budget_left(side), kind="plan" if planning else "work",
+            location=str(ws), log_name=f"{task_id}/{side.turns_total:03d}")
         log.info(kv("turn_start", task=task_id, n=side.turns_total, resume=resume,
                     session=session, phase="plan" if planning else None))
-        res = await run_claude(self.config.claude, inv, ws, stream_log)
+        res = await self.agent.run(request)
         side.cost_usd_total += res.cost_usd
-        tin, tout = res.tokens()
-        side.input_tokens_total += tin
-        side.output_tokens_total += tout
+        side.input_tokens_total += res.input_tokens
+        side.output_tokens_total += res.output_tokens
         self.sidecars.save(task_id, side)
-        if res.init and not self.logged_init:
-            self.logged_init = True
-            init = res.init
-            log.info(kv("claude_context", permission_mode=init.get("permissionMode"),
-                        skills=len(init.get("skills") or []),
-                        plugins=len(init.get("plugins") or []),
-                        mcp_servers=len(init.get("mcp_servers") or [])))
-        if res.malformed_lines:
-            log.warning(kv("malformed_lines", task=task_id, count=res.malformed_lines))
-        if res.stderr.strip():
-            log.debug(kv("claude_stderr", task=task_id, text=res.stderr.strip()[-2000:]))
         return res
 
     async def _validate(self, task_id: str, side: Sidecar, ws: Path) -> tuple[bool, str]:
@@ -599,10 +589,10 @@ class Orchestrator:
             text += "\n\n" + questions
         return text
 
-    def _ask(self, task_id: str, side: Sidecar, stage: str, res: RunResult) -> None:
+    def _ask(self, task_id: str, side: Sidecar, stage: str, res: AgentReport) -> None:
         """Record the questions of a blocked run (spec: states, Questions). A blocked run without a valid
         question (for example a permission denial) gets one synthesized from its summary."""
-        items = res.question_items
+        items = [(q.text, q.context) for q in res.questions]
         if not items:
             context = "Samba synthesized this question: the agent reported blocked without one."
             if res.denials:

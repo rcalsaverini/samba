@@ -15,7 +15,7 @@ SRC = Path(__file__).resolve().parent.parent / "src" / "samba"
 # chain append to this list as they move modules in.
 DOMAIN_MODULES = ["ports.py", "template.py", "prompts.py", "domain/__init__.py",
                   "domain/states.py", "domain/questions.py", "domain/sidecar.py",
-                  "domain/transitions.py", "domain/deps.py"]
+                  "domain/transitions.py", "domain/deps.py", "domain/agent.py"]
 
 FORBIDDEN = {"os", "time", "datetime", "uuid", "subprocess", "asyncio", "logging", "pathlib"}
 
@@ -70,6 +70,20 @@ def test_scenario_runner_imports_no_adapter_and_no_store() -> None:
 
 def code_without_comments(path: Path) -> str:
     return "\n".join(line.split("#", 1)[0] for line in path.read_text().splitlines())
+
+
+CLAUDE_JSON = re.compile(r"(?<!no_)structured_output|permission_denials|total_cost_usd|samba\.claude\b"
+                         r"|\b(?:res|result)\.(?:init|result)\b|\.get\(\"is_error\"\)")
+
+
+def test_only_the_claude_adapter_reads_claude_json() -> None:
+    for path in sorted(SRC.rglob("*.py")):
+        rel = path.relative_to(SRC).as_posix()
+        if rel == "adapters/claude_cli.py":
+            continue
+        hits = CLAUDE_JSON.findall(code_without_comments(path))
+        assert not hits, f"{rel} reads Claude's JSON: {hits}"
+    assert not (SRC / "claude.py").exists(), "claude.py moved to adapters/claude_cli.py"
 
 
 def test_no_direct_clock_or_uuid_calls() -> None:
