@@ -24,7 +24,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     (`resolve_task_id`, reused by every command taking an id), `task show` renderer.
   - `config.py`: loads and validates `WORKFLOW.md` (front matter + prompt body).
   - `domain/`: the pure core, no I/O (`architecture` chapter). `states.py` (`State`, causes),
-    `questions.py` (question records and helpers), `sidecar.py` (`Sidecar` dataclass),
+    `questions.py` (question records and helpers), `task.py` (the `Task` aggregate),
+    `task_id.py` (`TaskId`, slug, prefix resolution),
     `transitions.py` (the transition table as plain data, effects, `find_row`, `human_row`,
     `human_events`, the markdown renderer; `samba dev transitions` prints it and the states chapter
     embeds the output), `deps.py` (`depends_on` evaluation over a snapshot,
@@ -33,16 +34,16 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     action after a turn: fail, finish, run validation, record questions, continue).
   - `app/turn.py`: `TurnFlow`, the turn loop shared by planning and work, over the `AgentRunner`
     port; the orchestrator fires the transition for what it returns.
-  - `tasks.py`: folder-based task store (including `deps_snapshot`), `## Log` editing and
-    `SidecarStore`; `## Questions` in a task file is rendered from the sidecar records.
+  - `adapters/markdown_tasks.py`: `MarkdownTasks`, the `Tasks` port over the task folders, the
+    sidecar JSON and the `## Log`/`## Questions` sections (stale-save merge, hand-move detection).
   - `orchestrator.py`: poll loop, dispatch, workers, retries, transitions.
-  - `transitions.py`: `Machine.fire` and `observe`, the only path that moves a task
-    (`docs/spec/states.md`): the file IO around the domain table.
+  - `app/machine.py`: `Machine.fire` and `observe`, the only path that moves a task
+    (`docs/spec/states.md`): loads the `Task`, applies the domain row, saves.
   - `lock.py`: `repo_lock`, the `.samba/lock` flock shared by commands and orchestrator ticks.
   - `adapters/claude_cli.py`: `ClaudeCliRunner`, the only reader of Claude's stream-json: builds
     the argv, runs `claude`, maps the output into an `AgentReport`. `domain/agent.py`:
     `AgentRequest`, `AgentReport`, `Readiness`. `logfmt.py`: the `kv` log line format.
-  - `ports.py`: the ports (Protocols `Clock`, `IdGenerator`, `AgentRunner`); `adapters/system.py`: the system
+  - `ports.py`: the ports (Protocols `Clock`, `IdGenerator`, `AgentRunner`, `Tasks`); `adapters/system.py`: the system
     clock and uuid generator. The layers and the dependency rule are in the `architecture` chapter.
   - `workspace.py`: git worktrees outside the repo; `proc.py`: subprocess helpers (process groups).
   - `prompts.py`: built-in prompts, the protocol prompt, the outcome schema.

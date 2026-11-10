@@ -14,8 +14,7 @@ that has been holding the object for minutes.
 it. A `Tasks.create` writes `# title`, a blank line and `body` instead. Nothing writes `body` after
 that; if an aggregate changes it, the text is replaced as a whole and the sections are applied on top.
 
-Not yet used by the orchestrator and the CLI: they still use `samba.tasks` (a later part of the
-refactor moves them over).
+The orchestrator and the CLI use it through the `Tasks` port.
 """
 
 from __future__ import annotations
@@ -311,7 +310,7 @@ class MarkdownTasks:
 
     def location(self, id: TaskId) -> str:
         status = self._locate(id)
-        return str(self._md(id, status or "work-todo"))
+        return str(self._md(id, status or "work-todo").resolve())
 
     # ---- port: reading ------------------------------------------------------------------
 
@@ -420,7 +419,8 @@ class MarkdownTasks:
         text += f"# {task.title}\n\n"
         if task.body.strip():
             text += task.body.rstrip("\n") + "\n"
-        (self.root / task.status).mkdir(parents=True, exist_ok=True)
+        for s in STATES:  # as `prepare` does, without its legacy-layout refusal
+            (self.root / s).mkdir(parents=True, exist_ok=True)
         self._md(task.id, task.status).write_text(text)
         blank = _blank(task)
         if any(getattr(task, f) != getattr(blank, f) for f in SIDE_SCALARS if f != "queued_at") \
@@ -462,6 +462,7 @@ class MarkdownTasks:
         recorded = _str(side.get("state"))
         folder = cur.status
         if status_changed:
+            (self.root / task.status).mkdir(parents=True, exist_ok=True)
             try:
                 os.rename(self._md(task.id, cur.status), self._md(task.id, task.status))
             except FileNotFoundError:

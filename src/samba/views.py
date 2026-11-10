@@ -5,12 +5,13 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable
 
-from samba.domain.deps import evaluate
-from samba.domain.legacy_questions import open_questions, qstr
-from samba.domain.sidecar import Sidecar
+from samba.domain.deps import deps_snapshot, evaluate
+from samba.domain.questions import open_questions
 from samba.domain.states import STATES, State
+from samba.domain.task import Task
+from samba.domain.task_id import AmbiguousTask, TaskId, UnknownTask
 from samba.domain.transitions import human_events
-from samba.tasks import SidecarStore, Task, TaskStore
+from samba.ports import Tasks
 
 HEADER = ["ID", "STATE", "ATTEMPTS", "TURNS", "COST", "LAST", "ERROR"]
 
@@ -43,53 +44,49 @@ def resolve_states(args: Iterable[str]) -> tuple[State, ...]:
     return tuple(s for s in STATES if s in wanted)
 
 
-def resolve_task_id(store: TaskStore, text: str) -> str:
-    """An exact id, else a unique prefix of an id in any state folder."""
-    if store.state_of(text) is not None:
-        return text
-    ids = sorted({i for s in STATES for i in store.ids(s) if text and i.startswith(text)})
-    if len(ids) == 1:
-        return ids[0]
-    if not ids:
-        raise ResolveError(f"unknown task {text!r}")
-    raise ResolveError(f"ambiguous task id {text!r}; candidates:", tuple(ids))
+def resolve_task_id(tasks: Tasks, text: str) -> TaskId:
+    """An exact id, else a unique prefix of an id in any status (`TaskId.resolve`)."""
+    try:
+        return TaskId.resolve(tasks.ids(), text)
+    except UnknownTask:
+        raise ResolveError(f"unknown task {text!r}") from None
+    except AmbiguousTask as e:
+        raise ResolveError(f"ambiguous task id {text!r}; candidates:", e.candidates) from None
 
 
-def task_rows(tasks: TaskStore, sidecars: SidecarStore,
-              states: Iterable[State] = STATES) -> list[list[str]]:
+def task_rows(tasks: Tasks, states: Iterable[State] = STATES) -> list[list[str]]:
     rows: list[list[str]] = [list(HEADER)]
     now = time.time()
     for state in states:
         for task in tasks.list(state):
-            s = sidecars.load(task.id)
-            last = s.last_outcome or "-"
+            last = task.last_outcome or "-"
             if state in ("plan-todo", "work-todo"):
-                if s.not_before and s.not_before > now:
-                    last += f" (retry in {s.not_before - now:.0f}s)"
+                if task.not_before and task.not_before > now:
+                    last += f" (retry in {task.not_before - now:.0f}s)"
                 else:
-                    dep = evaluate(tasks.deps_snapshot(task), task.id)
+                    dep = evaluate(deps_snapshot(task, tasks.get), task.id)
                     if dep.kind == "waiting":
                         last = f"waiting on {', '.join(dep.waiting)}"
             shown = state
-            if state in ("question", "stuck") and s.blocked_cause:
-                shown = f"{state} ({s.blocked_cause})"
-            rows.append([task.id, shown, str(s.attempts), str(s.turns_total),
-                         f"${s.cost_usd_total:.2f}", last, " ".join((s.last_error or "").split())])
+            if state in ("question", "stuck") and task.blocked_cause:
+                shown = f"{state} ({task.blocked_cause})"
+            rows.append([task.id, shown, str(task.attempts), str(task.turns_total),
+                         f"${task.cost_usd_total:.2f}", last,
+                         " ".join((task.last_error or "").split())])
     return rows
 
 
 QUESTION_HEADER = ["TASK", "QID", "STAGE", "ASKED", "QUESTION"]
 
 
-def question_rows(tasks: TaskStore, sidecars: SidecarStore) -> list[list[str]]:
+def question_rows(tasks: Tasks) -> list[list[str]]:
     """Every open question of every task. QID is the full name `<task>/<qid>`, ready to paste
     into `question answer`."""
     rows: list[list[str]] = []
-    for task_id in tasks.ids("question"):
-        for q in open_questions(sidecars.load(task_id).questions):
-            rows.append([task_id, f"{task_id}/{qstr(q, 'id')}", qstr(q, "stage"),
-                         qstr(q, "asked_at")[:16].replace("T", " "),
-                         " ".join(qstr(q, "text").split())])
+    for task in tasks.list("question"):
+        for q in open_questions(task.questions):
+            rows.append([task.id, f"{task.id}/{q.id}", q.stage, q.asked_at[:16].replace("T", " "),
+                         " ".join(q.text.split())])
     return [QUESTION_HEADER, *rows]
 
 
@@ -112,7 +109,7 @@ def print_table(rows: list[list[str]], width: int | None = None, flex: int | Non
         print("  ".join(c.ljust(w) for c, w in zip(r, widths)).rstrip())
 
 
-def render_show(tasks: TaskStore, task: Task, side: Sidecar) -> list[str]:
+def render_show(tasks: Tasks, task: Task) -> list[str]:
     def v(x: object) -> str:
         return "-" if x is None or x == "" else str(x)
 
@@ -120,33 +117,34 @@ def render_show(tasks: TaskStore, task: Task, side: Sidecar) -> list[str]:
     lines = [
         f"id: {task.id}",
         f"title: {task.title}",
-        f"state: {task.state}",
-        f"blocked_cause: {v(side.blocked_cause)}",
+        f"state: {task.status}",
+        f"blocked_cause: {v(task.blocked_cause)}",
         f"priority: {v(task.priority)}",
-        f"attempts: {side.attempts}",
-        f"turns: {side.turns_total}",
-        f"cost: ${side.cost_usd_total:.2f}",
-        f"last_outcome: {v(side.last_outcome)}",
-        f"last_error: {v(side.last_error)}",
+        f"attempts: {task.attempts}",
+        f"turns: {task.turns_total}",
+        f"cost: ${task.cost_usd_total:.2f}",
+        f"last_outcome: {v(task.last_outcome)}",
+        f"last_error: {v(task.last_error)}",
     ]
-    if side.not_before and side.not_before > now:
-        lines.append(f"retry_in: {side.not_before - now:.0f}s")
+    if task.not_before and task.not_before > now:
+        lines.append(f"retry_in: {task.not_before - now:.0f}s")
     lines.append("depends_on:" if task.depends_on else "depends_on: -")
     for dep_id in task.depends_on:
-        lines.append(f"  {dep_id} ({tasks.state_of(dep_id) or 'unknown'})")
-    if task.depends_on and task.state in ("plan-todo", "work-todo"):
-        dep = evaluate(tasks.deps_snapshot(task), task.id)
-        if dep.kind != "ready":
-            held = f" on {', '.join(dep.waiting)}" if dep.waiting else ""
-            lines.append(f"dependency_status: {dep.kind}{held}")
-    lines.append(f"open_questions: {len(open_questions(side.questions))}")
+        dep = tasks.get(dep_id)
+        lines.append(f"  {dep_id} ({dep.status if dep else 'unknown'})")
+    if task.depends_on and task.status in ("plan-todo", "work-todo"):
+        dep_status = evaluate(deps_snapshot(task, tasks.get), task.id)
+        if dep_status.kind != "ready":
+            held = f" on {', '.join(dep_status.waiting)}" if dep_status.waiting else ""
+            lines.append(f"dependency_status: {dep_status.kind}{held}")
+    lines.append(f"open_questions: {len(open_questions(task.questions))}")
     lines += [
-        f"branch: {v(side.branch)}",
-        f"worktree: {v(side.workspace)}",
-        f"session_id: {v(side.session_id)}",
-        f"plan_session_id: {v(side.plan_session_id)}",
+        f"branch: {v(task.branch)}",
+        f"worktree: {v(task.workspace)}",
+        f"session_id: {v(task.session_id)}",
+        f"plan_session_id: {v(task.plan_session_id)}",
     ]
-    events = human_events(task.state, side)
+    events = human_events(task.status, task)
     if events:
         lines.append("events:")
         lines += [f"  {r.event} -> {r.dst}" for r in events]

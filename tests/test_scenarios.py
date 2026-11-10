@@ -1,7 +1,7 @@
 """Scenario runner (ADR 0012, docs/spec/architecture.md, Scenarios).
 
 Loads `tests/scenarios/*.json` and runs each scenario in-process against the domain. It imports the
-domain (and, later, use cases) only: never an adapter, never `samba.tasks`. The fake clock lives
+domain and use cases only: never an adapter (`FakeTasks` stands in for the store). The fake clock lives
 here for that reason.
 """
 
@@ -16,6 +16,7 @@ from typing import Any, cast
 
 import pytest
 from fake_agent import FakeAgentRunner
+from fake_tasks import FakeTasks
 
 from samba.app.turn import TurnFlow, TurnSetup
 from samba.domain.agent import AgentReport, Failure, QuestionDraft
@@ -37,9 +38,10 @@ from samba.domain.policy import (
     session_reset_needed,
     should_reflect,
 )
-from samba.domain.legacy_questions import Question
-from samba.domain.sidecar import Sidecar
+from samba.domain.questions import Question
 from samba.domain.states import State
+from samba.domain.task import Task
+from samba.domain.task_id import TaskId
 from samba.domain.transitions import (
     TRANSITIONS,
     Transition,
@@ -87,8 +89,19 @@ def ids(scenarios: list[Scenario]) -> list[str]:
     return [f"{sc['_file']}::{sc['name']}" for sc in scenarios]
 
 
-def sidecar_of(fields: dict[str, Any] | None) -> Sidecar:
-    return Sidecar(**copy.deepcopy(fields or {}))  # a copy: effects edit the question records
+def question_of(fields: dict[str, Any]) -> Question:
+    """A question from the fields a scenario names; the rest take neutral defaults."""
+    return Question(**cast(dict[str, Any], {"stage": "plan", "text": "", **fields}))
+
+
+def task_of(status: State, fields: dict[str, Any] | None) -> Task:
+    """A task in `status` with the fields a scenario names set on it."""
+    task = Task(id=TaskId("t1"), title="t", body="", priority=None, depends_on=(), status=status)
+    for key, value in copy.deepcopy(fields or {}).items():
+        if key == "questions":
+            value = tuple(question_of(q) for q in value)
+        setattr(task, key, value)
+    return task
 
 
 # ---- transition ------------------------------------------------------------------------------
@@ -97,14 +110,14 @@ def pick_row(sc: Scenario) -> Transition | None:
     """The row the scenario's event selects, the way `Machine.fire` selects it (`find_row`), or
     the row a hand move to `hand_move_to` observes (`human_row`)."""
     given = cast(dict[str, Any], sc["given"])
-    side = sidecar_of(given.get("sidecar"))
+    state = cast(State, given["state"])
+    side = task_of(state, given.get("task"))
     external = {"deps_met": given.get("deps_met", True),
                 "plan_required": given.get("plan_required", False)}
 
     def holds(name: str) -> bool:
         return stage_guard_ok(name, side) if name.startswith("last_stage=") else external[name]
 
-    state = cast(State, given["state"])
     if "hand_move_to" in sc:
         row = human_row(state, cast(State, sc["hand_move_to"]), side)
         row = row if row is not None and row.event == sc["event"] else None
@@ -113,9 +126,15 @@ def pick_row(sc: Scenario) -> Transition | None:
     return row if row is not None and row.actor == sc["actor"] else None
 
 
-def changed_fields(before: Sidecar, after: Sidecar) -> dict[str, Any]:
-    b, a = dataclasses.asdict(before), dataclasses.asdict(after)
-    return {k: a[k] for k in a if k != "state" and a[k] != b[k]}
+def changed_fields(before: Task, after: Task) -> dict[str, Any]:
+    """The fields a row changed, except the status and the dispatch order stamp (checked apart)."""
+    names = [f.name for f in dataclasses.fields(Task) if f.name not in ("status", "queued_at")]
+    return {n: getattr(after, n) for n in names if getattr(after, n) != getattr(before, n)}
+
+
+def expected_fields(fields: dict[str, Any]) -> dict[str, Any]:
+    return {k: tuple(question_of(q) for q in v) if k == "questions" else v
+            for k, v in fields.items()}
 
 
 TRANSITION = load("transition")
@@ -133,12 +152,12 @@ def test_transition(sc: Scenario) -> None:
     assert row.dst == expect["state"]
     assert guard_names(row) == expect["guards"]
     assert list(row.effects) == expect["effects"]
-    before = sidecar_of(given.get("sidecar"))
-    after = sidecar_of(given.get("sidecar"))
+    before = task_of(given["state"], given.get("task"))
+    after = task_of(given["state"], given.get("task"))
     apply_row(row, after, cast(dict[str, object], sc.get("ctx", {})),
               FakeClock(sc.get("clock_time", 0.0)))
-    assert after.state == row.dst
-    assert changed_fields(before, after) == expect["sidecar"]
+    assert after.status == row.dst
+    assert changed_fields(before, after) == expected_fields(expect["task"])
 
 
 def test_every_table_row_is_covered() -> None:
@@ -156,7 +175,7 @@ HUMAN_ROW = load("human_row")
 
 @pytest.mark.parametrize("sc", HUMAN_ROW, ids=ids(HUMAN_ROW))
 def test_human_row(sc: Scenario) -> None:
-    row = human_row(sc["src"], sc["dst"], sidecar_of(sc.get("sidecar")))
+    row = human_row(sc["src"], sc["dst"], task_of(sc["src"], sc.get("task")))
     assert (row.event if row else None) == sc["expect"]
 
 
@@ -165,7 +184,7 @@ HUMAN_EVENTS = load("human_events")
 
 @pytest.mark.parametrize("sc", HUMAN_EVENTS, ids=ids(HUMAN_EVENTS))
 def test_human_events(sc: Scenario) -> None:
-    rows = human_events(sc["state"], sidecar_of(sc.get("sidecar")))
+    rows = human_events(sc["state"], task_of(sc["state"], sc.get("task")))
     assert [r.event for r in rows] == sc["expect"]
 
 
@@ -277,25 +296,6 @@ class SeqIds:
         return f"s{self.n}"
 
 
-class MemoryStore:
-    def __init__(self) -> None:
-        self.sections: dict[str, str] = {}
-        self.lines: list[str] = []
-        self.rendered = 0
-
-    def save(self, task_id: str, side: Sidecar) -> None:
-        pass
-
-    def append_log(self, task_id: str, line: str) -> None:
-        self.lines.append(line)
-
-    def set_section(self, task_id: str, name: str, text: str) -> None:
-        self.sections[name] = text
-
-    def render_questions(self, task_id: str, questions: list[Question]) -> None:
-        self.rendered += 1
-
-
 TURN_FLOW = load("turn_flow")
 
 
@@ -308,9 +308,12 @@ def test_turn_flow(sc: Scenario) -> None:
         resume=s["resume"], first_prompt="FIRST", continue_prompt="CONT",
         validate_failed=lambda tail: f"VF:{tail}", max_turns=s["max_turns"],
         validate_enabled=s.get("validate_enabled", False), max_cost_usd=s.get("max_cost_usd"))
-    side = sidecar_of(sc.get("sidecar"))
+    store = FakeTasks()
+    store.create(task_of("plan-running" if setup.stage == "plan" else "work-running",
+                         sc.get("task")))
+    side = store.get(TaskId("t1"))
+    assert side is not None
     agent = FakeAgentRunner([report_of(r) for r in sc["reports"]])
-    store = MemoryStore()
     flow = TurnFlow(agent, SeqIds(), store, FakeClock())
     validations = iter(sc.get("validate", []))
     calls: list[int] = []
@@ -321,7 +324,7 @@ def test_turn_flow(sc: Scenario) -> None:
         return ok, tail
 
     turns: list[int] = []
-    result = asyncio.run(flow.run("t1", side, setup, validate, turns.append))
+    result = asyncio.run(flow.run(side, setup, validate, turns.append))
     if expect["result"]["kind"] == "fail":
         assert result == Fail(expect["result"]["error"])
     else:
@@ -329,16 +332,17 @@ def test_turn_flow(sc: Scenario) -> None:
         assert result == Finish(r["event"], r["what"], r["summary"])
     assert [{"prompt": q.prompt, "resume": q.resume, "kind": q.kind, "session_id": q.session_id,
              "max_budget_usd": q.max_budget_usd} for q in agent.requests] == expect["requests"]
-    assert store.sections == expect["sections"]
-    assert store.rendered == expect["questions"]
+    sections = {name: text for name, text in (("Plan", side.plan), ("Assumptions", side.assumptions))
+                if text}
+    assert sections == expect["sections"]
     assert len(side.questions) == expect["questions"]
     assert len(calls) == expect["validate_calls"]
     assert turns == list(range(1, len(turns) + 1))
-    for key, value in expect["sidecar"].items():
+    for key, value in expect["task"].items():
         assert getattr(side, key) == value, key
     wanted = expect.get("log", [])
-    assert len(store.lines) == len(wanted)
-    for want, got in zip(wanted, store.lines):
+    assert len(side.log) == len(wanted)
+    for want, got in zip(wanted, side.log):
         assert want in got
 
 
