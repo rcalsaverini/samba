@@ -1,0 +1,19 @@
+{
+  "kind": "human_events",
+  "scenarios": [
+    {"name": "plan-todo", "state": "plan-todo", "expect": ["task.discard"]},
+    {"name": "plan-running", "state": "plan-running", "expect": ["task.stop", "task.discard"]},
+    {"name": "plan-review", "state": "plan-review", "expect": ["plan.accept", "plan.reject", "task.discard"]},
+    {"name": "work-todo", "state": "work-todo", "expect": ["task.discard"]},
+    {"name": "work-running", "state": "work-running", "expect": ["task.stop", "task.discard"]},
+    {"name": "work-review lists work.reject once", "state": "work-review", "expect": ["work.accept", "work.reject", "work.reject_fresh", "task.discard"]},
+    {"name": "question with last_stage plan", "state": "question", "sidecar": {"last_stage": "plan"}, "expect": ["question.answer", "task.discard"]},
+    {"name": "question with last_stage work", "state": "question", "sidecar": {"last_stage": "work"}, "expect": ["question.answer", "task.discard"]},
+    {"name": "question with no recorded stage", "state": "question", "expect": ["question.answer", "task.discard"]},
+    {"name": "stuck with last_stage plan", "state": "stuck", "sidecar": {"last_stage": "plan"}, "expect": ["task.retry", "task.discard"]},
+    {"name": "stuck with last_stage work", "state": "stuck", "sidecar": {"last_stage": "work"}, "expect": ["task.retry", "task.discard"]},
+    {"name": "stuck with no recorded stage", "state": "stuck", "expect": ["task.retry", "task.discard"]},
+    {"name": "done has no human events", "state": "done", "expect": []},
+    {"name": "discarded has no human events", "state": "discarded", "expect": []}
+  ]
+}

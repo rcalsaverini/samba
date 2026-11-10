@@ -1,0 +1,22 @@
+{
+  "kind": "human_row",
+  "scenarios": [
+    {"name": "plan-review to plan-todo is plan.reject", "src": "plan-review", "dst": "plan-todo", "expect": "plan.reject"},
+    {"name": "plan-review to work-todo is plan.accept", "src": "plan-review", "dst": "work-todo", "expect": "plan.accept"},
+    {"name": "work-review to done is work.accept", "src": "work-review", "dst": "done", "expect": "work.accept"},
+    {"name": "work-review to work-todo is work.reject, never work.reject_fresh", "src": "work-review", "dst": "work-todo", "expect": "work.reject"},
+    {"name": "question to work-todo with last_stage work", "src": "question", "dst": "work-todo", "sidecar": {"last_stage": "work"}, "expect": "question.answer"},
+    {"name": "question to plan-todo with last_stage plan", "src": "question", "dst": "plan-todo", "sidecar": {"last_stage": "plan"}, "expect": "question.answer"},
+    {"name": "question to plan-todo with no recorded stage", "src": "question", "dst": "plan-todo", "expect": "question.answer"},
+    {"name": "question to work-todo with last_stage plan has no row", "src": "question", "dst": "work-todo", "sidecar": {"last_stage": "plan"}, "expect": null},
+    {"name": "stuck to plan-todo with last_stage plan is task.retry", "src": "stuck", "dst": "plan-todo", "sidecar": {"last_stage": "plan"}, "expect": "task.retry"},
+    {"name": "stuck to work-todo with last_stage plan has no row", "src": "stuck", "dst": "work-todo", "sidecar": {"last_stage": "plan"}, "expect": null},
+    {"name": "plan-running to stuck is task.stop", "src": "plan-running", "dst": "stuck", "expect": "task.stop"},
+    {"name": "work-running to stuck is task.stop", "src": "work-running", "dst": "stuck", "expect": "task.stop"},
+    {"name": "plan-todo to discarded is task.discard", "src": "plan-todo", "dst": "discarded", "expect": "task.discard"},
+    {"name": "stuck to discarded is task.discard", "src": "stuck", "dst": "discarded", "expect": "task.discard"},
+    {"name": "done to discarded has no row", "src": "done", "dst": "discarded", "expect": null},
+    {"name": "work-todo to plan-todo is a samba move, not a hand move", "src": "work-todo", "dst": "plan-todo", "expect": null},
+    {"name": "plan-todo to work-running has no row", "src": "plan-todo", "dst": "work-running", "expect": null}
+  ]
+}

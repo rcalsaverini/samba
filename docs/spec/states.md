@@ -57,7 +57,7 @@ described under the transition table below.
 
 ### Transition table
 
-The state machine is one declarative table in code (`src/samba/transitions.py`), plain data:
+The state machine is one declarative table in code (`src/samba/domain/transitions.py`), plain data:
 rows of `(src, event, actor, dst, guard, effects)`. Nothing moves a task outside the table: the
 orchestrator and, later, the commands all go through one `fire(task_id, event)` path that finds the
 row for the task's current folder, checks the guard, renames the file, applies the sidecar effects

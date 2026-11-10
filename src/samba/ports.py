@@ -17,6 +17,14 @@ class Clock(Protocol):
         """Monotonic time in seconds, for durations and deadlines."""
         ...
 
+    def iso_seconds(self) -> str:
+        """`time()` as local-offset ISO 8601 text, to the second (question timestamps)."""
+        ...
+
+    def log_stamp(self) -> str:
+        """`time()` as local `YYYY-MM-DD HH:MM` text (`## Log` lines)."""
+        ...
+
 
 class IdGenerator(Protocol):
     def new_session_id(self) -> str:
