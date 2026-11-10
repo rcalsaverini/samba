@@ -14,7 +14,8 @@ from typing import Literal
 from samba.adapters.system import SystemClock, UuidGenerator
 from samba.adapters.claude_cli import ClaudeCliRunner
 from samba.config import Config
-from samba.domain.agent import AgentReport, AgentRequest
+from samba.app.turn import TurnFlow, TurnSetup
+from samba.domain.policy import Fail, Retry, RetryPolicy, should_reflect
 from samba.logfmt import kv
 from samba.ports import AgentRunner, Clock, IdGenerator
 from samba.proc import git, run_shell
@@ -27,7 +28,7 @@ from samba.prompts import (
     validate_note,
 )
 from samba.domain.deps import evaluate
-from samba.domain.questions import add_questions, open_questions, round_pairs
+from samba.domain.questions import Question, open_questions, round_pairs
 from samba.domain.sidecar import Sidecar
 from samba.domain.states import STATES, Stage, State, running_of, todo_of
 from samba.domain.transitions import human_row, log_line
@@ -82,6 +83,8 @@ class Orchestrator:
         self.agent: AgentRunner = agent or ClaudeCliRunner(
             config.claude, config.planning, self.tasks.root.resolve(), self.runs_dir, config.repo)
         self.workspaces = Workspaces(config)
+        self.turns = TurnFlow(self.agent, self.ids, _TurnStore(self.tasks, self.sidecars),
+                              self.clock)
         self.running: dict[str, Running] = {}
         self.warned_invalid: set[str] = set()
         self.warned_deps: set[tuple[str, str]] = set()
@@ -331,7 +334,6 @@ class Orchestrator:
             await self._fail(task_id, side, f"internal error: {e}")
 
     async def _work(self, task_id: str) -> None:
-        cfg = self.config
         side = self.sidecars.load(task_id)
         try:
             ws, created = await self.workspaces.ensure(task_id)
@@ -347,125 +349,55 @@ class Orchestrator:
         task = self.tasks.find(task_id)
         if task is None:
             return
-        if stage_of(side) == "plan":
-            await self._plan(task, side, ws)
-            return
+        stage = stage_of(side)
         try:
-            variables = self._variables(task, ws, side)
-            system_prompt = self._system_prompt(variables, side)
-            if side.session_id:
-                prompt, resume = self._prompt("resume", variables), True
-            else:
-                prompt, resume = render(cfg.prompt_template, variables), False
+            setup = self._setup(task, ws, side, stage)
         except TemplateError as e:
             await self._fail(task_id, side, str(e))
             return
 
-        for turn in range(1, cfg.max_turns + 1):
+        def on_turn(n: int) -> None:
             entry = self.running.get(task_id)
             if entry:
-                entry.turn = turn
-            if self._budget_left(side) is not None and (self._budget_left(side) or 0) <= 0:
-                await self._finish(task_id, side, "budget",
-                                   f"budget exceeded (${side.cost_usd_total:.2f})")
-                return
-            res = await self._invoke(task_id, side, ws, prompt, resume, system_prompt)
-            if res.session_missing:
-                log.info(kv("session_missing", task=task_id))
-                side.session_id = None
-                prompt, resume = render(cfg.prompt_template, variables), False
-                res = await self._invoke(task_id, side, ws, prompt, resume, system_prompt)
-            for denial in res.denials:
-                self.tasks.append_log(task_id, log_line(f"permission denied: {denial}", self.clock))
-            if res.failure is not None:
-                await self._fail(task_id, side, res.failure.detail)
-                return
-            left = self._budget_left(side)
-            if left is not None and left <= 0:
-                await self._finish(task_id, side, "budget",
-                                   f"budget exceeded (${side.cost_usd_total:.2f})", res.summary)
-                return
+                entry.turn = n
 
-            outcome = res.outcome
-            if outcome == "missing":
-                log.warning(kv("no_structured_output", task=task_id))
-            log.info(kv("turn_end", task=task_id, turn=turn, outcome=outcome,
-                        cost=f"{res.cost_usd:.4f}"))
-            if outcome == "done":
-                if not cfg.validate_command:
-                    await self._finish(task_id, side, "done", "done", res.summary)
-                    return
-                ok, tail = await self._validate(task_id, side, ws)
-                if ok:
-                    await self._finish(task_id, side, "done", "validation passed", res.summary)
-                    return
-                prompt = self._prompt("validate_failed", variables) + "\n\n```\n" + tail + "\n```"
-            elif outcome == "blocked":
-                self._ask(task_id, side, "work", res)
-                await self._finish(task_id, side, "work_blocked", "blocked", res.summary)
-                return
-            else:
-                prompt = self._prompt("continue", variables)
-            resume = True
+        async def validate() -> tuple[bool, str]:
+            return await self._validate(task_id, side, ws)
 
-        await self._fail(task_id, side, f"max_turns ({cfg.max_turns}) exhausted")
+        result = await self.turns.run(task_id, side, setup, validate, on_turn)
+        if isinstance(result, Fail):
+            await self._fail(task_id, side, result.error)
+        else:
+            await self._finish(task_id, side, result.event, result.what, result.summary)
 
-    async def _plan(self, task: Task, side: Sidecar, ws: Path) -> None:
-        """One planning invocation (spec: running-claude, Planning run)."""
+    def _setup(self, task: Task, ws: Path, side: Sidecar, stage: Stage) -> TurnSetup:
+        """The prompts and limits of a run (spec: prompts, Which prompt is sent)."""
         cfg = self.config
-        task_id = task.id
-        try:
-            variables = self._variables(task, ws, side)
+        variables = self._variables(task, ws, side)
+        cap = cfg.max_cost_usd_per_task
+        if stage == "plan":
             system_prompt = render(PLAN_PROTOCOL, {
                 **variables,
                 "allowed_tools": allowed_tools_note(cfg.planning.allow, "dontAsk"),
             })
             first = self._first_plan_prompt(variables)
-            if side.plan_session_id:
-                prompt, resume = self._prompt("plan_revise", variables), True
-            else:
-                prompt, resume = first, False
-        except TemplateError as e:
-            await self._fail(task_id, side, str(e))
-            return
-        entry = self.running.get(task_id)
-        if entry:
-            entry.turn = 1
-        left = self._budget_left(side)
-        if left is not None and left <= 0:
-            await self._finish(task_id, side, "budget",
-                               f"budget exceeded (${side.cost_usd_total:.2f})")
-            return
-        res = await self._invoke(task_id, side, ws, prompt, resume, system_prompt, planning=True)
-        if res.session_missing:
-            log.info(kv("session_missing", task=task_id))
-            side.plan_session_id = None
-            res = await self._invoke(task_id, side, ws, first, False, system_prompt,
-                                     planning=True)
-        for denial in res.denials:
-            self.tasks.append_log(task_id, log_line(f"permission denied: {denial}", self.clock))
-        if res.failure is not None:
-            await self._fail(task_id, side, res.failure.detail)
-            return
-        left = self._budget_left(side)
-        if left is not None and left <= 0:
-            await self._finish(task_id, side, "budget",
-                               f"budget exceeded (${side.cost_usd_total:.2f})", res.summary)
-            return
-        outcome = res.outcome
-        log.info(kv("turn_end", task=task_id, turn=1, outcome=outcome,
-                    cost=f"{res.cost_usd:.4f}"))
-        if outcome not in ("planned", "blocked") or not res.plan:
-            await self._fail(task_id, side, "planning run returned no valid outcome and plan")
-            return
-        self.tasks.set_section(task_id, "Plan", res.plan)
-        if res.assumptions:
-            self.tasks.set_section(task_id, "Assumptions", res.assumptions)
-        if outcome == "planned":
-            await self._finish(task_id, side, "planned", "planned", res.summary)
-        else:
-            self._ask(task_id, side, "plan", res)
-            await self._finish(task_id, side, "plan_blocked", "blocked", res.summary)
+            resume = bool(side.plan_session_id)
+            return TurnSetup(
+                stage="plan", system_prompt=system_prompt, location=str(ws),
+                prompt=self._prompt("plan_revise", variables) if resume else first,
+                resume=resume, first_prompt=first, continue_prompt="",
+                validate_failed=lambda tail: "", max_turns=1, validate_enabled=False,
+                max_cost_usd=cap)
+        first = render(cfg.prompt_template, variables)
+        resume = bool(side.session_id)
+        failed = self._prompt("validate_failed", variables)
+        return TurnSetup(
+            stage="work", system_prompt=self._system_prompt(variables, side), location=str(ws),
+            prompt=self._prompt("resume", variables) if resume else first, resume=resume,
+            first_prompt=first, continue_prompt=self._prompt("continue", variables),
+            validate_failed=lambda tail: failed + "\n\n```\n" + tail + "\n```",
+            max_turns=cfg.max_turns, validate_enabled=bool(cfg.validate_command),
+            max_cost_usd=cap)
 
     def _first_plan_prompt(self, variables: dict[str, str]) -> str:
         override = self.config.prompts.get("plan")
@@ -475,31 +407,6 @@ class Orchestrator:
 
     def _running_folder(self, task_id: str) -> State:
         return running_of(stage_of(self.sidecars.load(task_id)))
-
-    async def _invoke(self, task_id: str, side: Sidecar, ws: Path, prompt: str, resume: bool,
-                      system_prompt: str, planning: bool = False) -> AgentReport:
-        session = side.plan_session_id if planning else side.session_id
-        if not resume or not session:
-            session = self.ids.new_session_id()
-            resume = False
-        if planning:
-            side.plan_session_id = session
-        else:
-            side.session_id = session
-        side.turns_total += 1
-        self.sidecars.save(task_id, side)
-        request = AgentRequest(
-            prompt=prompt, session_id=session, resume=resume, system_prompt=system_prompt,
-            max_budget_usd=self._budget_left(side), kind="plan" if planning else "work",
-            location=str(ws), log_name=f"{task_id}/{side.turns_total:03d}")
-        log.info(kv("turn_start", task=task_id, n=side.turns_total, resume=resume,
-                    session=session, phase="plan" if planning else None))
-        res = await self.agent.run(request)
-        side.cost_usd_total += res.cost_usd
-        side.input_tokens_total += res.input_tokens
-        side.output_tokens_total += res.output_tokens
-        self.sidecars.save(task_id, side)
-        return res
 
     async def _validate(self, task_id: str, side: Sidecar, ws: Path) -> tuple[bool, str]:
         cfg = self.config
@@ -527,25 +434,30 @@ class Orchestrator:
 
     async def _fail(self, task_id: str, side: Sidecar, error: str) -> None:
         cfg = self.config
-        attempts = side.attempts + 1
+        stage = stage_of(side)
+        decision = RetryPolicy(cfg.max_attempts, cfg.retry_base_s,
+                               cfg.max_retry_backoff_s).decide(side.attempts)
+        attempts = decision.attempts
         log.warning(kv("attempt_failed", task=task_id, attempt=attempts, error=error))
-        if attempts < cfg.max_attempts:
-            delay = min(cfg.retry_base_s * 2 ** (attempts - 1), cfg.max_retry_backoff_s)
+        if isinstance(decision, Retry):
+            delay = decision.delay
             self.machine.fire(
-                task_id, "retry_plan" if stage_of(side) == "plan" else "retry_work", side=side,
+                task_id, "retry_plan" if stage == "plan" else "retry_work", side=side,
                 message=f"attempt {attempts} failed: {error}; retry in {delay:.0f}s",
                 error=error, delay=delay)
             return
 
-        if (cfg.reflect_on_give_up and side.session_id and stage_of(side) != "plan"
-                and self.tasks.state_of(task_id) == self._running_folder(task_id)):
+        in_running = self.tasks.state_of(task_id) == self._running_folder(task_id)
+        if should_reflect(cfg.reflect_on_give_up, side.session_id, stage, in_running):
             task = self.tasks.find(task_id)
             if task is not None:
                 with contextlib.suppress(TemplateError):
                     ws = Path(side.workspace or self.workspaces.path(task_id))
                     variables = self._variables(task, ws, side)
-                    await self._invoke(task_id, side, ws, self._prompt("give_up", variables),
-                                       True, self._system_prompt(variables, side))
+                    await self.turns.invoke(
+                        task_id, side, stage="work", prompt=self._prompt("give_up", variables),
+                        resume=True, system_prompt=self._system_prompt(variables, side),
+                        location=str(ws), max_cost_usd=cfg.max_cost_usd_per_task)
         self.machine.fire(task_id, "give_up", side=side, error=error,
                           message=f"gave up after {attempts} failed attempts: {error}")
 
@@ -589,18 +501,22 @@ class Orchestrator:
             text += "\n\n" + questions
         return text
 
-    def _ask(self, task_id: str, side: Sidecar, stage: str, res: AgentReport) -> None:
-        """Record the questions of a blocked run (spec: states, Questions). A blocked run without a valid
-        question (for example a permission denial) gets one synthesized from its summary."""
-        items = [(q.text, q.context) for q in res.questions]
-        if not items:
-            context = "Samba synthesized this question: the agent reported blocked without one."
-            if res.denials:
-                context += " Permission denied: " + ", ".join(res.denials) + "."
-            items = [(res.summary or "The agent reported blocked without a question", context)]
-        add_questions(side.questions, stage, items, self.clock)
-        self.tasks.render_questions(task_id, side.questions)
 
-    def _budget_left(self, side: Sidecar) -> float | None:
-        cap = self.config.max_cost_usd_per_task
-        return None if cap is None else cap - side.cost_usd_total
+class _TurnStore:
+    """The persistence the turn flow asks for, over the sidecar and task stores (interim, part 5)."""
+
+    def __init__(self, tasks: TaskStore, sidecars: SidecarStore) -> None:
+        self.tasks = tasks
+        self.sidecars = sidecars
+
+    def save(self, task_id: str, side: Sidecar) -> None:
+        self.sidecars.save(task_id, side)
+
+    def append_log(self, task_id: str, line: str) -> None:
+        self.tasks.append_log(task_id, line)
+
+    def set_section(self, task_id: str, name: str, text: str) -> None:
+        self.tasks.set_section(task_id, name, text)
+
+    def render_questions(self, task_id: str, questions: list[Question]) -> None:
+        self.tasks.render_questions(task_id, questions)

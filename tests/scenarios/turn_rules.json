@@ -1,0 +1,28 @@
+{
+  "kind": "turn_rule",
+  "scenarios": [
+    {"name": "missing session asks for a reset", "rule": "session_reset",
+     "report": {"session_missing": true}, "expect": true},
+    {"name": "a normal report needs no reset", "rule": "session_reset",
+     "report": {"outcome": "done"}, "expect": false},
+    {"name": "no turn starts on an exhausted budget", "rule": "budget_gate",
+     "budget": {"cap": 2, "spent": 2.5},
+     "expect": {"event": "budget", "what": "budget exceeded ($2.50)", "summary": ""}},
+    {"name": "a budget with room opens the gate", "rule": "budget_gate",
+     "budget": {"cap": 2, "spent": 1}, "expect": null},
+    {"name": "no cap opens the gate", "rule": "budget_gate",
+     "budget": {"cap": null, "spent": 99}, "expect": null},
+    {"name": "last turn used", "rule": "exhausted", "max_turns": 3,
+     "expect": "max_turns (3) exhausted"},
+    {"name": "give-up reflection runs for work with a session", "rule": "reflect",
+     "args": {"flag": true, "session": "s1", "stage": "work", "in_running": true}, "expect": true},
+    {"name": "give-up reflection off by the flag", "rule": "reflect",
+     "args": {"flag": false, "session": "s1", "stage": "work", "in_running": true}, "expect": false},
+    {"name": "give-up reflection needs a session", "rule": "reflect",
+     "args": {"flag": true, "session": null, "stage": "work", "in_running": true}, "expect": false},
+    {"name": "give-up reflection is not for planning", "rule": "reflect",
+     "args": {"flag": true, "session": "s1", "stage": "plan", "in_running": true}, "expect": false},
+    {"name": "give-up reflection skipped when the task left its running folder", "rule": "reflect",
+     "args": {"flag": true, "session": "s1", "stage": "work", "in_running": false}, "expect": false}
+  ]
+}

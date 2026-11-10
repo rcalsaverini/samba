@@ -15,7 +15,11 @@ SRC = Path(__file__).resolve().parent.parent / "src" / "samba"
 # chain append to this list as they move modules in.
 DOMAIN_MODULES = ["ports.py", "template.py", "prompts.py", "domain/__init__.py",
                   "domain/states.py", "domain/questions.py", "domain/sidecar.py",
-                  "domain/transitions.py", "domain/deps.py", "domain/agent.py"]
+                  "domain/transitions.py", "domain/deps.py", "domain/agent.py",
+                  "domain/policy.py"]
+
+# Use cases: may log and await, but import no adapter and call no clock or uuid directly.
+APP_MODULES = ["app/__init__.py", "app/turn.py"]
 
 FORBIDDEN = {"os", "time", "datetime", "uuid", "subprocess", "asyncio", "logging", "pathlib"}
 
@@ -55,6 +59,14 @@ def test_domain_modules_import_no_io_and_no_adapter() -> None:
         assert violations(SRC / rel) == [], f"{rel} breaks the dependency rule"
 
 
+def test_app_modules_import_no_adapter() -> None:
+    for rel in APP_MODULES:
+        assert (SRC / rel).is_file(), f"{rel} is listed as a use case but does not exist"
+        for name in imported_modules(SRC / rel):
+            assert not (name == "samba.adapters" or name.startswith("samba.adapters.")), (
+                f"{rel} imports {name}")
+
+
 def test_the_check_catches_an_adapter_and_io_import(tmp_path: Path) -> None:
     bad = tmp_path / "bad.py"
     bad.write_text("from samba.adapters.system import SystemClock\nimport datetime\n"
@@ -88,6 +100,6 @@ def test_only_the_claude_adapter_reads_claude_json() -> None:
 
 def test_no_direct_clock_or_uuid_calls() -> None:
     pattern = re.compile(r"\btime\.(time|monotonic)\(|\bdatetime\.now\(|\buuid\.")
-    for rel in ["orchestrator.py", "transitions.py", *DOMAIN_MODULES]:
+    for rel in ["orchestrator.py", "transitions.py", *APP_MODULES, *DOMAIN_MODULES]:
         hits = pattern.findall(code_without_comments(SRC / rel))
         assert not hits, f"{rel} calls the clock or uuid directly"

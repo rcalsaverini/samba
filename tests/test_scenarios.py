@@ -7,6 +7,7 @@ here for that reason.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import dataclasses
 import json
@@ -14,8 +15,29 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from fake_agent import FakeAgentRunner
 
+from samba.app.turn import TurnFlow, TurnSetup
+from samba.domain.agent import AgentReport, Failure, QuestionDraft
 from samba.domain.deps import TaskRef, evaluate
+from samba.domain.policy import (
+    Action,
+    Budget,
+    Continue,
+    Fail,
+    Finish,
+    GiveUp,
+    RecordQuestions,
+    Retry,
+    RetryPolicy,
+    RunValidation,
+    after_last_turn,
+    budget_gate,
+    decide_after_turn,
+    session_reset_needed,
+    should_reflect,
+)
+from samba.domain.questions import Question
 from samba.domain.sidecar import Sidecar
 from samba.domain.states import State
 from samba.domain.transitions import (
@@ -163,7 +185,165 @@ def test_deps(sc: Scenario) -> None:
     assert list(status.unknown) == expect["unknown"]
 
 
+# ---- retry, budget, turn decisions -----------------------------------------------------------
+
+RETRY = load("retry_policy")
+
+
+@pytest.mark.parametrize("sc", RETRY, ids=ids(RETRY))
+def test_retry_policy(sc: Scenario) -> None:
+    decision = RetryPolicy(**sc["settings"]).decide(sc["failed_before"])
+    expect = cast(dict[str, Any], sc["expect"])
+    if expect["action"] == "retry":
+        assert decision == Retry(expect["attempts"], expect["delay"])
+    else:
+        assert decision == GiveUp(expect["attempts"])
+
+
+BUDGET = load("budget")
+
+
+@pytest.mark.parametrize("sc", BUDGET, ids=ids(BUDGET))
+def test_budget(sc: Scenario) -> None:
+    budget = Budget(sc["cap"], sc["spent"])
+    assert budget.left == sc["expect"]["left"]
+    assert budget.exceeded is sc["expect"]["exceeded"]
+
+
+def report_of(fields: dict[str, Any]) -> AgentReport:
+    data = dict(fields)
+    if "failure" in data:
+        data["failure"] = Failure(**data["failure"])
+    data["questions"] = tuple(QuestionDraft(**q) for q in data.get("questions", []))
+    data["denials"] = tuple(data.get("denials", []))
+    return AgentReport(**data)
+
+
+def budget_of(fields: dict[str, Any] | None) -> Budget:
+    return Budget(**fields) if fields else Budget(None, 0.0)
+
+
+def action_dict(action: Action) -> dict[str, Any]:
+    match action:
+        case Fail():
+            return {"action": "fail", "error": action.error}
+        case Finish():
+            return {"action": "finish", **dataclasses.asdict(action)}
+        case RunValidation():
+            return {"action": "run_validation", "summary": action.summary}
+        case RecordQuestions():
+            return {"action": "record_questions", **dataclasses.asdict(action.then)}
+        case Continue():
+            return {"action": "continue"}
+
+
+TURN_DECISION = load("turn_decision")
+
+
+@pytest.mark.parametrize("sc", TURN_DECISION, ids=ids(TURN_DECISION))
+def test_turn_decision(sc: Scenario) -> None:
+    action = decide_after_turn(report_of(sc["report"]), sc["stage"], budget_of(sc.get("budget")),
+                               sc["validate"])
+    assert action_dict(action) == sc["expect"]
+
+
+TURN_RULE = load("turn_rule")
+
+
+@pytest.mark.parametrize("sc", TURN_RULE, ids=ids(TURN_RULE))
+def test_turn_rule(sc: Scenario) -> None:
+    rule = sc["rule"]
+    if rule == "session_reset":
+        got: object = session_reset_needed(report_of(sc["report"]))
+    elif rule == "budget_gate":
+        gate = budget_gate(budget_of(sc["budget"]))
+        got = None if gate is None else dataclasses.asdict(gate)
+    elif rule == "exhausted":
+        got = after_last_turn(sc["max_turns"]).error
+    else:
+        a = sc["args"]
+        got = should_reflect(a["flag"], a["session"], a["stage"], a["in_running"])
+    assert got == sc["expect"]
+
+
+# ---- the turn flow with the fake runner ------------------------------------------------------
+
+class SeqIds:
+    def __init__(self) -> None:
+        self.n = 0
+
+    def new_session_id(self) -> str:
+        self.n += 1
+        return f"s{self.n}"
+
+
+class MemoryStore:
+    def __init__(self) -> None:
+        self.sections: dict[str, str] = {}
+        self.lines: list[str] = []
+        self.rendered = 0
+
+    def save(self, task_id: str, side: Sidecar) -> None:
+        pass
+
+    def append_log(self, task_id: str, line: str) -> None:
+        self.lines.append(line)
+
+    def set_section(self, task_id: str, name: str, text: str) -> None:
+        self.sections[name] = text
+
+    def render_questions(self, task_id: str, questions: list[Question]) -> None:
+        self.rendered += 1
+
+
+TURN_FLOW = load("turn_flow")
+
+
+@pytest.mark.parametrize("sc", TURN_FLOW, ids=ids(TURN_FLOW))
+def test_turn_flow(sc: Scenario) -> None:
+    s = cast(dict[str, Any], sc["setup"])
+    expect = cast(dict[str, Any], sc["expect"])
+    setup = TurnSetup(
+        stage=s["stage"], system_prompt="SYS", location="/ws", prompt=s["prompt"],
+        resume=s["resume"], first_prompt="FIRST", continue_prompt="CONT",
+        validate_failed=lambda tail: f"VF:{tail}", max_turns=s["max_turns"],
+        validate_enabled=s.get("validate_enabled", False), max_cost_usd=s.get("max_cost_usd"))
+    side = sidecar_of(sc.get("sidecar"))
+    agent = FakeAgentRunner([report_of(r) for r in sc["reports"]])
+    store = MemoryStore()
+    flow = TurnFlow(agent, SeqIds(), store, FakeClock())
+    validations = iter(sc.get("validate", []))
+    calls: list[int] = []
+
+    async def validate() -> tuple[bool, str]:
+        calls.append(1)
+        ok, tail = next(validations)
+        return ok, tail
+
+    turns: list[int] = []
+    result = asyncio.run(flow.run("t1", side, setup, validate, turns.append))
+    if expect["result"]["kind"] == "fail":
+        assert result == Fail(expect["result"]["error"])
+    else:
+        r = expect["result"]
+        assert result == Finish(r["event"], r["what"], r["summary"])
+    assert [{"prompt": q.prompt, "resume": q.resume, "kind": q.kind, "session_id": q.session_id,
+             "max_budget_usd": q.max_budget_usd} for q in agent.requests] == expect["requests"]
+    assert store.sections == expect["sections"]
+    assert store.rendered == expect["questions"]
+    assert len(side.questions) == expect["questions"]
+    assert len(calls) == expect["validate_calls"]
+    assert turns == list(range(1, len(turns) + 1))
+    for key, value in expect["sidecar"].items():
+        assert getattr(side, key) == value, key
+    wanted = expect.get("log", [])
+    assert len(store.lines) == len(wanted)
+    for want, got in zip(wanted, store.lines):
+        assert want in got
+
+
 def test_every_scenario_file_has_a_known_kind() -> None:
-    known = {"transition", "human_row", "human_events", "deps"}
+    known = {"transition", "human_row", "human_events", "deps", "retry_policy", "budget",
+             "turn_decision", "turn_rule", "turn_flow"}
     for path in SCENARIO_DIR.glob("*.json"):
         assert json.loads(path.read_text())["kind"] in known, path.name
