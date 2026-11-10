@@ -29,6 +29,45 @@ system adapters.
 | `Clock` | `time()` wall seconds, `monotonic()`, `iso_seconds()` local ISO 8601 to the second, `log_stamp()` local `YYYY-MM-DD HH:MM` | `SystemClock` in `adapters/system.py` |
 | `IdGenerator` | `new_session_id()` | `UuidGenerator` in `adapters/system.py` |
 | `AgentRunner` | `run(AgentRequest) -> AgentReport`, `ready() -> Readiness` | `ClaudeCliRunner` in `adapters/claude_cli.py` |
+| `Tasks` | `get(id)`, `list(status)`, `ids(status?)`, `create(task)`, `save(task) -> bool`, `observe_moves()`, `accept_move(move)`, `revert_move(move)`, `rejected_names(status)`, `location(id)`, `prepare()` | `MarkdownTasks` in `adapters/markdown_tasks.py`; the in-memory `FakeTasks` for tests is `tests/fake_tasks.py` |
+
+### The Tasks port and stale saves
+
+`Task` (`domain/task.py`) is the one record the core talks to: identity (`TaskId`, `domain/task_id.py`),
+title, body, priority, `depends_on`, `status` (a `State`), the counters, the session ids, the closed
+`last_stage`, `blocked_cause` and `last_outcome`, `queued_at`, `branch` and `workspace` (opaque
+strings), and the plan, assumptions, feedback rounds, log lines and question records. The store
+behind the port is the adapter's business. Until the orchestrator and the CLI are moved onto the
+port, `MarkdownTasks` exists next to the old `tasks.py` and nothing calls it.
+
+A worker holds a `Task` for minutes while commands (`task stop`, `question answer`, `work reject`)
+write the same record, and the agent edits its own task file. So `save` is not "write what I
+hold". The rule, which every adapter keeps:
+
+- `get` and `list` remember a snapshot of what they returned (identity is the key, the domain has no
+  version field).
+- `save(task)` re-reads the stored record and diffs the aggregate against its snapshot. Only the
+  fields the aggregate changed are written; the others keep the stored value. A scalar changed on
+  both sides takes the aggregate's value.
+- `log` and `feedback` are append-only: only entries beyond the snapshot's are appended to the stored
+  ones, so lines written meanwhile (by a human, by the agent) stay.
+- `questions` merge by id. A question both sides changed keeps the stored version, so a human's
+  answer is not lost.
+- `status` is written only if the aggregate changed it, and then only if the stored status is still
+  the one it was loaded with. Otherwise `save` returns False and writes nothing (the old
+  compare-and-move).
+- The store's record of the last known status (for hand moves) changes only on a status-changing
+  save, on first sight and in `accept_move`. A stale counter save never resets it, so a hand move is
+  not missed.
+- `MarkdownTasks` rewrites the `.md` only when a field the file owns changed (`body`, `plan`,
+  `assumptions`, `log`, `feedback`, `questions`, `status`); a counter-only save touches only the sidecar
+  JSON.
+- After a successful save the aggregate is refreshed in place from the merged record and its snapshot
+  renewed, so the worker's copy picks up what a human changed.
+
+A version number with a conflict-and-retry loop was rejected: it would push retry logic into every use
+case and make workers re-apply their increments. A database adapter can use row versions behind the
+same port.
 
 `AgentRequest`, `AgentReport`, `Failure`, `QuestionDraft` and `Readiness` are frozen dataclasses in
 `domain/agent.py` (running-claude, Adapter boundary and the report). The orchestrator takes an

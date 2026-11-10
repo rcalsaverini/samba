@@ -24,7 +24,7 @@ from samba.domain.policy import (
     decide_after_turn,
     session_reset_needed,
 )
-from samba.domain.questions import Question, add_questions
+from samba.domain.legacy_questions import Question, add_questions
 from samba.domain.sidecar import Sidecar
 from samba.domain.states import Stage
 from samba.domain.transitions import log_line

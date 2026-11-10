@@ -12,7 +12,7 @@ from typing import Any, cast
 from samba.adapters.system import SystemClock
 from samba.config import ConfigError, split_front_matter
 from samba.domain.deps import TaskRef
-from samba.domain.questions import render_questions
+from samba.domain.legacy_questions import render_questions
 from samba.domain.sidecar import Sidecar
 from samba.domain.states import STATES, State
 from samba.ports import Clock
