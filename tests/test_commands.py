@@ -229,8 +229,13 @@ def started(sb: Sandbox) -> bool:
 
 
 def settle(sb: Sandbox, task_id: str, marker: str) -> None:
-    wait_for(lambda: sb.state_of(task_id) is not None and marker in sb.task_text(task_id),
-             timeout=30)
+    def settled() -> bool:
+        try:
+            return sb.state_of(task_id) is not None and marker in sb.task_text(task_id)
+        except FileNotFoundError:  # the task moved between the two reads: look again
+            return False
+
+    wait_for(settled, timeout=30)
 
 
 def assert_clean(sb: Sandbox, event: str) -> None:
