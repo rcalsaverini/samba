@@ -52,6 +52,15 @@ evaluation (`deps.py`). `evaluate` takes a snapshot (`TaskRef` per task id, an a
 unknown); `TaskStore.deps_snapshot` builds it from the task and its `depends_on` closure.
 `samba/transitions.py` keeps only `Machine` (`fire`, `observe`), the file IO around the table.
 
+Policy is in `domain/policy.py`: `Budget` (cap, spent, `left`, `exceeded`), `RetryPolicy` (`decide`
+gives `Retry` with the delay or `GiveUp`), `should_reflect` (the give-up turn) and
+`decide_after_turn`, which turns an `AgentReport` into one action: `Fail`, `Finish`,
+`RunValidation`, `RecordQuestions` or `Continue`. A failure wins over the budget, the budget over
+the outcome. The turn flow shared by planning and work is the use case `app/turn.py` (`TurnFlow`):
+it drives the `AgentRunner` port, executes the action and returns `Finish` or `Fail` to the
+orchestrator, which fires the transition. Its persistence (`TurnStore`) is interim until the Tasks
+port.
+
 Not yet behind a port, and not yet moved:
 
 - Task store and sidecars: `tasks.py`.
@@ -79,6 +88,11 @@ JSON named as in the `Sidecar` dataclass; omitted fields take their default.
 | `human_row` | `src`, `dst`, `sidecar`, `expect` | The event name of the human row for a hand move, or `null`. |
 | `human_events` | `state`, `sidecar`, `expect` | The ordered human event names legal in the state. |
 | `deps` | `tasks` (`id`, `status`, `depends_on`), `task`, `expect` | `evaluate` on a snapshot of `tasks` gives `kind`, `waiting` and `unknown`. |
+| `retry_policy` | `settings` (`max_attempts`, `base_s`, `max_backoff_s`), `failed_before`, `expect` | `RetryPolicy.decide`: `{"action": "retry", "attempts", "delay"}` or `{"action": "give_up", "attempts"}`. |
+| `budget` | `cap` (or null), `spent`, `expect` | `left` and `exceeded` of a `Budget`. |
+| `turn_decision` | `stage`, `validate`, optional `budget` (`cap`, `spent`), `report` (`AgentReport` fields), `expect` | `decide_after_turn`: `action` (`fail`, `finish`, `run_validation`, `record_questions`, `continue`) with its `error`, or `event`, `what`, `summary`. |
+| `turn_rule` | `rule` (`session_reset`, `budget_gate`, `exhausted`, `reflect`) and its inputs, `expect` | The small rules: session reset on a missing session, the pre-turn budget gate, `max_turns` exhaustion, the give-up reflection. |
+| `turn_flow` | `setup` (stage, prompts, limits), `sidecar`, `reports` (scripted `AgentRunner`), `validate` (results), `expect` | `TurnFlow.run` end to end with the fake runner and an in-memory store: the result, the requests sent, sections written, questions recorded, validation calls and sidecar fields. |
 
 Coverage rule: a test fails when a row of the transition table, keyed by `(src, event, guard,
 dst)`, is picked by no `transition` scenario that fires. Adding a row therefore needs a scenario.
@@ -87,9 +101,10 @@ dst)`, is picked by no `transition` scenario that fires. Adding a row therefore 
 
 `tests/test_architecture.py` reads source files with `ast` and never imports `samba`. It asserts
 that the modules in its `DOMAIN_MODULES` list import none of the forbidden modules and no adapter,
-that `orchestrator.py`, `transitions.py` and the domain modules make no direct `time.time`,
+that the `app/` modules import no adapter, that `orchestrator.py`, `transitions.py`, the `app/`
+modules and the domain modules make no direct `time.time`,
 `time.monotonic`, `datetime.now` or `uuid` call, and that the scanner does flag an `adapters` or
 `datetime` import in a temporary module. It also asserts that `tests/test_scenarios.py` imports no
 adapter and not `samba.tasks`, and that no module but `adapters/claude_cli.py` mentions Claude's
 JSON fields. The list holds `ports.py`, `template.py`, `prompts.py` and the
-modules of `domain/` (including `agent.py`), and grows as more modules move in.
+modules of `domain/` (including `agent.py` and `policy.py`), and grows as more modules move in.

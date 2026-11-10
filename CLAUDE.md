@@ -29,6 +29,10 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `human_events`, the markdown renderer; `samba dev transitions` prints it and the states chapter
     embeds the output), `deps.py` (`depends_on` evaluation over a snapshot,
     `docs/spec/orchestrator.md`, Dependencies).
+  - `domain/policy.py`: `Budget`, `RetryPolicy`, `should_reflect` and `decide_after_turn` (one
+    action after a turn: fail, finish, run validation, record questions, continue).
+  - `app/turn.py`: `TurnFlow`, the turn loop shared by planning and work, over the `AgentRunner`
+    port; the orchestrator fires the transition for what it returns.
   - `tasks.py`: folder-based task store (including `deps_snapshot`), `## Log` editing and
     `SidecarStore`; `## Questions` in a task file is rendered from the sidecar records.
   - `orchestrator.py`: poll loop, dispatch, workers, retries, transitions.

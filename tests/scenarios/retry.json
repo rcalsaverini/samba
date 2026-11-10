@@ -1,0 +1,29 @@
+{
+  "kind": "retry_policy",
+  "scenarios": [
+    {"name": "backoff, first failure", "settings": {"max_attempts": 9, "base_s": 10, "max_backoff_s": 300},
+     "failed_before": 0, "expect": {"action": "retry", "attempts": 1, "delay": 10}},
+    {"name": "backoff, second failure", "settings": {"max_attempts": 9, "base_s": 10, "max_backoff_s": 300},
+     "failed_before": 1, "expect": {"action": "retry", "attempts": 2, "delay": 20}},
+    {"name": "backoff, third failure", "settings": {"max_attempts": 9, "base_s": 10, "max_backoff_s": 300},
+     "failed_before": 2, "expect": {"action": "retry", "attempts": 3, "delay": 40}},
+    {"name": "backoff, fourth failure", "settings": {"max_attempts": 9, "base_s": 10, "max_backoff_s": 300},
+     "failed_before": 3, "expect": {"action": "retry", "attempts": 4, "delay": 80}},
+    {"name": "backoff, fifth failure", "settings": {"max_attempts": 9, "base_s": 10, "max_backoff_s": 300},
+     "failed_before": 4, "expect": {"action": "retry", "attempts": 5, "delay": 160}},
+    {"name": "backoff is capped", "settings": {"max_attempts": 9, "base_s": 10, "max_backoff_s": 300},
+     "failed_before": 5, "expect": {"action": "retry", "attempts": 6, "delay": 300}},
+    {"name": "backoff stays capped", "settings": {"max_attempts": 20, "base_s": 10, "max_backoff_s": 300},
+     "failed_before": 12, "expect": {"action": "retry", "attempts": 13, "delay": 300}},
+    {"name": "max_attempts 3, second failure retries", "settings": {"max_attempts": 3, "base_s": 10, "max_backoff_s": 300},
+     "failed_before": 1, "expect": {"action": "retry", "attempts": 2, "delay": 20}},
+    {"name": "max_attempts 3, third failure gives up", "settings": {"max_attempts": 3, "base_s": 10, "max_backoff_s": 300},
+     "failed_before": 2, "expect": {"action": "give_up", "attempts": 3}},
+    {"name": "max_attempts 1 gives up at once", "settings": {"max_attempts": 1, "base_s": 10, "max_backoff_s": 300},
+     "failed_before": 0, "expect": {"action": "give_up", "attempts": 1}},
+    {"name": "custom base and cap", "settings": {"max_attempts": 5, "base_s": 1.5, "max_backoff_s": 5},
+     "failed_before": 1, "expect": {"action": "retry", "attempts": 2, "delay": 3.0}},
+    {"name": "custom cap below base", "settings": {"max_attempts": 5, "base_s": 30, "max_backoff_s": 5},
+     "failed_before": 0, "expect": {"action": "retry", "attempts": 1, "delay": 5}}
+  ]
+}

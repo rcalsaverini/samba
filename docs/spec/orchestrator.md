@@ -72,10 +72,12 @@ A task with `depends_on` (task-files, Format) is dispatched only when the `deps_
 ```
 ensure_workspace(task)              # workspaces
 for turn in 1..max_turns:
+    if budget exceeded: -> stuck ("budget exceeded", blocked_cause budget)   # before every turn, the first included
     prompt = first_prompt or continuation prompt (prompts)
     result = agent.run(request)     # running-claude, resumes session if one exists; returns an AgentReport
     record usage/cost in sidecar; log any permission_denials
-    if budget exceeded: -> stuck ("budget exceeded", blocked_cause budget)
+    if result.failure: -> failure path (below)      # a failure wins over the budget check
+    if budget exceeded: -> stuck ("budget exceeded", blocked_cause budget)   # the log line carries the run summary
     match structured outcome in result (running-claude, Outcome):
       done:
         v = run_validate()          # workspaces, Validation
@@ -88,6 +90,10 @@ max_turns reached -> failure ("max_turns exhausted")
 
 Every exit path appends one line to the task's `## Log`, for example:
 `- 2026-11-06 21:40 samba: validate passed after 4 turns ($0.83), moved to work-review`.
+
+The rules of this loop (budget, retry delay, what happens after a turn) are pure domain code in
+`domain/policy.py`; the loop itself is the use case `app/turn.py`, shared by work and planning
+(architecture).
 
 A task dispatched into `plan-running/` gets a planning worker instead: one invocation, no continue
 loop and no validation (running-claude, Planning run). Its exits are `planned`, `plan_blocked`,
@@ -106,8 +112,8 @@ On failure:
    `not_before = now + min(retry_base_s * 2^(attempts-1), max_retry_backoff_s)`, set
    `last_outcome = "retrying"`, move to the todo folder of the task's stage (`last_stage`:
    `plan-todo/` or `work-todo/`). Planning runs retry with the same backoff and `max_attempts`.
-3. Else (**give up**): if `reflect_on_give_up` is true and a session exists (work stage only; the
-   reflection turn is skipped for planning runs), run
+3. Else (**give up**): if `reflect_on_give_up` is true, a session exists and the task file is still
+   in its running folder (work stage only; the reflection turn is skipped for planning runs), run
    one final short turn with the `give_up` prompt (prompts), ignoring its outcome. Then set
    `last_outcome = "failed"`, `blocked_cause = "gave_up"` and move to `stuck/` with `last_error`.
 

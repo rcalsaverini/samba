@@ -1,0 +1,11 @@
+{
+  "kind": "budget",
+  "scenarios": [
+    {"name": "no cap is never exceeded", "cap": null, "spent": 1000, "expect": {"left": null, "exceeded": false}},
+    {"name": "some left", "cap": 5, "spent": 2, "expect": {"left": 3, "exceeded": false}},
+    {"name": "nothing spent", "cap": 5, "spent": 0, "expect": {"left": 5, "exceeded": false}},
+    {"name": "spent equal to the cap is exceeded", "cap": 5, "spent": 5, "expect": {"left": 0, "exceeded": true}},
+    {"name": "spent above the cap", "cap": 5, "spent": 6.5, "expect": {"left": -1.5, "exceeded": true}},
+    {"name": "a zero cap is exceeded at once", "cap": 0, "spent": 0, "expect": {"left": 0, "exceeded": true}}
+  ]
+}
