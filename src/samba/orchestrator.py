@@ -24,24 +24,15 @@ from samba.prompts import (
     allowed_tools_note,
     validate_note,
 )
-from samba.deps import evaluate
+from samba.domain.deps import evaluate
+from samba.domain.questions import add_questions, open_questions, round_pairs
+from samba.domain.sidecar import Sidecar
+from samba.domain.states import STATES, Stage, State, running_of, todo_of
+from samba.domain.transitions import human_row, log_line
 from samba.lock import repo_lock
-from samba.tasks import (
-    STATES,
-    Sidecar,
-    SidecarStore,
-    Stage,
-    State,
-    Task,
-    TaskStore,
-    add_questions,
-    open_questions,
-    round_pairs,
-    running_of,
-    todo_of,
-)
+from samba.tasks import SidecarStore, Task, TaskStore
 from samba.template import TemplateError, render
-from samba.transitions import Machine, human_row, kv, log_line
+from samba.transitions import Machine, kv
 from samba.workspace import WorkspaceError, Workspaces, branch_name
 
 log = logging.getLogger("samba")
@@ -91,7 +82,7 @@ class Orchestrator:
         self.logged_init = False
         self.warned_invalid: set[str] = set()
         self.warned_deps: set[tuple[str, str]] = set()
-        self.machine = Machine(self.tasks, self.sidecars, self._guard, self.clock)
+        self.machine = Machine(self.tasks, self.sidecars, self.clock, self._guard)
         self.pending_notes: dict[str, list[str]] = {}  # `## Log` lines held while an agent runs
         self.held: dict[str, tuple[str, ...]] = {}  # todo tasks waiting on dependencies
 
@@ -100,7 +91,7 @@ class Orchestrator:
             return self.config.planning.require_plan and not side.plan_approved
         if name == "deps_met":
             task = self.tasks.find(task_id)
-            return task is not None and evaluate(self.tasks, task).kind == "ready"
+            return task is not None and evaluate(self.tasks.deps_snapshot(task), task.id).kind == "ready"
         return False
 
     # ---- startup ------------------------------------------------------------------------
@@ -285,7 +276,7 @@ class Orchestrator:
 
     def _deps_ready(self, task: Task) -> bool:
         """The dependency guard of the dispatch rows (spec: orchestrator, Dependencies). Fires the stuck rows."""
-        status = evaluate(self.tasks, task)
+        status = evaluate(self.tasks.deps_snapshot(task), task.id)
         if status.kind == "ready":
             return True
         if status.kind == "cycle":

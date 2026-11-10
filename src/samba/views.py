@@ -5,18 +5,12 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable
 
-from samba.deps import evaluate
-from samba.tasks import (
-    STATES,
-    Sidecar,
-    SidecarStore,
-    State,
-    Task,
-    TaskStore,
-    open_questions,
-    qstr,
-)
-from samba.transitions import human_events
+from samba.domain.deps import evaluate
+from samba.domain.questions import open_questions, qstr
+from samba.domain.sidecar import Sidecar
+from samba.domain.states import STATES, State
+from samba.domain.transitions import human_events
+from samba.tasks import SidecarStore, Task, TaskStore
 
 HEADER = ["ID", "STATE", "ATTEMPTS", "TURNS", "COST", "LAST", "ERROR"]
 
@@ -73,7 +67,7 @@ def task_rows(tasks: TaskStore, sidecars: SidecarStore,
                 if s.not_before and s.not_before > now:
                     last += f" (retry in {s.not_before - now:.0f}s)"
                 else:
-                    dep = evaluate(tasks, task)
+                    dep = evaluate(tasks.deps_snapshot(task), task.id)
                     if dep.kind == "waiting":
                         last = f"waiting on {', '.join(dep.waiting)}"
             shown = state
@@ -141,7 +135,7 @@ def render_show(tasks: TaskStore, task: Task, side: Sidecar) -> list[str]:
     for dep_id in task.depends_on:
         lines.append(f"  {dep_id} ({tasks.state_of(dep_id) or 'unknown'})")
     if task.depends_on and task.state in ("plan-todo", "work-todo"):
-        dep = evaluate(tasks, task)
+        dep = evaluate(tasks.deps_snapshot(task), task.id)
         if dep.kind != "ready":
             held = f" on {', '.join(dep.waiting)}" if dep.waiting else ""
             lines.append(f"dependency_status: {dep.kind}{held}")

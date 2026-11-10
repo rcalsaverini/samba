@@ -5,39 +5,21 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import asdict, dataclass, field, fields
-from datetime import datetime
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from samba.adapters.system import SystemClock
 from samba.config import ConfigError, split_front_matter
+from samba.domain.deps import TaskRef
+from samba.domain.questions import render_questions
+from samba.domain.sidecar import Sidecar
+from samba.domain.states import STATES, State
 from samba.ports import Clock
 
-State = Literal["plan-todo", "plan-running", "plan-review", "work-todo", "work-running",
-                "work-review", "question", "stuck", "done", "discarded"]
-STATES: tuple[State, ...] = ("plan-todo", "plan-running", "plan-review", "work-todo",
-                             "work-running", "work-review", "question", "stuck", "done",
-                             "discarded")
-Stage = Literal["plan", "work"]
 # Folders of the pre-stage layout (spec: orchestrator, Startup, refuses to start while they hold task files).
 LEGACY_STATES: tuple[str, ...] = ("plan", "todo", "running", "review", "blocked")
 
-# Values of Sidecar.blocked_cause. Plain strings, not a closed type: more are added later.
-CAUSE_QUESTION = "question"
-CAUSE_BUDGET = "budget"
-CAUSE_GAVE_UP = "gave_up"
-CAUSE_STOPPED = "stopped"
-CAUSE_DEPENDENCY_DISCARDED = "dependency_discarded"
-CAUSE_DEPENDENCY_CYCLE = "dependency_cycle"
-
-
-def todo_of(stage: Stage) -> State:
-    return "plan-todo" if stage == "plan" else "work-todo"
-
-
-def running_of(stage: Stage) -> State:
-    return "plan-running" if stage == "plan" else "work-running"
 ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
@@ -133,6 +115,24 @@ class TaskStore:
             return parse_task(task_id, state, self.path(task_id, state))
         except OSError:
             return None
+
+    def deps_snapshot(self, task: Task) -> dict[str, TaskRef]:
+        """The task and everything reachable through `depends_on`, for `domain.deps.evaluate`.
+        Ids with no task file are left out (unknown). A done task's own dependencies are not
+        followed: they cannot take part in a cycle."""
+        snap: dict[str, TaskRef] = {task.id: TaskRef(task.id, task.state, task.depends_on)}
+        stack = list(task.depends_on)
+        while stack:
+            dep_id = stack.pop()
+            if dep_id in snap:
+                continue
+            dep = self.find(dep_id)
+            if dep is None:
+                continue
+            snap[dep_id] = TaskRef(dep.id, dep.state, dep.depends_on)
+            if dep.state != "done":
+                stack.extend(dep.depends_on)
+        return snap
 
     def move(self, task_id: str, src: State, dst: State) -> bool:
         """Atomic rename. Returns False if the file is no longer in `src`."""
@@ -259,116 +259,6 @@ def append_to_log_section(text: str, line: str) -> str:
     if following < len(lines) and lines[following].startswith("## "):
         lines.insert(following, "")
     return "\n".join(lines) + "\n"
-
-
-# ---- question records (spec: states, Sidecar state and Questions) -----------------------------------------------------
-
-Question = dict[str, object]
-
-
-def now_iso(clock: Clock) -> str:
-    return datetime.fromtimestamp(clock.time()).astimezone().isoformat(timespec="seconds")
-
-
-def qint(q: Question, key: str) -> int:
-    v = q.get(key)
-    return v if isinstance(v, int) else 0
-
-
-def qstr(q: Question, key: str) -> str:
-    v = q.get(key)
-    return v if isinstance(v, str) else ""
-
-
-def question_number(q: Question) -> int:
-    qid = qstr(q, "id")
-    return int(qid[1:]) if qid[1:].isdigit() else 0
-
-
-def latest_round(questions: list[Question]) -> int:
-    return max((qint(q, "round") for q in questions), default=0)
-
-
-def round_questions(questions: list[Question]) -> list[Question]:
-    """The questions of the latest blocking round."""
-    n = latest_round(questions)
-    return [q for q in questions if qint(q, "round") == n] if n else []
-
-
-def open_questions(questions: list[Question]) -> list[Question]:
-    return [q for q in questions if q.get("status") == "open"]
-
-
-def add_questions(questions: list[Question], stage: str, items: list[tuple[str, str]],
-                  clock: Clock) -> None:
-    """Append open records for one blocking event: ids continue after the highest ever used,
-    the round is one more than the latest."""
-    n = max((question_number(q) for q in questions), default=0)
-    rnd = latest_round(questions) + 1
-    for text, context in items:
-        n += 1
-        questions.append({"id": f"q{n}", "round": rnd, "stage": stage, "status": "open",
-                          "text": text, "context": context, "asked_at": now_iso(clock),
-                          "answer": None, "answered_at": None})
-
-
-def answer_question(q: Question, text: str, clock: Clock) -> None:
-    q["status"], q["answer"], q["answered_at"] = "answered", text, now_iso(clock)
-
-
-def dismiss_open(questions: list[Question], clock: Clock) -> None:
-    for q in open_questions(questions):
-        q["status"], q["answered_at"] = "dismissed", now_iso(clock)
-
-
-def render_questions(questions: list[Question]) -> str:
-    blocks: list[str] = []
-    for q in questions:
-        parts = [f"### {qstr(q, 'id')} (round {qint(q, 'round')}, {qstr(q, 'status')})",
-                 qstr(q, "text").strip()]
-        if qstr(q, "context").strip():
-            parts.append("Context: " + qstr(q, "context").strip())
-        if q.get("status") == "answered":
-            parts.append("Answer: " + qstr(q, "answer").strip())
-        blocks.append("\n\n".join(parts))
-    return "\n\n".join(blocks)
-
-
-def round_pairs(questions: list[Question]) -> str:
-    """The latest round as question and answer pairs, for the resume prompt (spec: prompts, Which prompt is sent)."""
-    out: list[str] = []
-    for q in round_questions(questions):
-        status = qstr(q, "status")
-        out.append(f"{qstr(q, 'id')} ({status}): {qstr(q, 'text').strip()}")
-        if status == "answered":
-            out.append(f"Answer: {qstr(q, 'answer').strip()}")
-        elif status == "dismissed":
-            out.append("The human dismissed this question without answering.")
-        out.append("")
-    return "\n".join(out).strip()
-
-
-@dataclass
-class Sidecar:
-    state: str | None = None  # last known folder, for observed hand moves (spec: states)
-    session_id: str | None = None
-    last_stage: str | None = None  # "plan" | "work", set at dispatch (spec: states, Sidecar state)
-    blocked_cause: str | None = None  # why the task is in question/stuck (CAUSE_*)
-    plan_session_id: str | None = None
-    plan_approved: bool = False
-    attempts: int = 0
-    not_before: float | None = None  # unix timestamp
-    last_error: str | None = None
-    last_outcome: str | None = None
-    turns_total: int = 0
-    cost_usd_total: float = 0.0
-    input_tokens_total: int = 0
-    output_tokens_total: int = 0
-    branch: str | None = None
-    workspace: str | None = None
-    first_dispatched_at: float | None = None
-    updated_at: float | None = None
-    questions: list[dict[str, object]] = field(default_factory=lambda: [])  # spec: states, Sidecar state
 
 
 class SidecarStore:

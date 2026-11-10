@@ -23,19 +23,18 @@ from samba.adapters.system import SystemClock
 from samba.config import Config, ConfigError, load_config
 from samba.lock import repo_lock
 from samba.orchestrator import Orchestrator, StartupError
-from samba.tasks import (
-    STATES,
+from samba.domain.questions import (
     Question,
-    SidecarStore,
-    State,
-    TaskStore,
     answer_question,
     open_questions,
     qint,
     qstr,
     round_questions,
 )
-from samba.transitions import Machine, human_events, log_line, render_markdown_table
+from samba.domain.states import STATES, State
+from samba.domain.transitions import human_events, log_line, render_markdown_table
+from samba.tasks import SidecarStore, TaskStore
+from samba.transitions import Machine
 from samba.views import (
     ResolveError,
     print_table,
@@ -218,7 +217,7 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
         if feedback:
             n = tasks.append_feedback(task_id, feedback)
             message = f"feedback round {n}"
-        if not Machine(tasks, sidecars).fire(task_id, event, message=message):
+        if not Machine(tasks, sidecars, SystemClock()).fire(task_id, event, message=message):
             note = "; the feedback was already written" if feedback else ""
             print(f"samba: {event} did not apply to {task_id}{note}", file=sys.stderr)
             return 1
@@ -366,14 +365,16 @@ def cmd_question_answer(config: Config, target: str, text: str | None, edit: boo
             return q
         side = sidecars.load(task_id)
         record = next(r for r in side.questions if qstr(r, "id") == qstr(q, "id"))
-        answer_question(record, answer, SystemClock())
+        clock = SystemClock()
+        answer_question(record, answer, clock)
         sidecars.save(task_id, side)
         tasks.render_questions(task_id, side.questions)
-        tasks.append_log(task_id, log_line(f"{event}: {task_id}/{qstr(record, 'id')} answered"))
+        tasks.append_log(task_id, log_line(f"{event}: {task_id}/{qstr(record, 'id')} answered",
+                                           clock))
         left = [r for r in open_questions(round_questions(side.questions))]
         if not left:
             tasks.ensure()
-            if not Machine(tasks, sidecars).fire(task_id, event):
+            if not Machine(tasks, sidecars, clock).fire(task_id, event):
                 _err(f"{event} did not apply to {task_id}; the answer was recorded")
                 return 1
     state = tasks.state_of(task_id)
@@ -484,7 +485,7 @@ def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: b
                 if config.validate_command is None:
                     err("no validate.command; merged without validation")
         tasks.ensure()
-        if not Machine(tasks, sidecars).fire(task_id, event, message=message):
+        if not Machine(tasks, sidecars, SystemClock()).fire(task_id, event, message=message):
             err(f"{event} did not apply to {task_id}"
                 + ("" if no_merge else f" after the merge ({message}); the merge is in {base}"))
             return 1

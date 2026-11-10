@@ -23,15 +23,18 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `views.py`: read-only shared helpers: table printer, state-prefix matcher, task id resolver
     (`resolve_task_id`, reused by every command taking an id), `task show` renderer.
   - `config.py`: loads and validates `WORKFLOW.md` (front matter + prompt body).
-  - `tasks.py`: folder-based task store, `## Log` editing, sidecar state (`Sidecar`), and the
-    question record helpers (`add_questions`, `answer_question`, `dismiss_open`,
-    `render_questions`); `## Questions` in a task file is rendered from the sidecar records.
+  - `domain/`: the pure core, no I/O (`architecture` chapter). `states.py` (`State`, causes),
+    `questions.py` (question records and helpers), `sidecar.py` (`Sidecar` dataclass),
+    `transitions.py` (the transition table as plain data, effects, `find_row`, `human_row`,
+    `human_events`, the markdown renderer; `samba dev transitions` prints it and the states chapter
+    embeds the output), `deps.py` (`depends_on` evaluation over a snapshot,
+    `docs/spec/orchestrator.md`, Dependencies).
+  - `tasks.py`: folder-based task store (including `deps_snapshot`), `## Log` editing and
+    `SidecarStore`; `## Questions` in a task file is rendered from the sidecar records.
   - `orchestrator.py`: poll loop, dispatch, workers, retries, transitions.
-  - `transitions.py`: the transition table (plain data) and `Machine.fire`, the only path that moves
-    a task (`docs/spec/states.md`). `samba dev transitions` prints it; the states chapter embeds the
-    output.
+  - `transitions.py`: `Machine.fire` and `observe`, the only path that moves a task
+    (`docs/spec/states.md`): the file IO around the domain table.
   - `lock.py`: `repo_lock`, the `.samba/lock` flock shared by commands and orchestrator ticks.
-  - `deps.py`: `depends_on` evaluation (`docs/spec/orchestrator.md`, Dependencies).
   - `claude.py`: builds the `claude` argv, runs it, parses stream-json (`RunResult`).
   - `ports.py`: the ports (Protocols `Clock`, `IdGenerator`); `adapters/system.py`: the system
     clock and uuid generator. The layers and the dependency rule are in the `architecture` chapter.
@@ -45,6 +48,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `conftest.py`: the `Sandbox` fixture (temp git repo, WORKFLOW.md, tasks, helpers).
   - `test_manual.py`: drift check for `docs/manual.md`. Runs the CLI's `--help` and reads files,
     never imports `samba`.
+  - `test_scenarios.py` and `scenarios/*.json`: the scenario runner and its data (ADR 0012,
+    `architecture` chapter, Scenarios). Imports the domain only, never an adapter.
   - `test_architecture.py`: guards the dependency rule. Reads sources with `ast`, never imports
     `samba`; append moved domain modules to its `DOMAIN_MODULES`.
   - `fake_claude.py`: scripted fake of the `claude` CLI. Standard library only.

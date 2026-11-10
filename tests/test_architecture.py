@@ -13,7 +13,9 @@ SRC = Path(__file__).resolve().parent.parent / "src" / "samba"
 
 # Modules that belong to the pure domain, relative to src/samba. Later tasks of the refactor
 # chain append to this list as they move modules in.
-DOMAIN_MODULES = ["ports.py", "template.py", "prompts.py", "deps.py"]
+DOMAIN_MODULES = ["ports.py", "template.py", "prompts.py", "domain/__init__.py",
+                  "domain/states.py", "domain/questions.py", "domain/sidecar.py",
+                  "domain/transitions.py", "domain/deps.py"]
 
 FORBIDDEN = {"os", "time", "datetime", "uuid", "subprocess", "asyncio", "logging", "pathlib"}
 
@@ -37,13 +39,33 @@ def test_domain_modules_exist() -> None:
         assert (SRC / rel).is_file(), f"{rel} is listed as domain but does not exist"
 
 
+def violations(path: Path) -> list[str]:
+    """Imports in `path` that a domain module may not have."""
+    bad: list[str] = []
+    for name in imported_modules(path):
+        if name.split(".")[0] in FORBIDDEN:
+            bad.append(name)
+        elif name == "samba.adapters" or name.startswith("samba.adapters."):
+            bad.append(name)
+    return bad
+
+
 def test_domain_modules_import_no_io_and_no_adapter() -> None:
     for rel in DOMAIN_MODULES:
-        for name in imported_modules(SRC / rel):
-            top = name.split(".")[0]
-            assert top not in FORBIDDEN, f"{rel} imports {name}"
-            assert not (name == "samba.adapters" or name.startswith("samba.adapters.")), \
-                f"{rel} imports adapter {name}"
+        assert violations(SRC / rel) == [], f"{rel} breaks the dependency rule"
+
+
+def test_the_check_catches_an_adapter_and_io_import(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("from samba.adapters.system import SystemClock\nimport datetime\n"
+                   "from samba import adapters\n")
+    assert violations(bad) == ["samba.adapters.system", "datetime", "samba.adapters"]
+
+
+def test_scenario_runner_imports_no_adapter_and_no_store() -> None:
+    for name in imported_modules(Path(__file__).parent / "test_scenarios.py"):
+        assert name != "samba.tasks", "the scenario runner must not import the task store"
+        assert not (name == "samba.adapters" or name.startswith("samba.adapters.")), name
 
 
 def code_without_comments(path: Path) -> str:
@@ -52,6 +74,6 @@ def code_without_comments(path: Path) -> str:
 
 def test_no_direct_clock_or_uuid_calls() -> None:
     pattern = re.compile(r"\btime\.(time|monotonic)\(|\bdatetime\.now\(|\buuid\.")
-    for rel in ["orchestrator.py", "transitions.py"]:
+    for rel in ["orchestrator.py", "transitions.py", *DOMAIN_MODULES]:
         hits = pattern.findall(code_without_comments(SRC / rel))
         assert not hits, f"{rel} calls the clock or uuid directly"
