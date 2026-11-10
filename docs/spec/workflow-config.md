@@ -4,6 +4,10 @@ Markdown with YAML front matter. The body is the first-turn prompt template.
 
 ## Config (all optional, defaults shown)
 
+The file format is unchanged by how the code groups it: `load_config` splits these keys into the
+parts `Policy`, `AgentSettings`, `Layout`, `Prompts`, `Validation` and `Hooks` (see the
+`architecture` chapter).
+
 ```yaml
 ---
 samba_dir: .samba

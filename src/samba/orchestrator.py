@@ -66,16 +66,19 @@ class Orchestrator:
                  ids: IdGenerator | None = None, agent: AgentRunner | None = None,
                  tasks: Tasks | None = None) -> None:
         self.config = config
+        self.policy = config.policy
+        self.layout = config.layout
+        self.prompts = config.prompts
+        self.validation = config.validation
         self.clock: Clock = clock or SystemClock()
         self.ids: IdGenerator = ids or UuidGenerator()
-        self.sym = config.samba_dir
+        self.sym = config.layout.samba_dir
         self.tasks: Tasks = tasks or MarkdownTasks(self.sym / "tasks", self.sym / "state",
                                                     self.clock)
         self.runs_dir = self.sym / "runs"
         self.agent: AgentRunner = agent or ClaudeCliRunner(
-            config.claude, config.planning, (self.sym / "tasks").resolve(), self.runs_dir,
-            config.repo)
-        self.workspaces = Workspaces(config)
+            config.agent, (self.sym / "tasks").resolve(), self.runs_dir, config.layout.repo)
+        self.workspaces = Workspaces(config.layout, config.hooks, config.validation.shell)
         self.turns = TurnFlow(self.agent, self.ids, self.tasks, self.clock)
         self.running: dict[str, Running] = {}
         self.warned_invalid: set[str] = set()
@@ -86,7 +89,7 @@ class Orchestrator:
 
     def _guard(self, name: str, task: Task) -> bool:
         if name == "plan_required":
-            return self.config.planning.require_plan and not task.plan_approved
+            return self.policy.require_plan and not task.plan_approved
         if name == "deps_met":
             return evaluate(deps_snapshot(task, self.tasks.get), task.id).kind == "ready"
         return False
@@ -104,23 +107,23 @@ class Orchestrator:
     # ---- startup ------------------------------------------------------------------------
 
     async def startup(self) -> None:
-        cfg = self.config
+        layout = self.layout
         try:
             self.tasks.prepare()
         except StoreError as e:
             raise StartupError(str(e)) from e
-        top = await git(cfg.repo, "rev-parse", "--show-toplevel")
-        if not top.ok or Path(top.output.strip()).resolve() != cfg.repo:
-            raise StartupError(f"{cfg.repo} is not the root of a git repository")
-        base = await git(cfg.repo, "rev-parse", "--verify", "--quiet",
-                         f"refs/heads/{cfg.base_branch}")
+        top = await git(layout.repo, "rev-parse", "--show-toplevel")
+        if not top.ok or Path(top.output.strip()).resolve() != layout.repo:
+            raise StartupError(f"{layout.repo} is not the root of a git repository")
+        base = await git(layout.repo, "rev-parse", "--verify", "--quiet",
+                         f"refs/heads/{layout.base_branch}")
         if not base.ok:
-            raise StartupError(f"base_branch '{cfg.base_branch}' does not exist")
+            raise StartupError(f"base_branch '{layout.base_branch}' does not exist")
         readiness = await self.agent.ready()
         if not readiness.ok:
             raise StartupError(
                 f"claude auth status says not logged in; run `claude auth login`. {readiness.detail}")
-        for w in cfg.warnings:
+        for w in self.config.warnings:
             log.warning(kv("config_warning", message=w))
 
         self.runs_dir.mkdir(parents=True, exist_ok=True)
@@ -133,15 +136,15 @@ class Orchestrator:
 
     async def _exclude_samba_dir(self) -> None:
         try:
-            rel = self.sym.relative_to(self.config.repo)
+            rel = self.sym.relative_to(self.layout.repo)
         except ValueError:
             return  # samba_dir outside the repo: nothing to exclude
-        res = await git(self.config.repo, "rev-parse", "--git-path", "info/exclude")
+        res = await git(self.layout.repo, "rev-parse", "--git-path", "info/exclude")
         if not res.ok:
             return
         exclude = Path(res.output.strip())
         if not exclude.is_absolute():
-            exclude = self.config.repo / exclude
+            exclude = self.layout.repo / exclude
         entry = f"/{rel.as_posix()}/"
         existing = exclude.read_text() if exclude.exists() else ""
         if entry not in existing.splitlines() and f"{rel.as_posix()}/" not in existing.splitlines():
@@ -153,7 +156,7 @@ class Orchestrator:
 
     async def run(self, exit_when_idle: bool = False) -> None:
         await self.startup()
-        log.info(kv("started", repo=self.config.repo, max_concurrent=self.config.max_concurrent))
+        log.info(kv("started", repo=self.layout.repo, max_concurrent=self.policy.max_concurrent))
         try:
             while True:
                 await self.tick()
@@ -161,7 +164,7 @@ class Orchestrator:
                     await self.cleanup_workspaces()
                     log.info(kv("idle_exit"))
                     return
-                await asyncio.sleep(self.config.poll_interval_s)
+                await asyncio.sleep(self.policy.poll_interval_s)
         finally:
             await self.shutdown()
 
@@ -247,7 +250,7 @@ class Orchestrator:
         candidates.sort(key=lambda t: (t.priority is None, t.priority or 0, t.queued_at or 0.0,
                                        t.id))
         for task in candidates:
-            if len(self.running) >= self.config.max_concurrent:
+            if len(self.running) >= self.policy.max_concurrent:
                 break
             if task.status == "work-todo":
                 self.machine.fire(task.id, "route_to_plan", task=task)  # to plan-todo, if it applies
@@ -359,13 +362,12 @@ class Orchestrator:
 
     def _setup(self, task: Task, ws: Path, stage: Stage) -> TurnSetup:
         """The prompts and limits of a run (spec: prompts, Which prompt is sent)."""
-        cfg = self.config
         variables = self._variables(task, ws)
-        cap = cfg.max_cost_usd_per_task
+        cap = self.policy.max_cost_usd_per_task
         if stage == "plan":
             system_prompt = render(PLAN_PROTOCOL, {
                 **variables,
-                "allowed_tools": allowed_tools_note(cfg.planning.allow, "dontAsk"),
+                "allowed_tools": allowed_tools_note(self.config.agent.planning_allow, "dontAsk"),
             })
             first = self._first_plan_prompt(variables)
             resume = bool(task.plan_session_id)
@@ -375,7 +377,7 @@ class Orchestrator:
                 resume=resume, first_prompt=first, continue_prompt="",
                 validate_failed=lambda tail: "", max_turns=1, validate_enabled=False,
                 max_cost_usd=cap)
-        first = render(cfg.prompt_template, variables)
+        first = render(self.prompts.template, variables)
         resume = bool(task.session_id)
         failed = self._prompt("validate_failed", variables)
         return TurnSetup(
@@ -383,27 +385,27 @@ class Orchestrator:
             prompt=self._prompt("resume", variables) if resume else first, resume=resume,
             first_prompt=first, continue_prompt=self._prompt("continue", variables),
             validate_failed=lambda tail: failed + "\n\n```\n" + tail + "\n```",
-            max_turns=cfg.max_turns, validate_enabled=bool(cfg.validate_command),
+            max_turns=self.policy.max_turns, validate_enabled=bool(self.validation.command),
             max_cost_usd=cap)
 
     def _first_plan_prompt(self, variables: dict[str, str]) -> str:
-        override = self.config.prompts.get("plan")
+        override = self.prompts.overrides.get("plan")
         if override:
             return render(override, variables)
-        return render(self.config.prompt_template, variables) + "\n\n" + DEFAULT_PROMPTS["plan"]
+        return render(self.prompts.template, variables) + "\n\n" + DEFAULT_PROMPTS["plan"]
 
     async def _validate(self, task: Task, ws: Path) -> tuple[bool, str]:
-        cfg = self.config
-        assert cfg.validate_command
+        val = self.validation
+        assert val.command
         task_id = task.id
-        res = await run_shell(cfg.shell, cfg.validate_command, ws, cfg.validate_timeout_s)
+        res = await run_shell(val.shell, val.command, ws, val.timeout_s)
         out_path = self.runs_dir / task_id / f"validate-{task.turns_total:03d}.log"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(res.output)
         lines = res.output.rstrip().splitlines()
-        tail = "\n".join(lines[-cfg.validate_tail_lines:])
+        tail = "\n".join(lines[-val.tail_lines:])
         if res.timed_out:
-            tail = (tail + "\n" if tail else "") + f"(timed out after {cfg.validate_timeout_s}s)"
+            tail = (tail + "\n" if tail else "") + f"(timed out after {val.timeout_s}s)"
         log.info(kv("validate", task=task_id, ok=res.ok, code=res.code))
         return res.ok, tail
 
@@ -417,11 +419,11 @@ class Orchestrator:
         log.info(kv("finished", task=task.id, transition=event, moved=moved))
 
     async def _fail(self, task: Task, error: str) -> None:
-        cfg = self.config
+        policy = self.policy
         task_id = task.id
         stage = stage_of(task)
-        decision = RetryPolicy(cfg.max_attempts, cfg.retry_base_s,
-                               cfg.max_retry_backoff_s).decide(task.attempts)
+        decision = RetryPolicy(policy.max_attempts, policy.retry_base_s,
+                               policy.max_retry_backoff_s).decide(task.attempts)
         attempts = decision.attempts
         log.warning(kv("attempt_failed", task=task_id, attempt=attempts, error=error))
         if isinstance(decision, Retry):
@@ -433,14 +435,14 @@ class Orchestrator:
             return
 
         in_running = self._status(task_id) == running_of(stage)
-        if should_reflect(cfg.reflect_on_give_up, task.session_id, stage, in_running):
+        if should_reflect(policy.reflect_on_give_up, task.session_id, stage, in_running):
             with contextlib.suppress(TemplateError):
                 ws = Path(task.workspace or self.workspaces.path(task_id))
                 variables = self._variables(task, ws)
                 await self.turns.invoke(
                     task, stage="work", prompt=self._prompt("give_up", variables),
                     resume=True, system_prompt=self._system_prompt(variables, task),
-                    location=str(ws), max_cost_usd=cfg.max_cost_usd_per_task)
+                    location=str(ws), max_cost_usd=policy.max_cost_usd_per_task)
         self.machine.fire(task_id, "give_up", task=task, error=error,
                           message=f"gave up after {attempts} failed attempts: {error}")
 
@@ -454,9 +456,9 @@ class Orchestrator:
             "task.path": self.tasks.location(task.id),
             "workspace": str(ws),
             "branch": branch_name(task.id),
-            "base_branch": self.config.base_branch,
+            "base_branch": self.layout.base_branch,
             "attempt": str(task.attempts),
-            "validate_command": self.config.validate_command or "",
+            "validate_command": self.validation.command or "",
             # The answered round, for the first run after a question (spec: prompts, Which prompt is sent).
             "questions": (round_pairs(task.questions)
                           if task.last_outcome == "blocked" and not open_questions(task.questions)
@@ -464,18 +466,18 @@ class Orchestrator:
         }
 
     def _system_prompt(self, variables: dict[str, str], task: Task) -> str:
-        cfg = self.config
+        agent = self.config.agent
         text = render(PROTOCOL, {
             **variables,
-            "validate_note": validate_note(cfg.validate_command),
-            "allowed_tools": allowed_tools_note(cfg.claude.allow, cfg.claude.permission_mode),
+            "validate_note": validate_note(self.validation.command),
+            "allowed_tools": allowed_tools_note(agent.allow, agent.permission_mode),
         })
         if task.plan_approved:
             text = text.rstrip("\n") + "\n" + APPROVED_PLAN_RULE
         return text
 
     def _prompt(self, key: str, variables: dict[str, str]) -> str:
-        template = self.config.prompts.get(key) or DEFAULT_PROMPTS[key]
+        template = self.prompts.overrides.get(key) or DEFAULT_PROMPTS[key]
         text = render(template, variables).rstrip()
         questions = variables.get("questions", "")
         # A custom prompt without {{ questions }} must not lose the answers.

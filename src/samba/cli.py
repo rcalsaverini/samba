@@ -41,11 +41,11 @@ from samba.views import (
 
 
 def _setup_logging(config: Config) -> None:
-    config.samba_dir.mkdir(parents=True, exist_ok=True)
+    config.layout.samba_dir.mkdir(parents=True, exist_ok=True)
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
     root = logging.getLogger("samba")
     root.setLevel(logging.DEBUG)
-    file_handler = logging.FileHandler(config.samba_dir / "samba.log")
+    file_handler = logging.FileHandler(config.layout.samba_dir / "samba.log")
     file_handler.setFormatter(fmt)
     file_handler.setLevel(logging.DEBUG)
     console = logging.StreamHandler(sys.stderr)
@@ -91,7 +91,8 @@ def cmd_task_list(config: Config, states: list[str]) -> int:
 
 def _store(config: Config) -> Tasks:
     """The task store the commands use (the composition root arrives with a later task)."""
-    return MarkdownTasks(config.samba_dir / "tasks", config.samba_dir / "state", SystemClock())
+    sym = config.layout.samba_dir
+    return MarkdownTasks(sym / "tasks", sym / "state", SystemClock())
 
 
 def _log(tasks: Tasks, task_id: TaskId, line: str) -> None:
@@ -209,7 +210,7 @@ def cmd_transition(config: Config, text: str, event: str, label: str, *,
         if code is not None:
             return code
 
-    with repo_lock(config.samba_dir) as held:
+    with repo_lock(config.layout.samba_dir) as held:
         if not held:
             print("samba: another command or the orchestrator holds .samba/lock; "
                   "try again", file=sys.stderr)
@@ -358,7 +359,7 @@ def cmd_question_answer(config: Config, target: str, text: str | None, edit: boo
         _err("question answer needs text (argument or --edit); nothing changed")
         return 2
 
-    with repo_lock(config.samba_dir) as held:
+    with repo_lock(config.layout.samba_dir) as held:
         if not held:
             _err("another command or the orchestrator holds .samba/lock; try again")
             return 1
@@ -406,7 +407,7 @@ def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: b
                 f"{', '.join(events) or 'none'}")
             return False
         if not no_merge:
-            problem = merge.preflight(config.repo, config.base_branch, branch)
+            problem = merge.preflight(config.layout.repo, config.layout.base_branch, branch)
             if problem:
                 err(f"{problem}; nothing changed")
                 return False
@@ -418,30 +419,32 @@ def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: b
         err(e.render())
         return 2
     branch = workspace.branch_name(task_id)
-    base = config.base_branch
+    layout = config.layout
+    validation = config.validation
+    base = layout.base_branch
     if not check(task_id):
         return 1
-    do_validate = not no_merge and not no_validate and config.validate_command is not None
-    count = 0 if no_merge else merge.commit_count(config.repo, base, branch)
+    do_validate = not no_merge and not no_validate and validation.command is not None
+    count = 0 if no_merge else merge.commit_count(layout.repo, base, branch)
     plural = "" if count == 1 else "s"
     if no_merge:
         plan = f"Mark {task_id} done without merging (--no-merge)"
     else:
         plan = f"Merge {branch} into {base} ({count} commit{plural})"
         if do_validate:
-            plan += f", then validate with `{config.validate_command}`"
+            plan += f", then validate with `{validation.command}`"
     if dry_run:
         print(f"{plan}")
         print(f"branch: {branch}\nbase: {base}\ncommits: {count}")
         print(f"merge: {'no' if no_merge else 'yes (--no-ff)'}")
-        print(f"validate: {config.validate_command if do_validate else 'skipped'}")
+        print(f"validate: {validation.command if do_validate else 'skipped'}")
         print("final state: done")
         return 0
     code = confirm(plan, "work accept", yes)
     if code is not None:
         return code
 
-    with repo_lock(config.samba_dir) as held:
+    with repo_lock(layout.samba_dir) as held:
         if not held:
             err("another command or the orchestrator holds .samba/lock; try again")
             return 1
@@ -454,10 +457,10 @@ def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: b
             found = tasks.get(task_id)
             title = found.title if found else task_id
             res = merge.merge_branch(
-                config.repo, branch, f"Merge {branch}: {title}", shell=config.shell,
-                validate_command=config.validate_command if do_validate else None,
-                timeout_s=config.validate_timeout_s, tail_lines=config.validate_tail_lines,
-                log_path=config.samba_dir / "runs" / task_id / "accept-validate.log")
+                layout.repo, branch, f"Merge {branch}: {title}", shell=validation.shell,
+                validate_command=validation.command if do_validate else None,
+                timeout_s=validation.timeout_s, tail_lines=validation.tail_lines,
+                log_path=layout.samba_dir / "runs" / task_id / "accept-validate.log")
             if res.status == "conflict":
                 _log(tasks, task_id, f"work.accept: merge failed (conflicts: {res.detail})")
                 err(f"merge conflict in: {res.detail}; merge aborted, task stays in work-review")
@@ -480,7 +483,7 @@ def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: b
                 message = f"merged {res.detail}" + (
                     ", validated" if res.validated else ", validation skipped" if no_validate
                     else "")
-                if config.validate_command is None:
+                if validation.command is None:
                     err("no validate.command; merged without validation")
         if not Machine(tasks, SystemClock()).fire(task_id, event, message=message):
             err(f"{event} did not apply to {task_id}"

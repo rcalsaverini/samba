@@ -105,6 +105,15 @@ it drives the `AgentRunner` port, executes the action and returns `Finish` or `F
 orchestrator, which fires the transition. It mutates the `Task` it is given (plan, assumptions,
 questions, denial log lines, counters) and calls `Tasks.save` after each step.
 
+Configuration (`config.py`) is a composite of frozen parts, so each consumer takes only the part it
+needs: `Policy` (turns, retries, cost cap, `reflect_on_give_up`, `require_plan`, concurrency,
+polling), `AgentSettings` (the `claude` command, permissions, timeouts and the planning model and
+allow list; taken by `adapters/claude_cli.py`), `Layout` (repo, Samba directory, workspaces root,
+base branch), `Prompts` (the body template and the overrides), `Validation` (command, timeout, tail
+lines, shell) and `Hooks` (`after_create`, timeout). `Config` holds one of each plus `warnings`;
+`load_config` builds it. `Workspaces` takes `Layout`, `Hooks` and the shell. `DEFAULT_ALLOW` and
+`DEFAULT_PLANNING_ALLOW` stay in `config.py`.
+
 Not yet behind a port, and not yet moved:
 
 - Subprocess helpers: `proc.py` (the Claude runner moved to `adapters/claude_cli.py`).
