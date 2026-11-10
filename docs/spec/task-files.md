@@ -3,8 +3,12 @@
 ## Identity
 
 - Task id = file name without `.md`.
-- The id must match `[A-Za-z0-9._-]+`. Files with other names are skipped with a warning.
+- The id must match `[A-Za-z0-9._-]+` (and is not `.` or `..`): `TaskId` in the domain enforces it.
+  Files with other names are skipped by the markdown adapter (`rejected_names`) with a warning.
 - The id is used for the workspace folder, the sidecar file, and the branch `samba/<id>`.
+- This chapter describes the markdown adapter (`MarkdownTasks`) of the `Tasks` port (states, The
+  Tasks port): folders are the status, front matter, the sections and the sidecar are how the
+  `Task` aggregate is stored. Only the adapter reads or writes these files.
 
 ## Format
 
@@ -51,7 +55,7 @@ Free-form description written by the human: goal, context, acceptance criteria.
 - Samba writes to a task file **only when no agent process is running for it** (before dispatch
   and after the worker ends), using read-modify-write of the whole file, and only appends lines to
   `## Log` (creating the section if missing).
-- Orchestrator bookkeeping goes to the sidecar (states, Sidecar state), not to the markdown.
+- Orchestrator bookkeeping goes to the sidecar (states, Task fields and how the markdown adapter stores them), not to the markdown.
 - A command (cli) may also write a task file, only to append feedback to `## Feedback` of a task in
   a review folder, or to rewrite `## Questions` and append to `## Log` of a task in `question/`
   (`question answer`), where no agent runs. The exception is `task stop` and
@@ -59,6 +63,13 @@ Free-form description written by the human: goal, context, acceptance criteria.
   line to the new path (`stuck/` or `discarded/`), which the agent does not hold, and the
   orchestrator's next tick cancels the worker. A read-modify-write race with an agent that has
   already rewritten its file is accepted.
+- **Stale saves.** A worker holds its `Task` for the whole run while commands write the same record.
+  `save` therefore merges against the snapshot taken at load (architecture, The Tasks port and stale
+  saves): only changed fields are written, `## Log` and `## Feedback` entries are appended (the
+  agent's own lines stay), questions merge by id with the stored version winning, and a status
+  change is written only if the stored status is still the loaded one. The `.md` is rewritten only
+  when a field it owns changed, so a counter-only save touches the sidecar alone and the agent's
+  edits to its file are never overwritten by a stale save.
 - **Writing a planning result** (no agent runs at that point, running-claude, Planning run): Samba
   replaces the whole `## Plan` section with `## Plan` followed by the `plan` text (creating it if
   missing, before `## Log` if present, else at the end; it is never duplicated). A non-empty

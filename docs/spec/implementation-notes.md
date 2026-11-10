@@ -15,6 +15,6 @@
   writes, commits, exit code, `is_error`, missing result, hang, malformed lines, permission denials,
   missing session on resume) and records each invocation's argv for assertions.
 - Samba checks `claude auth status` at startup and refuses to start when logged out.
-- Test-only knob: `SAMBA_DEBUG_FIRE_DELAY=<seconds>` makes `fire` sleep between the rename and
-  the sidecar save, so black-box tests can make the race the repo lock covers (task-files, Write discipline) deterministic.
+- Test-only knob: `SAMBA_DEBUG_FIRE_DELAY=<seconds>` makes `MarkdownTasks.save` sleep between the rename and
+  the sidecar write (so a transition's save is slow, not `Machine`), so black-box tests can make the race the repo lock covers (task-files, Write discipline) deterministic.
 

@@ -37,7 +37,7 @@ Principles taken from harness engineering:
 
 Ideas not built yet are in backlog.
 
-- Remote trackers (Jira, Linear, GitHub Issues). The task store sits behind a small interface (states, Task store interface)
+- Remote trackers (Jira, Linear, GitHub Issues). The task store sits behind a small interface (states, The Tasks port)
   so one can be added later.
 - Multi-user use, web UI, HTTP API, remote/SSH workers.
 - Live reload of `WORKFLOW.md`. Restart to apply changes.

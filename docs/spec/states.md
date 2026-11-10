@@ -19,7 +19,7 @@ the status (`todo`, `running`, `review`) are both in the name. Moving a file is 
 | `discarded`    | Terminal: abandoned                                  | Human                      |
 
 `question` and `stuck` have no stage in their name. The sidecar records where the task came from
-(`last_stage`) and why it is there (`blocked_cause`), both in states, Sidecar state.
+(`last_stage`) and why it is there (`blocked_cause`), both in states, Task fields and how the markdown adapter stores them.
 
 `done` and `discarded` both remove the task's worktree and neither deletes its branch (orchestrator, Tick).
 
@@ -71,7 +71,7 @@ move (below). Guards are names evaluated in code: `deps_met` (on `dispatch_plan`
 `route_to_plan`: every id in `depends_on` is in `done/`; `done` means merged, so the worktree of the
 dependent task, branched from the base branch at dispatch, already contains the dependency's work;
 `discarded/` does not count; the guard gates planning as well as execution), `plan_required` (`require_plan`
-is set and the plan is not approved), `last_stage=plan|work|unset` (the sidecar field, states, Sidecar state; `unset` means none is recorded: a task from
+is set and the plan is not approved), `last_stage=plan|work|unset` (a `Task` field, states, Task fields and how the markdown adapter stores them; `unset` means none is recorded: a task from
 before the stage layout, or put into `question` or `stuck` by hand). For `question.answer` and
 `task.retry` with `last_stage` unset, either todo folder is accepted: the folder the human chose
 decides the stage and the row sets `last_stage` from it. With `last_stage` set, only the todo
@@ -146,21 +146,23 @@ an effect of `question.answer` and `task.retry`.
 
 ### Observed hand moves
 
-The sidecar records the last known folder as `state` (states, Sidecar state). Samba's own moves update it, so
-they are never mistaken for hand moves. Each tick, before anything else, every task file whose
-folder differs from its sidecar `state` is looked up as `(state, folder)` among the `human` rows
-(guards evaluated on the sidecar):
+The store records the last known status of each task (`MarkdownTasks`: `state` in the sidecar JSON,
+states, Task fields and how the markdown adapter stores them). Samba's own status-changing saves
+update it, so they are never mistaken for hand moves. The store reports hand moves through
+`observe_moves()` as `ObservedMove(task_id, src, dst)` events. Each tick, before anything else, every
+move is looked up as `(src, dst)` among the `human` rows (guards evaluated on the task):
 
-- A row exists: it is an **observed event**. Its effects are applied, the new `state` is saved and
+- A row exists: it is an **observed event**. Its effects are applied, the new status is saved
+  (`accept_move`) and
   `<event>: <src> -> <dst>: observed hand move` is appended to `## Log`. Only the event fires: no
   effect outside Samba happens (nothing is merged, no feedback text is written).
-- No row: an **illegal move**. The file is renamed back to its previous folder, the sidecar is not
+- No row: an **illegal move**. The file is renamed back to its previous folder (`revert_move`), the record is not
   changed, `illegal move: <src> -> <dst>, moved back to <src>` is appended to `## Log` and a
   warning goes to `samba.log`. Examples: `work-todo -> done`, `done -> work-todo`,
   `plan-todo -> work-todo` (a rejected plan cannot be approved by skipping the review),
   `question -> work-todo` for a task whose `last_stage` is `plan` (but not when `last_stage` is
   unset).
-- No `state` yet (first sight: a new task, an old sidecar, a missing sidecar): the current folder is
+- No recorded status yet (first sight: a new task, an old sidecar, a missing sidecar): the current folder is
   recorded and nothing fires.
 
 A hand move made while Samba was stopped is interpreted in the first tick after it starts, after
@@ -177,26 +179,35 @@ with a live agent is held in memory and appended when its worker ends.
 A task file deleted by the human has no table row: it is treated like `done` (agent stopped,
 worktree removed, branch kept, orchestrator, Tick).
 
-## Sidecar state (`state/<id>.json`)
+## Task fields and how the markdown adapter stores them
 
-Owned by Samba. Fields:
+The `Task` aggregate (`domain/task.py`) holds the fields below. `MarkdownTasks` keeps the bookkeeping
+ones in `state/<id>.json` (the sidecar) under the same names; the `task` key of the scenario JSON
+holds the same fields. The sidecar also carries two adapter-private values that are not on the
+aggregate: `state` (the last known folder, written only by a status-changing save, on first sight
+and by `accept_move`, so a stale save cannot hide a hand move; null on first sight) and `updated_at`.
+`queued_at` (float seconds) is set when the task enters a todo status and is the dispatch order key
+(orchestrator, Tick); for a hand-created task with no recorded value the adapter fills it from the
+file's modification time. Stale saves are merged by the adapter (architecture, The Tasks port and
+stale saves).
 
-- `state` (folder name or null): the last known folder of the task, written by every transition
-  and used to interpret hand moves (states, States). Null on first sight (recorded, nothing fires).
+Fields:
+
 - `session_id` (string or null): Claude Code session UUID, generated by Samba and written here
   before launch (running-claude, Invocation), used for `--resume`.
 - `attempts` (int): failed attempts so far (reset to 0 when the task reaches `work-review` or
   `plan-review`).
 - `not_before` (ISO timestamp or null): retry delay; the task is not dispatched before this.
 - `last_error` (string or null)
-- `last_outcome` (`done` | `blocked` | `failed` | `validate_failed` | `retrying` | `planned` |
-  null): what the last run ended with. It is a log of the run, never used to decide where a task
-  goes. Old sidecars may hold `approved`; it is ignored.
+- `last_outcome` (`done` | `blocked` | `failed` | `retrying` | `planned` | null): a closed set. What
+  the last run ended with. It is a log of the run, never used to decide where a task goes. An
+  unknown stored value (old sidecars may hold `approved` or `validate_failed`) reads as null.
 - `last_stage` (`plan` | `work` | null): the stage of the last dispatch, set at dispatch. Tells a
   task in `question` or `stuck`, or one that is stopped or retried, which stage it belongs to.
-- `blocked_cause` (string or null): why the task is in `question` or `stuck`. Values now:
+- `blocked_cause` (one of the causes below or null): why the task is in `question` or `stuck`.
   `question` (the agent asked), `budget`, `gave_up`, `dependency_discarded`, `dependency_cycle`
-  (orchestrator, Dependencies), `stopped` (a human ran `task stop`). It is an open string, not a closed set: later versions add values. Cleared at dispatch
+  (orchestrator, Dependencies), `stopped` (a human ran `task stop`). A closed set (`BlockedCause`);
+  an unknown stored value reads as null. Cleared at dispatch
   and by the rows that send a task back to a todo folder.
 - `plan_session_id` (string or null): the planning session, separate from `session_id`
   (running-claude, Planning run).
@@ -205,8 +216,8 @@ Owned by Samba. Fields:
 - `questions` (list of question records, states, Questions). A missing field means an empty list.
 - `turns_total` (int)
 - `cost_usd_total` (float), `input_tokens_total`, `output_tokens_total` (ints)
-- `branch` (string), `workspace` (absolute path)
-- `updated_at` (ISO timestamp)
+- `branch` (string), `workspace` (opaque string; an absolute path in the markdown adapter)
+- `queued_at` (float seconds, or absent)
 
 If the sidecar is missing or unreadable it is recreated empty (attempts 0, no session). Old sidecars
 load with defaults. Unknown fields (for example the removed `phase` of older versions) are ignored
@@ -254,7 +265,7 @@ database would replace the storage, not the model.
 
 | Record | Identifier | Written by | Stored in | Lifecycle |
 |---|---|---|---|---|
-| Task | the file name without `.md` (task-files, Identity) | the human creates it (`task new` or by hand); Samba moves it and appends to `## Log`; the agent edits its own file while it runs | `tasks/<state>/<id>.md`; bookkeeping in `state/<id>.json` (states, Sidecar state) | created in a todo folder, moves through the states (states, States), ends in `done` or `discarded`; files are never deleted by Samba |
+| Task | the file name without `.md` (task-files, Identity) | the human creates it (`task new` or by hand); Samba moves it and appends to `## Log`; the agent edits its own file while it runs | `tasks/<state>/<id>.md`; bookkeeping in `state/<id>.json` (states, Task fields and how the markdown adapter stores them) | created in a todo folder, moves through the states (states, States), ends in `done` or `discarded`; files are never deleted by Samba |
 | Run | `runs/<task>/NNN.jsonl`, `NNN` = the task's turn number (`turns_total`) | Samba, from the agent's stream (running-claude, Reading the stream) | `runs/<task>/NNN.jsonl` (and `validate-NNN.log`) | one per agent invocation, append-only, kept after the task ends |
 | Feedback round | `### Round N` under `## Feedback`, N = highest existing + 1 | the human, through `plan reject` and `work reject` | the task file | appended, never rewritten |
 | Question | `qN` per task, full name `<task>/qN` (states, Questions) | the agent asks (in its outcome), Samba records it; the human answers through `question answer` | the sidecar `questions` list; `## Questions` in the task file is a rendered view | `open`, then `answered` or `dismissed`; never deleted, ids never reused |
@@ -262,13 +273,18 @@ database would replace the storage, not the model.
 
 Questions are the first record with real ids; the others are documented as they are.
 
-## Task store interface
+## The Tasks port
 
-The rest of the system only uses these operations, so another tracker can replace the folder store
-later:
+The rest of the system only uses the `Tasks` port (architecture, Ports), so another tracker can
+replace the folder store later:
 
-- `list(state) -> [Task]`
-- `read(id) -> Task` (state, title, body, front matter)
-- `move(id, to_state)` (only used by `fire` and the illegal-move reversal, states, States)
-- `append_log(id, line)`
+- `get(id) -> Task | None`, `list(status) -> [Task]`, `ids(status?) -> [TaskId]` (cheap, no parsing)
+- `create(task)` (raises `TaskExists`)
+- `save(task) -> bool`: saves the whole aggregate with the stale-save merge (architecture, The Tasks
+  port and stale saves). A status change is a compare-and-move: it returns False and writes nothing
+  when the stored status is no longer the loaded one. `Machine.fire` is the only path that changes
+  `status`, besides the illegal-move reversal.
+- `observe_moves()`, `accept_move(move)`, `revert_move(move) -> bool`: hand moves (states, Observed hand moves)
+- `rejected_names(status)`: records skipped as invalid. `location(id)`: where the agent finds its
+  task (the prompt variable `task.path`). `prepare()`: readies the store or raises `StoreError`.
 
