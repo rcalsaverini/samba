@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+from samba.adapters.system import SystemClock
+from samba.ports import Clock
 from samba.tasks import (
     CAUSE_BUDGET,
     CAUSE_DEPENDENCY_CYCLE,
@@ -126,35 +128,35 @@ TRANSITIONS: tuple[Transition, ...] = (
 # ---- effects --------------------------------------------------------------------------------
 
 Ctx = dict[str, object]
-Effect = Callable[[Sidecar, Ctx], None]
+Effect = Callable[[Sidecar, Ctx, Clock], None]
 
 
 def _set(**kw: object) -> Effect:
-    def apply(side: Sidecar, _ctx: Ctx) -> None:
+    def apply(side: Sidecar, _ctx: Ctx, _clock: Clock) -> None:
         for k, v in kw.items():
             setattr(side, k, v)
     return apply
 
 
-def _attempts_inc(side: Sidecar, _ctx: Ctx) -> None:
+def _attempts_inc(side: Sidecar, _ctx: Ctx, _clock: Clock) -> None:
     side.attempts += 1
 
 
-def _error_from_ctx(side: Sidecar, ctx: Ctx) -> None:
+def _error_from_ctx(side: Sidecar, ctx: Ctx, _clock: Clock) -> None:
     side.last_error = str(ctx.get("error", ""))
 
 
-def _retry_delay(side: Sidecar, ctx: Ctx) -> None:
-    side.not_before = time.time() + float(str(ctx.get("delay", 0)))
+def _retry_delay(side: Sidecar, ctx: Ctx, clock: Clock) -> None:
+    side.not_before = clock.time() + float(str(ctx.get("delay", 0)))
 
 
-def _first_dispatch(side: Sidecar, _ctx: Ctx) -> None:
+def _first_dispatch(side: Sidecar, _ctx: Ctx, clock: Clock) -> None:
     if side.first_dispatched_at is None:
-        side.first_dispatched_at = time.time()
+        side.first_dispatched_at = clock.time()
 
 
-def _dismiss_open(side: Sidecar, _ctx: Ctx) -> None:
-    dismiss_open(side.questions)
+def _dismiss_open(side: Sidecar, _ctx: Ctx, clock: Clock) -> None:
+    dismiss_open(side.questions, clock)
 
 
 EFFECTS: dict[str, Effect] = {
@@ -210,8 +212,8 @@ def kv(event: str, **fields: object) -> str:
     return " ".join(parts)
 
 
-def log_line(message: str) -> str:
-    stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+def log_line(message: str, clock: Clock | None = None) -> str:
+    stamp = datetime.fromtimestamp((clock or SystemClock()).time()).strftime("%Y-%m-%d %H:%M")
     return f"- {stamp} samba: {message}"
 
 
@@ -244,28 +246,29 @@ def _own_guards_ok(row: Transition, side: Sidecar) -> bool:
                if g.startswith("last_stage="))
 
 
-def _apply(row: Transition, side: Sidecar, ctx: Ctx) -> bool:
+def _apply(row: Transition, side: Sidecar, ctx: Ctx, clock: Clock) -> bool:
     """Apply the row's effects. True if the question records changed."""
     before = json.dumps(side.questions)
     for name in row.effects:
-        EFFECTS[name](side, ctx)
+        EFFECTS[name](side, ctx, clock)
     side.state = row.dst
     return json.dumps(side.questions) != before
 
 
-def entry_line(row: Transition, message: str = "") -> str:
+def entry_line(row: Transition, message: str = "", clock: Clock | None = None) -> str:
     text = f"{row.event}: {row.src} -> {row.dst}"
-    return log_line(f"{text}: {message}" if message else text)
+    return log_line(f"{text}: {message}" if message else text, clock)
 
 
 class Machine:
     """Applies table rows. `fire` is the only way Samba moves a task."""
 
     def __init__(self, tasks: TaskStore, sidecars: SidecarStore,
-                 guard: GuardFn | None = None) -> None:
+                 guard: GuardFn | None = None, clock: Clock | None = None) -> None:
         self.tasks = tasks
         self.sidecars = sidecars
         self.guard = guard
+        self.clock: Clock = clock or SystemClock()
 
     def _guards_ok(self, row: Transition, task_id: str, side: Sidecar) -> bool:
         for g in filter(None, row.guard.split(",")):
@@ -295,11 +298,11 @@ class Machine:
             return False
         if DEBUG_FIRE_DELAY:
             time.sleep(DEBUG_FIRE_DELAY)  # test-only: widens the window the repo lock covers
-        changed = _apply(row, side, ctx)
+        changed = _apply(row, side, ctx, self.clock)
         self.sidecars.save(task_id, side)
         if changed:  # `## Questions` is a view of the records (spec: task-files, Write discipline)
             self.tasks.render_questions(task_id, side.questions)
-        self.tasks.append_log(task_id, entry_line(row, message))
+        self.tasks.append_log(task_id, entry_line(row, message, self.clock))
         log.info(kv("transition", task=task_id, transition=row.event, src=row.src, dst=row.dst,
                     actor=row.actor))
         return True
@@ -307,13 +310,13 @@ class Machine:
     def observe(self, task_id: str, row: Transition, side: Sidecar) -> str:
         """Apply a human row for a move already made by hand. Returns the `## Log` line, which
         the caller writes (or defers while an agent runs, spec: task-files, Write discipline)."""
-        changed = _apply(row, side, {})
+        changed = _apply(row, side, {}, self.clock)
         self.sidecars.save(task_id, side)
         if changed:  # the task came from question/, where no agent runs
             self.tasks.render_questions(task_id, side.questions)
         log.info(kv("transition", task=task_id, transition=row.event, src=row.src, dst=row.dst,
                     actor=row.actor, observed=True))
-        return entry_line(row, "observed hand move")
+        return entry_line(row, "observed hand move", self.clock)
 
 
 # ---- rendering ------------------------------------------------------------------------------

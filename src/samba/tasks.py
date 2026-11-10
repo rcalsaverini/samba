@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import os
 import re
-import time
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from samba.adapters.system import SystemClock
 from samba.config import ConfigError, split_front_matter
+from samba.ports import Clock
 
 State = Literal["plan-todo", "plan-running", "plan-review", "work-todo", "work-running",
                 "work-review", "question", "stuck", "done", "discarded"]
@@ -265,8 +266,8 @@ def append_to_log_section(text: str, line: str) -> str:
 Question = dict[str, object]
 
 
-def now_iso() -> str:
-    return datetime.now().astimezone().isoformat(timespec="seconds")
+def now_iso(clock: Clock) -> str:
+    return datetime.fromtimestamp(clock.time()).astimezone().isoformat(timespec="seconds")
 
 
 def qint(q: Question, key: str) -> int:
@@ -298,7 +299,8 @@ def open_questions(questions: list[Question]) -> list[Question]:
     return [q for q in questions if q.get("status") == "open"]
 
 
-def add_questions(questions: list[Question], stage: str, items: list[tuple[str, str]]) -> None:
+def add_questions(questions: list[Question], stage: str, items: list[tuple[str, str]],
+                  clock: Clock) -> None:
     """Append open records for one blocking event: ids continue after the highest ever used,
     the round is one more than the latest."""
     n = max((question_number(q) for q in questions), default=0)
@@ -306,17 +308,17 @@ def add_questions(questions: list[Question], stage: str, items: list[tuple[str, 
     for text, context in items:
         n += 1
         questions.append({"id": f"q{n}", "round": rnd, "stage": stage, "status": "open",
-                          "text": text, "context": context, "asked_at": now_iso(),
+                          "text": text, "context": context, "asked_at": now_iso(clock),
                           "answer": None, "answered_at": None})
 
 
-def answer_question(q: Question, text: str) -> None:
-    q["status"], q["answer"], q["answered_at"] = "answered", text, now_iso()
+def answer_question(q: Question, text: str, clock: Clock) -> None:
+    q["status"], q["answer"], q["answered_at"] = "answered", text, now_iso(clock)
 
 
-def dismiss_open(questions: list[Question]) -> None:
+def dismiss_open(questions: list[Question], clock: Clock) -> None:
     for q in open_questions(questions):
-        q["status"], q["answered_at"] = "dismissed", now_iso()
+        q["status"], q["answered_at"] = "dismissed", now_iso(clock)
 
 
 def render_questions(questions: list[Question]) -> str:
@@ -370,8 +372,9 @@ class Sidecar:
 
 
 class SidecarStore:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, clock: Clock | None = None) -> None:
         self.root = root
+        self.clock: Clock = clock or SystemClock()
 
     def load(self, task_id: str) -> Sidecar:
         p = self.root / f"{task_id}.json"
@@ -392,7 +395,7 @@ class SidecarStore:
 
     def save(self, task_id: str, sidecar: Sidecar) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
-        sidecar.updated_at = time.time()
+        sidecar.updated_at = self.clock.time()
         p = self.root / f"{task_id}.json"
         tmp = p.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(asdict(sidecar), indent=2) + "\n")

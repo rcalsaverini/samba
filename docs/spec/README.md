@@ -13,5 +13,6 @@ The Samba specification is split into the chapters below, one file per topic. Ch
 - [running-claude.md](running-claude.md): read when touching how `claude` is invoked, the stream, the outcome schemas, the planning run, config isolation or the verified Claude Code behavior.
 - [observability.md](observability.md): read when touching logs and what an operator can see.
 - [cli.md](cli.md): read when adding or changing a CLI command or its output.
+- [architecture.md](architecture.md): read when touching the layers, the dependency rule, ports or adapters.
 - [implementation-notes.md](implementation-notes.md): read for implementation details.
 - [backlog.md](backlog.md): read to see ideas not built yet.
