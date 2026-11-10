@@ -451,6 +451,25 @@ def test_task_new_creates_plan_todo_task(sb: Sandbox) -> None:
     assert (sb.tasks_dir / "plan-todo" / "add-csv-export-2.md").exists()
 
 
+def test_task_new_writes_front_matter_and_title_exactly(sb: Sandbox) -> None:
+    res = sb.run("task", "new", "Add CSV export!", "--priority", "2", "--body", "Some text.\n")
+    assert res.returncode == 0, res.stderr
+    assert (sb.tasks_dir / "plan-todo" / "add-csv-export.md").read_text() == (
+        "---\npriority: 2\n---\n# Add CSV export!\n\nSome text.\n")
+
+
+def test_agents_edit_of_its_own_file_survives_the_orchestrators_writes(sb: Sandbox) -> None:
+    sb.add_task("t1")
+    sb.steps("t1", {"task_log": "AGENT NOTE", "summary": "ok"})
+    sb.run_idle()
+    assert sb.state_of("t1") == "work-review"
+    text = sb.task_text("t1")
+    assert "AGENT NOTE" in text
+    assert "dispatch_work: work-todo -> work-running" in text and "work-running -> work-review" in text
+    side = sb.sidecar("t1")
+    assert side["turns_total"] == 1 and side["last_outcome"] == "done"
+
+
 def test_task_list_shows_cause_and_cost(sb: Sandbox) -> None:
     sb.add_task("t1")
     sb.steps("t1", {"outcome": "blocked", "cost": 0.5})

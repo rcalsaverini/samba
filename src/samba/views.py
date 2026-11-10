@@ -6,7 +6,7 @@ import time
 from collections.abc import Iterable
 
 from samba.domain.deps import evaluate
-from samba.domain.questions import open_questions, qstr
+from samba.domain.legacy_questions import open_questions, qstr
 from samba.domain.sidecar import Sidecar
 from samba.domain.states import STATES, State
 from samba.domain.transitions import human_events

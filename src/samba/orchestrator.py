@@ -28,7 +28,7 @@ from samba.prompts import (
     validate_note,
 )
 from samba.domain.deps import evaluate
-from samba.domain.questions import Question, open_questions, round_pairs
+from samba.domain.legacy_questions import Question, open_questions, round_pairs
 from samba.domain.sidecar import Sidecar
 from samba.domain.states import STATES, Stage, State, running_of, todo_of
 from samba.domain.transitions import human_row, log_line

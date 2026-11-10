@@ -23,7 +23,7 @@ from samba.adapters.system import SystemClock
 from samba.config import Config, ConfigError, load_config
 from samba.lock import repo_lock
 from samba.orchestrator import Orchestrator, StartupError
-from samba.domain.questions import (
+from samba.domain.legacy_questions import (
     Question,
     answer_question,
     open_questions,

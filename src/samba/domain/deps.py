@@ -5,11 +5,13 @@ Pure: `evaluate` reads a snapshot of the tasks, it never touches a store.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
 from samba.domain.states import State
+from samba.domain.task import Task
+from samba.domain.task_id import TaskId
 
 
 @dataclass(frozen=True)
@@ -28,6 +30,25 @@ class TaskRef:
 
 
 Snapshot = Mapping[str, TaskRef]  # task id -> ref; an id that is absent is an unknown task
+
+
+def deps_snapshot(task: Task, get: Callable[[TaskId], Task | None]) -> dict[str, TaskRef]:
+    """The task and everything reachable through `depends_on`, for `evaluate`. Ids `get` does not
+    know are left out (unknown). A done task's own dependencies are not followed: they cannot
+    take part in a cycle."""
+    snap: dict[str, TaskRef] = {task.id: TaskRef(task.id, task.status, task.depends_on)}
+    stack = list(task.depends_on)
+    while stack:
+        dep_id = stack.pop()
+        if dep_id in snap:
+            continue
+        dep = get(dep_id)
+        if dep is None:
+            continue
+        snap[dep_id] = TaskRef(dep.id, dep.status, dep.depends_on)
+        if dep.status != "done":
+            stack.extend(dep.depends_on)
+    return snap
 
 
 def _in_cycle(snapshot: Snapshot, task: TaskRef) -> bool:

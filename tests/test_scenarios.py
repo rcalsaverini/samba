@@ -37,7 +37,7 @@ from samba.domain.policy import (
     session_reset_needed,
     should_reflect,
 )
-from samba.domain.questions import Question
+from samba.domain.legacy_questions import Question
 from samba.domain.sidecar import Sidecar
 from samba.domain.states import State
 from samba.domain.transitions import (

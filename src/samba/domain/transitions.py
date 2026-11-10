@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from samba.domain.questions import dismiss_open
+from samba.domain.legacy_questions import dismiss_open
 from samba.domain.sidecar import Sidecar
 from samba.domain.states import (
     CAUSE_BUDGET,

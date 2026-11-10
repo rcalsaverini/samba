@@ -11,13 +11,20 @@ STATES: tuple[State, ...] = ("plan-todo", "plan-running", "plan-review", "work-t
                              "discarded")
 Stage = Literal["plan", "work"]
 
-# Values of Sidecar.blocked_cause. Plain strings, not a closed type: more are added later.
-CAUSE_QUESTION = "question"
-CAUSE_BUDGET = "budget"
-CAUSE_GAVE_UP = "gave_up"
-CAUSE_STOPPED = "stopped"
-CAUSE_DEPENDENCY_DISCARDED = "dependency_discarded"
-CAUSE_DEPENDENCY_CYCLE = "dependency_cycle"
+# Closed sets (a spec decision of the Task aggregate: an unknown stored value reads as None).
+BlockedCause = Literal["question", "budget", "gave_up", "stopped", "dependency_discarded",
+                       "dependency_cycle"]
+BLOCKED_CAUSES: tuple[BlockedCause, ...] = ("question", "budget", "gave_up", "stopped",
+                                            "dependency_discarded", "dependency_cycle")
+LastOutcome = Literal["done", "blocked", "failed", "retrying", "planned"]
+LAST_OUTCOMES: tuple[LastOutcome, ...] = ("done", "blocked", "failed", "retrying", "planned")
+
+CAUSE_QUESTION: BlockedCause = "question"
+CAUSE_BUDGET: BlockedCause = "budget"
+CAUSE_GAVE_UP: BlockedCause = "gave_up"
+CAUSE_STOPPED: BlockedCause = "stopped"
+CAUSE_DEPENDENCY_DISCARDED: BlockedCause = "dependency_discarded"
+CAUSE_DEPENDENCY_CYCLE: BlockedCause = "dependency_cycle"
 
 
 def todo_of(stage: Stage) -> State:
