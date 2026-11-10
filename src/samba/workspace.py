@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from samba.config import Config
+from samba.config import Hooks, Layout
 from samba.proc import git, run_shell
 
 
@@ -24,9 +24,11 @@ def branch_name(task_id: str) -> str:
 
 
 class Workspaces:
-    def __init__(self, config: Config) -> None:
-        self.config = config
-        self.root = (config.workspaces_root / repo_key(config.repo)).resolve()
+    def __init__(self, layout: Layout, hooks: Hooks, shell: list[str]) -> None:
+        self.layout = layout
+        self.hooks = hooks
+        self.shell = shell
+        self.root = (layout.workspaces_root / repo_key(layout.repo)).resolve()
 
     def path(self, task_id: str) -> Path:
         p = (self.root / task_id).resolve()
@@ -45,19 +47,19 @@ class Workspaces:
         if path.is_dir():
             return path, False
         self.root.mkdir(parents=True, exist_ok=True)
-        repo = self.config.repo
+        repo = self.layout.repo
         branch = branch_name(task_id)
         exists = await git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
         if exists.ok:
             res = await git(repo, "worktree", "add", str(path), branch)
         else:
             res = await git(repo, "worktree", "add", "-b", branch, str(path),
-                            self.config.base_branch)
+                            self.layout.base_branch)
         if not res.ok:
             raise WorkspaceError(f"git worktree add failed: {res.output.strip()[-500:]}")
-        if self.config.after_create:
-            hook = await run_shell(self.config.shell, self.config.after_create, path,
-                                   self.config.hooks_timeout_s)
+        if self.hooks.after_create:
+            hook = await run_shell(self.shell, self.hooks.after_create, path,
+                                   self.hooks.timeout_s)
             if not hook.ok:
                 await self.remove(task_id)
                 why = "timed out" if hook.timed_out else f"exit {hook.code}"
@@ -69,7 +71,7 @@ class Workspaces:
         path = self.path(task_id)
         if not path.exists():
             return
-        res = await git(self.config.repo, "worktree", "remove", "--force", str(path))
+        res = await git(self.layout.repo, "worktree", "remove", "--force", str(path))
         if not res.ok and path.exists():
             raise WorkspaceError(f"git worktree remove failed: {res.output.strip()[-500:]}")
-        await git(self.config.repo, "worktree", "prune")
+        await git(self.layout.repo, "worktree", "prune")

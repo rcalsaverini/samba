@@ -33,7 +33,24 @@ class ConfigError(Exception):
 
 
 @dataclass(frozen=True)
-class ClaudeConfig:
+class Policy:
+    """Limits and scheduling: turns, retries, cost, concurrency, polling."""
+
+    max_turns: int
+    max_attempts: int
+    retry_base_s: float
+    max_retry_backoff_s: float
+    max_cost_usd_per_task: float | None
+    reflect_on_give_up: bool
+    require_plan: bool
+    max_concurrent: int
+    poll_interval_s: float
+
+
+@dataclass(frozen=True)
+class AgentSettings:
+    """How the `claude` CLI is run, for work (`claude.*`) and for planning (`planning.*`)."""
+
     command: list[str]
     model: str | None
     permission_mode: str
@@ -42,39 +59,52 @@ class ClaudeConfig:
     isolate_user_config: bool
     turn_timeout_s: float
     stall_timeout_s: float
+    planning_model: str | None = None
+    planning_allow: list[str] = field(default_factory=lambda: list(DEFAULT_PLANNING_ALLOW))
 
 
 @dataclass(frozen=True)
-class PlanningConfig:
-    require_plan: bool = False
-    model: str | None = None
-    allow: list[str] = field(default_factory=lambda: list(DEFAULT_PLANNING_ALLOW))
+class Layout:
+    """Where things live: the repository, the Samba directory, the worktrees, the base branch."""
 
-
-@dataclass(frozen=True)
-class Config:
     repo: Path
     samba_dir: Path
     workspaces_root: Path
     base_branch: str
-    poll_interval_s: float
+
+
+@dataclass(frozen=True)
+class Prompts:
+    """The WORKFLOW.md body and the per-key prompt overrides."""
+
+    template: str
+    overrides: dict[str, str] = field(default_factory=lambda: {})
+
+
+@dataclass(frozen=True)
+class Validation:
+    command: str | None
+    timeout_s: float
+    tail_lines: int
     shell: list[str]
-    max_concurrent: int
-    max_turns: int
-    max_attempts: int
-    retry_base_s: float
-    max_retry_backoff_s: float
-    max_cost_usd_per_task: float | None
-    reflect_on_give_up: bool
+
+
+@dataclass(frozen=True)
+class Hooks:
     after_create: str | None
-    hooks_timeout_s: float
-    validate_command: str | None
-    validate_timeout_s: float
-    validate_tail_lines: int
-    claude: ClaudeConfig
-    prompt_template: str
-    prompts: dict[str, str] = field(default_factory=lambda: {})
-    planning: PlanningConfig = field(default_factory=PlanningConfig)
+    timeout_s: float
+
+
+@dataclass(frozen=True)
+class Config:
+    """The composite of the parts above; each consumer takes only the part it needs."""
+
+    policy: Policy
+    agent: AgentSettings
+    layout: Layout
+    prompts: Prompts
+    validation: Validation
+    hooks: Hooks
     warnings: list[str] = field(default_factory=lambda: [])
 
 
@@ -227,7 +257,7 @@ def load_config(repo: Path) -> Config:
         if value:
             prompts[key] = value
 
-    claude_cfg = ClaudeConfig(
+    agent = AgentSettings(
         command=command,
         model=claude.string("model", None),
         permission_mode=permission_mode,
@@ -236,40 +266,39 @@ def load_config(repo: Path) -> Config:
         isolate_user_config=claude.boolean("isolate_user_config", True),
         turn_timeout_s=claude.number("turn_timeout_s", 3600),
         stall_timeout_s=claude.number("stall_timeout_s", 300),
+        planning_model=planning_r.string("model", None),
+        planning_allow=planning_r.string_list("allow", DEFAULT_PLANNING_ALLOW),
     )
-
-    planning_cfg = PlanningConfig(
-        require_plan=planning_r.boolean("require_plan", False),
-        model=planning_r.string("model", None),
-        allow=planning_r.string_list("allow", DEFAULT_PLANNING_ALLOW),
-    )
-
-    config = Config(
-        repo=repo,
-        samba_dir=samba_dir,
-        workspaces_root=workspaces_root,
-        base_branch=r.string("base_branch", "main") or "main",
-        poll_interval_s=r.number("poll_interval_s", 10),
-        shell=shell,
-        max_concurrent=r.integer("max_concurrent", 2),
+    policy = Policy(
         max_turns=r.integer("max_turns", 10),
         max_attempts=r.integer("max_attempts", 3),
         retry_base_s=r.number("retry_base_s", 10),
         max_retry_backoff_s=r.number("max_retry_backoff_s", 300),
         max_cost_usd_per_task=r.optional_number("max_cost_usd_per_task"),
         reflect_on_give_up=r.boolean("reflect_on_give_up", True),
-        after_create=hooks.string("after_create", None),
-        hooks_timeout_s=hooks.number("timeout_s", 300),
-        validate_command=validate.string("command", None),
-        validate_timeout_s=validate.number("timeout_s", 900),
-        validate_tail_lines=validate.integer("output_tail_lines", 200),
-        claude=claude_cfg,
-        prompt_template=body.strip(),
-        prompts=prompts,
-        planning=planning_cfg,
+        require_plan=planning_r.boolean("require_plan", False),
+        max_concurrent=r.integer("max_concurrent", 2),
+        poll_interval_s=r.number("poll_interval_s", 10),
+    )
+    layout = Layout(repo=repo, samba_dir=samba_dir, workspaces_root=workspaces_root,
+                    base_branch=r.string("base_branch", "main") or "main")
+    validation = Validation(
+        command=validate.string("command", None),
+        timeout_s=validate.number("timeout_s", 900),
+        tail_lines=validate.integer("output_tail_lines", 200),
+        shell=shell,
+    )
+    config = Config(
+        policy=policy,
+        agent=agent,
+        layout=layout,
+        prompts=Prompts(template=body.strip(), overrides=prompts),
+        validation=validation,
+        hooks=Hooks(after_create=hooks.string("after_create", None),
+                    timeout_s=hooks.number("timeout_s", 300)),
     )
     for reader in (r, hooks, validate, claude, prompts_r, planning_r):
         config.warnings.extend(f"unknown config key ignored: {k}" for k in reader.unknown())
-    if not config.prompt_template:
+    if not config.prompts.template:
         raise ConfigError("WORKFLOW.md has an empty prompt body")
     return config
