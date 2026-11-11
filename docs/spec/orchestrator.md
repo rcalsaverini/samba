@@ -1,5 +1,12 @@
 # Orchestrator loop
 
+Who owns what (ADR 0015, step 1; the `architecture` chapter, Orchestrator parts): `Startup`
+(`app/startup.py`) owns the startup checks and the recovery, `Tick` (`app/tick.py`) the tick,
+`RunTask` (`app/run_task.py`, with `PromptBuilder` and `Finisher`) the run of one task and the
+retry, reflect or give-up decision, and `Guard` the external transition guards. The `Orchestrator`
+class (`entrypoints/orchestrator.py`) still holds the poll loop and the asyncio workers; step 2
+moves the workers to `Workers` and leaves a thin loop. The behavior below does not change.
+
 ## Startup
 
 1. Load and validate `WORKFLOW.md` (workflow-config). Fail fast on errors.
