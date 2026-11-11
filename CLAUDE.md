@@ -72,8 +72,13 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `app/tick.py`: `Tick` (observe hand moves, reconcile running workers, clean up workspaces,
     dispatch with dependency rows), `Notes` (held `## Log` lines) and `Running`; starts workers
     through a `spawn` callback.
-  - `entrypoints/orchestrator.py`: poll loop and asyncio workers; delegates the rules to `app/`; split
-    further by the next task (ADR 0015, step 2: `Workers` and a thin loop). It builds the parts below.
+  - `entrypoints/orchestrator.py`: the thin `Orchestrator` (about 100 lines, no rule; guarded by
+    `tests/test_architecture.py`): builds the parts below and runs startup, then tick and sleep,
+    `Workers.shutdown` in a `finally`, exit when idle (ADR 0015).
+  - `entrypoints/workers.py`: `Workers`: `spawn` (the callback of `Tick`), the `running` dict and
+    `Notes` shared with `Tick`, the cancelled-worker handling (journal `stopped`, recover on
+    shutdown, workspace removal when moved), `run_task.crashed` for other exceptions, `shutdown`,
+    `wait_all` (tests).
   - `app/guard.py` (`Guard`: `plan_required`, `deps_met`), `app/startup.py` (`Startup` and
     `StartupError`: checks, config warnings, recovery), `app/run_task.py` (`RunTask`: the run of one
     task), `app/prompt_builder.py` (`PromptBuilder`: variables, prompts, `TurnSetup`), `app/finish.py`

@@ -12,7 +12,7 @@ lives.
 | Use cases | `src/samba/app/` | The operations of the orchestrator and the commands, written against ports. |
 | Ports | `src/samba/domain/ports.py` | Protocols for everything the core needs from the outside world. They sit at the domain level: the domain's `Task` depends on the clock port. |
 | Adapters | `src/samba/adapters/` | Implementations of the ports: system clock, files, git, the `claude` runner, the terminal. |
-| Entry points | `src/samba/entrypoints/` | What starts Samba: `cli.py` (the thin argparse adapter), `table.py` (the table printer of the CLI) and `orchestrator.py` (the poll loop and the asyncio workers; ADR 0015 splits it in two steps, see Orchestrator parts). They call `bootstrap`, the use cases and the ports, never an adapter. |
+| Entry points | `src/samba/entrypoints/` | What starts Samba: `cli.py` (the thin argparse adapter), `table.py` (the table printer of the CLI) and `workers.py` (the asyncio workers) and `orchestrator.py` (the wiring and the poll loop; see Orchestrator parts). They call `bootstrap`, the use cases and the ports, never an adapter. |
 
 The root of `src/samba/` holds only `__init__.py`, `__main__.py`, `bootstrap.py` and the four
 packages `domain`, `app`, `adapters` and `entrypoints`. `bootstrap.py` is the one module allowed to
@@ -48,7 +48,7 @@ case, prints the result's messages and maps its kind to the exit code (`ok` 0, `
 | `Lock` | `acquire(blocking) -> context manager yielding held` | `FileLock` in `adapters/file_lock.py` (the `.samba/lock` flock; replaces `lock.py` and `RepoLock`) |
 | `Vcs` | All async, locations opaque text: `branch_name(task_id)`, `workspace_location(task_id)`, `ensure_workspace(task_id) -> Workspace(location, created)` (runs the `after_create` hook, removes the worktree if it fails, raises `WorkspaceError`), `remove_workspace(task_id)`, `existing_workspaces()`, `repository_problem() -> str \| None`, `preflight(branch)`, `commit_count(branch)`, `begin_merge(branch, message) -> MergeAttempt(status, detail, restore_point)` (`pending`, `already`, `conflict`, `error`; conflict and error are already undone), `abort_merge(restore_point)`, `commit_merge(restore_point) -> CommitResult(ok, detail)`, `checkout_location()`, `exclude_samba_dir()`. The restore point is returned, so the adapter keeps no merge state | `GitVcs` in `adapters/git_vcs.py` (replaces `workspace.py`, `merge.py`, `GitMerger` and `GitWorkspaces`). `AcceptWork` (async, one `asyncio.run` in `entrypoints/cli.py`) runs the merge sequence over it: `begin_merge`, the validator in `checkout_location()`, then `abort_merge` or `commit_merge` |
 | `Validator` | `run(location, log_name) -> ValidationResult` (async; stores the full output under the runs directory; `domain/validation.py` holds the result and the two tail formats `agent_tail` and `accept_tail`) | `ShellValidator` in `adapters/shell_validator.py`; `TurnFlow` and `AcceptWork` call it, and it creates the directories of the logs it writes |
-| `Journal` | `debug`, `info`, `warning`, `exception(event, **fields)`; `exception` adds the traceback | `LogJournal` in `adapters/log_journal.py` (`samba.log` at DEBUG, stderr at INFO, the `kv` format), `NullJournal` for commands that write no log. Injected into `Machine`, `Tick`, `TurnFlow`, `Startup`, `RunTask`, `Finisher`, `Orchestrator` and `ClaudeCliRunner`; `bootstrap.build(repo, for_run=True)` builds the `LogJournal` for `samba run` only |
+| `Journal` | `debug`, `info`, `warning`, `exception(event, **fields)`; `exception` adds the traceback | `LogJournal` in `adapters/log_journal.py` (`samba.log` at DEBUG, stderr at INFO, the `kv` format), `NullJournal` for commands that write no log. Injected into `Machine`, `Tick`, `TurnFlow`, `Startup`, `RunTask`, `Finisher`, `Workers`, `Orchestrator` and `ClaudeCliRunner`; `bootstrap.build(repo, for_run=True)` builds the `LogJournal` for `samba run` only |
 | `Adrs` | `parse_number(text)`, `load_all() -> list[AdrInfo]`, `find(number)`, `set_status(number, verb, allowed_from, status) -> files`, `supersede(old, new) -> files`; every method may raise `AdrError(message, code)` (`code` 1 refused, 2 usage); `AdrInfo` carries `file` as text | `FileAdrs` in `adapters/adr_files.py` (wraps `adapters/adr_format.py`) |
 | `InteractiveSession` | `run(LaunchSpec(argv, cwd)) -> exit code`, not async; runs the program attached to the person's terminal. Raises `LaunchError(message)` when it cannot start (for example `claude` not found). `LaunchSpec` is in `domain/launch.py` | `TerminalSession` in `adapters/interactive_session.py`: `subprocess.run` with the terminal inherited, SIGINT ignored in Samba while the child runs. It reads no stream-json and is not an `AgentRunner`. Used by `StartExplore` (`app/explore.py`) |
 | `Tasks` | `get(id)`, `list(status)`, `ids(status?)`, `create(task)`, `save(task) -> bool`, `observe_moves()`, `accept_move(move)`, `revert_move(move)`, `rejected_names(status)`, `location(id)`, `prepare()` | `MarkdownTasks` in `adapters/markdown_tasks.py`; the in-memory `FakeTasks` for tests is `tests/fake_tasks.py` |
@@ -141,7 +141,7 @@ the repo. Bootstrap hands `Locations` only to `GitVcs` (which also takes the bas
 and the shell), `FileLock`, `MarkdownTasks`, `LogJournal` and `ClaudeCliRunner`.
 
 The terminal, git (workspaces and merge), validation, the lock, the journal and the ADR files are
-behind ports. `entrypoints/orchestrator.py` (poll loop, workers) imports no adapter, `logging`,
+behind ports. `entrypoints/orchestrator.py` (wiring, poll loop) and `entrypoints/workers.py` import no adapter, `logging`,
 `subprocess` or `pathlib`; the decisions are in `app/`. What is not behind a port:
 
 - Subprocess helpers: `adapters/process.py`, used only inside adapters.
@@ -151,9 +151,8 @@ behind ports. `entrypoints/orchestrator.py` (poll loop, workers) imports no adap
 
 ## Orchestrator parts
 
-ADR 0015 splits the orchestrator in two steps. Step 1 (done): `entrypoints/orchestrator.py` still
-holds the poll loop and the asyncio workers (`_spawn`, `work`, `shutdown`, including what happens to
-a cancelled worker), but every rule is delegated to `app/`:
+ADR 0015 splits the orchestrator into named parts. Every rule is in `app/`; the entry point only
+wires and supervises:
 
 | Part | Module | Owns |
 |---|---|---|
@@ -163,9 +162,11 @@ a cancelled worker), but every rule is delegated to `app/`:
 | `PromptBuilder` | `app/prompt_builder.py` | the prompt variables, system prompt, named prompts and the `TurnSetup` of a stage |
 | `Finisher` | `app/finish.py` | the finishing transition, and the retry, reflect or give-up decision after a failed attempt |
 
-`Tick` is unchanged. Step 2 (a separate task) adds `entrypoints/workers.py` (`Workers`, the asyncio
-supervision) and leaves `Orchestrator` as a thin loop of about a hundred lines that wires startup,
-tick and sleep. `Startup` and `RunTask` are tested with the fakes and without a loop
+| `Tick` | `app/tick.py` | observe hand moves, reconcile running workers, clean up workspaces, dispatch; starts workers through a `spawn` callback |
+| `Workers` | `entrypoints/workers.py` | `spawn`, the `running` dict shared with `Tick` (and the same `Notes`), the asyncio task of each worker, the cancelled worker (journal `stopped`, `recover` on shutdown, workspace removal when moved), `crashed` for any other exception, `shutdown`, `wait_all` for tests |
+| `Orchestrator` | `entrypoints/orchestrator.py` | builds the parts and runs: startup, then tick and sleep until stopped, `Workers.shutdown` in a `finally`, exit when idle. About a hundred lines, no rule |
+
+`Startup` and `RunTask` are tested with the fakes and without a loop
 (`tests/test_app_startup.py`, `tests/test_app_run_task.py`); the lifecycle scenarios still run
 over the `Orchestrator`.
 
@@ -186,11 +187,13 @@ over the `Orchestrator`.
 - the root of `src/samba/` holds only `__init__.py`, `__main__.py`, `bootstrap.py` and the packages
   `domain`, `app`, `adapters` and `entrypoints`; `cli.py`, `views.py`, `orchestrator.py` and
   `compose.py` no longer exist there, and every `.py` under `entrypoints/` (`__init__.py`, `cli.py`,
-  `table.py`, `orchestrator.py`) is accounted for;
+  `table.py`, `orchestrator.py`, `workers.py`) is accounted for;
 - no module of `domain/`, `app/` or `adapters/` imports `samba.bootstrap` or `samba.entrypoints`;
-- `entrypoints/orchestrator.py` imports no adapter, `workspace`, `merge`, `lock`, `logging`,
-  `os`, `subprocess` or `pathlib`;
-- the orchestrator, the use cases and the domain make no direct `time.time`, `time.monotonic`,
+- `entrypoints/orchestrator.py` and `entrypoints/workers.py` import no adapter, `workspace`,
+  `merge`, `lock`, `logging`, `os`, `subprocess` or `pathlib`;
+- `entrypoints/orchestrator.py` is at most about 110 lines and imports none of `domain.policy`,
+  `domain.prompts`, `domain.template` (it holds no rule);
+- the orchestrator, the workers, the use cases and the domain make no direct `time.time`, `time.monotonic`,
   `datetime.now` or `uuid` call, and the code of `domain/` and `app/` (comments stripped) matches
   none of `Path`, `mtime`, `sidecar`, `front matter`;
 - only `bootstrap.py` constructs `MarkdownTasks`, no module of `entrypoints/` imports an
