@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
-import logging
 import re
 from pathlib import Path
 
@@ -16,12 +15,12 @@ from samba.app.tick import Notes, Running, Tick, running_folder, stage_of
 from samba.app.turn import TurnFlow, TurnSetup
 from samba.config import Config
 from samba.domain.policy import Fail, Retry, RetryPolicy, should_reflect
-from samba.logfmt import kv
 from samba.ports import (
     AgentRunner,
     Clock,
     IdGenerator,
-    RepoLock,
+    Journal,
+    Lock,
     StoreError,
     Tasks,
     WorkspaceError,
@@ -44,8 +43,6 @@ from samba.domain.task_id import TaskId
 from samba.template import TemplateError, render
 from samba.workspace import branch_name
 
-log = logging.getLogger("samba")
-
 
 class StartupError(Exception):
     pass
@@ -61,8 +58,10 @@ class WorkerWorkspaces(Workspaces, Protocol):
 
 class Orchestrator:
     def __init__(self, config: Config, clock: Clock, ids: IdGenerator, agent: AgentRunner,
-                 tasks: Tasks, workspaces: WorkerWorkspaces, lock: RepoLock) -> None:
+                 tasks: Tasks, workspaces: WorkerWorkspaces, lock: Lock,
+                 journal: Journal) -> None:
         """Every port is passed in; the composition root (`samba.compose`) builds them."""
+        self.journal = journal
         self.config = config
         self.policy = config.policy
         self.layout = config.layout
@@ -75,13 +74,13 @@ class Orchestrator:
         self.runs_dir = self.sym / "runs"
         self.agent: AgentRunner = agent
         self.workspaces = workspaces
-        self.turns = TurnFlow(self.agent, self.ids, self.tasks, self.clock)
+        self.turns = TurnFlow(self.agent, self.ids, self.tasks, self.clock, journal)
         self.running: dict[str, Running] = {}
-        self.machine = Machine(self.tasks, self.clock, self._guard)
+        self.machine = Machine(self.tasks, self.clock, journal, self._guard)
         self.notes = Notes(self.tasks, self.running)  # `## Log` lines held while an agent runs
         self.ticker = Tick(self.tasks, self.clock, lock, self.workspaces,
                            self.machine, self.policy.max_concurrent, self.running, self.notes,
-                           self._spawn)
+                           self._spawn, journal)
 
     def _guard(self, name: str, task: Task) -> bool:
         if name == "plan_required":
@@ -114,7 +113,7 @@ class Orchestrator:
             raise StartupError(
                 f"claude auth status says not logged in; run `claude auth login`. {readiness.detail}")
         for w in self.config.warnings:
-            log.warning(kv("config_warning", message=w))
+            self.journal.warning("config_warning", message=w)
 
         self.runs_dir.mkdir(parents=True, exist_ok=True)
         await self._exclude_samba_dir()
@@ -122,7 +121,7 @@ class Orchestrator:
         for stage in ("plan", "work"):
             for task in self.tasks.list(running_of(stage)):
                 if self.machine.fire(task.id, "recover", message="recovered at startup"):
-                    log.info(kv("recovered", task=task.id, to=todo_of(stage)))
+                    self.journal.info("recovered", task=task.id, to=todo_of(stage))
 
     async def _exclude_samba_dir(self) -> None:
         try:
@@ -146,13 +145,14 @@ class Orchestrator:
 
     async def run(self, exit_when_idle: bool = False) -> None:
         await self.startup()
-        log.info(kv("started", repo=self.layout.repo, max_concurrent=self.policy.max_concurrent))
+        self.journal.info("started", repo=self.layout.repo,
+                          max_concurrent=self.policy.max_concurrent)
         try:
             while True:
                 await self.tick()
                 if exit_when_idle and not self.running and not self.ticker.runnable_todo():
                     await self.cleanup_workspaces()
-                    log.info(kv("idle_exit"))
+                    self.journal.info("idle_exit")
                     return
                 await asyncio.sleep(self.policy.poll_interval_s)
         finally:
@@ -193,14 +193,14 @@ class Orchestrator:
         except asyncio.CancelledError:
             entry = self.running.get(task_id)
             reason = entry.stop_reason if entry else "shutdown"
-            log.info(kv("stopped", task=task_id, reason=reason))
+            self.journal.info("stopped", task=task_id, reason=reason)
             if reason == "shutdown":
                 self.machine.fire(TaskId(task_id), "recover", message="stopped by shutdown")
             elif reason == "moved" and self._status(task_id) in (None, "done", "discarded"):
                 with contextlib.suppress(WorkspaceError):
                     await self.workspaces.remove(task_id)
         except Exception as e:  # a bug in Samba itself: do not lose the task
-            log.exception(kv("worker_crashed", task=task_id, error=e))
+            self.journal.exception("worker_crashed", task=task_id, error=e)
             task = self.tasks.get(TaskId(task_id))
             if task is not None:
                 await self._fail(task, f"internal error: {e}")
@@ -215,7 +215,7 @@ class Orchestrator:
             await self._fail(task, str(e))
             return
         if created:
-            log.info(kv("workspace_created", task=task_id, path=ws))
+            self.journal.info("workspace_created", task=task_id, path=ws)
         task.workspace = str(ws)
         task.branch = branch_name(task_id)
         self.tasks.save(task)
@@ -287,7 +287,7 @@ class Orchestrator:
         tail = "\n".join(lines[-val.tail_lines:])
         if res.timed_out:
             tail = (tail + "\n" if tail else "") + f"(timed out after {val.timeout_s}s)"
-        log.info(kv("validate", task=task_id, ok=res.ok, code=res.code))
+        self.journal.info("validate", task=task_id, ok=res.ok, code=res.code)
         return res.ok, tail
 
     # ---- transitions --------------------------------------------------------------------
@@ -297,7 +297,7 @@ class Orchestrator:
         if summary:
             msg += f": {summary}"
         moved = self.machine.fire(task.id, event, task=task, message=msg)
-        log.info(kv("finished", task=task.id, transition=event, moved=moved))
+        self.journal.info("finished", task=task.id, transition=event, moved=moved)
 
     async def _fail(self, task: Task, error: str) -> None:
         policy = self.policy
@@ -306,7 +306,7 @@ class Orchestrator:
         decision = RetryPolicy(policy.max_attempts, policy.retry_base_s,
                                policy.max_retry_backoff_s).decide(task.attempts)
         attempts = decision.attempts
-        log.warning(kv("attempt_failed", task=task_id, attempt=attempts, error=error))
+        self.journal.warning("attempt_failed", task=task_id, attempt=attempts, error=error)
         if isinstance(decision, Retry):
             delay = decision.delay
             self.machine.fire(

@@ -13,6 +13,7 @@ from samba.domain.task import Task
 from samba.domain.task_id import TaskId
 from samba.ports import EditResult
 
+from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
 from fake_terminal import FakeLock, FakeTerminal
 from test_scenarios import FakeClock
@@ -27,7 +28,7 @@ def make(status: State, tid: str = "t1") -> tuple[FakeTasks, TaskId]:
 
 def change_state(tasks: FakeTasks, terminal: FakeTerminal | None = None,
                  lock: FakeLock | None = None) -> ChangeState:
-    return ChangeState(tasks, Machine(tasks, FakeClock()), terminal or FakeTerminal(),
+    return ChangeState(tasks, Machine(tasks, FakeClock(), FakeJournal()), terminal or FakeTerminal(),
                        lock or FakeLock())
 
 
@@ -164,7 +165,7 @@ def asking(*texts: str) -> tuple[FakeTasks, TaskId]:
 def answer_uc(tasks: FakeTasks, terminal: FakeTerminal | None = None,
               lock: FakeLock | None = None) -> AnswerQuestion:
     clock = FakeClock()
-    return AnswerQuestion(tasks, Machine(tasks, clock), terminal or FakeTerminal(),
+    return AnswerQuestion(tasks, Machine(tasks, clock, FakeJournal()), terminal or FakeTerminal(),
                           lock or FakeLock(), clock)
 
 

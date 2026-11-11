@@ -1,4 +1,4 @@
-"""In-memory `Journal`: records `(level, event, fields)`."""
+"""In-memory `Journal` for in-process tests: records `(level, event, fields)`."""
 
 from __future__ import annotations
 
@@ -20,4 +20,4 @@ class FakeJournal:
         self.records.append(("error", event, fields))
 
     def events(self, level: str | None = None) -> list[str]:
-        return [e for lv, e, _ in self.records if level is None or lv == level]
+        return [e for lvl, e, _ in self.records if level is None or lvl == level]

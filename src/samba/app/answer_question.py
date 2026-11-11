@@ -11,7 +11,7 @@ from samba.app.results import LOCK_BUSY, Refused, refused, usage
 from samba.domain.questions import Question, open_questions, round_questions
 from samba.domain.task_id import TaskId
 from samba.domain.transitions import log_line
-from samba.ports import Clock, RepoLock, Tasks, Terminal
+from samba.ports import Clock, Lock, Tasks, Terminal
 
 EVENT = "question.answer"
 
@@ -39,7 +39,7 @@ def strip_comments(text: str) -> str:
 
 
 class AnswerQuestion:
-    def __init__(self, tasks: Tasks, machine: Machine, terminal: Terminal, lock: RepoLock,
+    def __init__(self, tasks: Tasks, machine: Machine, terminal: Terminal, lock: Lock,
                  clock: Clock) -> None:
         self.tasks = tasks
         self.machine = machine

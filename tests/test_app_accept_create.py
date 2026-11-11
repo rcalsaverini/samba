@@ -10,6 +10,7 @@ from samba.app.results import Refused
 from samba.domain.task_id import TaskId
 from samba.ports import MergeResult
 
+from fake_journal import FakeJournal
 from fake_merger import FakeMerger
 from fake_tasks import FakeTasks
 from fake_terminal import FakeLock, FakeTerminal
@@ -21,7 +22,7 @@ from test_scenarios import FakeClock
 
 def accept_uc(tasks: FakeTasks, merger: FakeMerger, terminal: FakeTerminal | None = None,
               lock: FakeLock | None = None, command: str | None = "make check") -> AcceptWork:
-    return AcceptWork(tasks, Machine(tasks, FakeClock()), terminal or FakeTerminal(),
+    return AcceptWork(tasks, Machine(tasks, FakeClock(), FakeJournal()), terminal or FakeTerminal(),
                       lock or FakeLock(), merger, "main", command)
 
 

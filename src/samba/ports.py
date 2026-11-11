@@ -165,7 +165,7 @@ class Merger(Protocol):
         ...
 
 
-class RepoLock(Protocol):
+class Lock(Protocol):
     """The advisory lock that serialises state-changing commands and the orchestrator."""
 
     def acquire(self, blocking: bool = True) -> AbstractContextManager[bool]:

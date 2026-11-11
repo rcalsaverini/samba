@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import logging
 import shutil
 import signal
 import sys
@@ -17,29 +16,13 @@ from samba.app.queries import split_target
 from samba.app.resolve import ResolveError, resolve_task_id
 from samba.app.results import Refused, Table, Text, Written
 from samba.compose import Services, build, build_adr
-from samba.config import Config, ConfigError
+from samba.config import ConfigError
 from samba.domain.transitions import render_markdown_table
 from samba.orchestrator import StartupError
 from samba.views import print_table
 
 
-def _setup_logging(config: Config) -> None:
-    config.layout.samba_dir.mkdir(parents=True, exist_ok=True)
-    fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    root = logging.getLogger("samba")
-    root.setLevel(logging.DEBUG)
-    file_handler = logging.FileHandler(config.layout.samba_dir / "samba.log")
-    file_handler.setFormatter(fmt)
-    file_handler.setLevel(logging.DEBUG)
-    console = logging.StreamHandler(sys.stderr)
-    console.setFormatter(fmt)
-    console.setLevel(logging.INFO)
-    root.addHandler(file_handler)
-    root.addHandler(console)
-
-
 def cmd_run(svc: Services, exit_when_idle: bool) -> int:
-    _setup_logging(svc.config)
     orch = svc.orchestrator
 
     async def main() -> None:
@@ -292,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_adr(args)
 
     try:
-        svc = build(cast(Path, args.repo))
+        svc = build(cast(Path, args.repo), for_run=args.command == "run")
     except ConfigError as e:
         print(f"samba: config error: {e}", file=sys.stderr)
         return 2

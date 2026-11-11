@@ -14,7 +14,8 @@ from samba.adapters.claude_cli import ClaudeCliRunner
 from samba.adapters.git_merger import GitMerger
 from samba.adapters.git_workspaces import GitWorkspaces
 from samba.adapters.markdown_tasks import MarkdownTasks
-from samba.adapters.repo_lock import FileRepoLock
+from samba.adapters.file_lock import FileLock
+from samba.adapters.log_journal import LogJournal, NullJournal
 from samba.adapters.system import SystemClock, UuidGenerator
 from samba.adapters.terminal import StdTerminal
 from samba.app.accept_work import AcceptWork
@@ -26,7 +27,7 @@ from samba.app.machine import Machine
 from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask
 from samba.config import Config, load_config
 from samba.orchestrator import Orchestrator
-from samba.ports import Tasks
+from samba.ports import Journal, Tasks
 
 
 @dataclass(frozen=True)
@@ -52,17 +53,20 @@ class Services:
     orchestrator: Orchestrator
 
 
-def build(repo: Path) -> Services:
-    """Load the config of `repo` (raises `ConfigError`) and build every use case."""
+def build(repo: Path, *, for_run: bool = False) -> Services:
+    """Load the config of `repo` (raises `ConfigError`) and build every use case. Only `samba run`
+    (`for_run`) writes `samba.log` and logs to stderr; other commands journal nothing."""
     config = load_config(repo)
+    journal: Journal = LogJournal(config.layout.samba_dir) if for_run else NullJournal()
     layout = config.layout
     sym = layout.samba_dir
     clock = SystemClock()
     tasks = MarkdownTasks(sym / "tasks", sym / "state", clock)
     terminal = StdTerminal()
-    lock = FileRepoLock(sym)
-    machine = Machine(tasks, clock)
-    agent = ClaudeCliRunner(config.agent, (sym / "tasks").resolve(), sym / "runs", layout.repo)
+    lock = FileLock(sym)
+    machine = Machine(tasks, clock, journal)
+    agent = ClaudeCliRunner(config.agent, (sym / "tasks").resolve(), sym / "runs", layout.repo,
+                            journal)
     workspaces = GitWorkspaces(layout, config.hooks, config.validation.shell)
     return Services(
         config=config,
@@ -77,7 +81,8 @@ def build(repo: Path) -> Services:
         show_task=ShowTask(tasks, clock),
         list_questions=ListQuestions(tasks),
         show_question=ShowQuestion(tasks),
-        orchestrator=Orchestrator(config, clock, UuidGenerator(), agent, tasks, workspaces, lock),
+        orchestrator=Orchestrator(config, clock, UuidGenerator(), agent, tasks, workspaces, lock,
+                                    journal),
     )
 
 

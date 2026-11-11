@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,11 +22,9 @@ from samba.domain.agent import (
     QuestionDraft,
     Readiness,
 )
-from samba.logfmt import kv
+from samba.ports import Journal
 from samba.proc import kill_group, run_cmd
 from samba.prompts import OUTCOME_SCHEMA_JSON, PLAN_OUTCOME_SCHEMA_JSON
-
-log = logging.getLogger("samba")
 
 LINE_LIMIT = 10 * 1024 * 1024
 STDERR_KEEP = 20_000
@@ -184,7 +181,8 @@ class ClaudeCliRunner:
     """Runs `claude -p` per request. Stream logs go to `<runs_dir>/<request.log_name>.jsonl`."""
 
     def __init__(self, cfg: AgentSettings, tasks_dir: Path,
-                 runs_dir: Path, check_dir: Path) -> None:
+                 runs_dir: Path, check_dir: Path, journal: Journal) -> None:
+        self.journal = journal
         self.cfg = cfg
         self.tasks_dir = tasks_dir
         self.runs_dir = runs_dir
@@ -200,14 +198,14 @@ class ClaudeCliRunner:
         if res.init and not self._logged_init:
             self._logged_init = True
             init = res.init
-            log.info(kv("claude_context", permission_mode=init.get("permissionMode"),
-                        skills=len(init.get("skills") or []),
-                        plugins=len(init.get("plugins") or []),
-                        mcp_servers=len(init.get("mcp_servers") or [])))
+            self.journal.info("claude_context", permission_mode=init.get("permissionMode"),
+                              skills=len(init.get("skills") or []),
+                              plugins=len(init.get("plugins") or []),
+                              mcp_servers=len(init.get("mcp_servers") or []))
         if res.malformed_lines:
-            log.warning(kv("malformed_lines", task=task, count=res.malformed_lines))
+            self.journal.warning("malformed_lines", task=task, count=res.malformed_lines)
         if res.stderr.strip():
-            log.debug(kv("claude_stderr", task=task, text=res.stderr.strip()[-2000:]))
+            self.journal.debug("claude_stderr", task=task, text=res.stderr.strip()[-2000:])
         return _to_report(res)
 
     async def ready(self) -> Readiness:

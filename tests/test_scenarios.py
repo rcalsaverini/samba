@@ -16,6 +16,7 @@ from typing import Any, cast
 
 import pytest
 from fake_agent import FakeAgentRunner
+from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
 
 from samba.app.turn import TurnFlow, TurnSetup
@@ -314,7 +315,7 @@ def test_turn_flow(sc: Scenario) -> None:
     side = store.get(TaskId("t1"))
     assert side is not None
     agent = FakeAgentRunner([report_of(r) for r in sc["reports"]])
-    flow = TurnFlow(agent, SeqIds(), store, FakeClock())
+    flow = TurnFlow(agent, SeqIds(), store, FakeClock(), FakeJournal())
     validations = iter(sc.get("validate", []))
     calls: list[int] = []
 

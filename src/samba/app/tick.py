@@ -7,7 +7,6 @@ dispatch the next tasks. Starting a worker is the orchestrator's business: `Tick
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
@@ -18,10 +17,7 @@ from samba.domain.states import Stage, State, running_of
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
 from samba.domain.transitions import human_row, log_line
-from samba.logfmt import kv
-from samba.ports import Clock, RepoLock, Tasks, WorkspaceError, Workspaces
-
-log = logging.getLogger("samba")
+from samba.ports import Clock, Journal, Lock, Tasks, WorkspaceError, Workspaces
 
 StopReason = Literal["moved", "shutdown"]
 
@@ -69,9 +65,10 @@ class Notes:
 
 
 class Tick:
-    def __init__(self, tasks: Tasks, clock: Clock, lock: RepoLock, workspaces: Workspaces,
+    def __init__(self, tasks: Tasks, clock: Clock, lock: Lock, workspaces: Workspaces,
                  machine: Machine, max_concurrent: int, running: dict[str, Running],
-                 notes: Notes, spawn: Callable[[Task], None]) -> None:
+                 notes: Notes, spawn: Callable[[Task], None], journal: Journal) -> None:
+        self.journal = journal
         self.tasks = tasks
         self.clock = clock
         self.lock = lock
@@ -101,7 +98,7 @@ class Tick:
         # before the command saved.
         with self.lock.acquire(blocking=False) as held:
             if not held:
-                log.debug(kv("tick_skipped", reason="repo lock held"))
+                self.journal.debug("tick_skipped", reason="repo lock held")
                 return
             self.observe()
             self.reconcile()
@@ -120,7 +117,7 @@ class Tick:
                 continue
             if not self.tasks.revert_move(move):
                 continue
-            log.warning(kv("illegal_move", task=move.task_id, src=move.src, dst=move.dst))
+            self.journal.warning("illegal_move", task=move.task_id, src=move.src, dst=move.dst)
             self.notes.add(move.task_id, log_line(
                 f"illegal move: {move.src} -> {move.dst}, moved back to {move.src}", self.clock))
 
@@ -130,8 +127,9 @@ class Tick:
             if entry.stop_reason is None and status != entry.folder:
                 entry.stop_reason = "moved"
                 entry.task.cancel()
-                log.info(kv("stopping", task=task_id, reason=f"task file left {entry.folder}/",
-                            now=status or "deleted"))
+                self.journal.info("stopping", task=task_id,
+                                  reason=f"task file left {entry.folder}/",
+                                  now=status or "deleted")
 
     async def cleanup_workspaces(self) -> None:
         for task_id in self.workspaces.existing_ids():
@@ -141,17 +139,17 @@ class Tick:
             if state in (None, "done", "discarded"):
                 try:
                     await self.workspaces.remove(task_id)
-                    log.info(kv("workspace_removed", task=task_id))
+                    self.journal.info("workspace_removed", task=task_id)
                 except WorkspaceError as e:
-                    log.warning(kv("workspace_remove_failed", task=task_id, error=e))
+                    self.journal.warning("workspace_remove_failed", task=task_id, error=e)
 
     def dispatch(self) -> None:
         for status in ("plan-todo", "work-todo"):
             for name in self.tasks.rejected_names(status):
                 if name not in self.warned_invalid:
                     self.warned_invalid.add(name)
-                    log.warning(kv("invalid_task_name", file=name,
-                                   hint="use only letters, digits, '.', '_' and '-'"))
+                    self.journal.warning("invalid_task_name", file=name,
+                                         hint="use only letters, digits, '.', '_' and '-'")
         now = self.clock.time()
         self.held = {}
         candidates: list[Task] = []
@@ -173,9 +171,9 @@ class Tick:
                                      else "dispatch_work", task=task):
                 continue
             stage = stage_of(task)
-            log.info(kv("dispatch", task=task.id, attempt=task.attempts, stage=stage,
-                        resume=bool(task.plan_session_id if stage == "plan"
-                                    else task.session_id)))
+            self.journal.info("dispatch", task=task.id, attempt=task.attempts, stage=stage,
+                              resume=bool(task.plan_session_id if stage == "plan"
+                                          else task.session_id))
             self.spawn(task)
 
     def _deps_ready(self, task: Task) -> bool:
@@ -193,7 +191,7 @@ class Tick:
             for dep_id in status.unknown:
                 if (task.id, dep_id) not in self.warned_deps:
                     self.warned_deps.add((task.id, dep_id))
-                    log.warning(kv("unknown_dependency", task=task.id, dependency=dep_id))
+                    self.journal.warning("unknown_dependency", task=task.id, dependency=dep_id)
         return False
 
 

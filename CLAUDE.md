@@ -53,7 +53,9 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     CLI prints their results and maps `kind` to the exit code.
   - `adapters/git_merger.py` (`GitMerger`, the `Merger` port over `merge.py`),
     `adapters/terminal.py` (`StdTerminal`, the `Terminal` port: tty, prompts, `$EDITOR`),
-    `adapters/repo_lock.py` (`FileRepoLock`, the `RepoLock` port over `lock.py`).
+    `adapters/file_lock.py` (`FileLock`, the `Lock` port: the `.samba/lock` flock shared by commands
+    and orchestrator ticks), `adapters/log_journal.py` (`LogJournal`, `NullJournal`: the `Journal`
+    port; only `samba run` gets the log, `compose.build(repo, for_run=True)`).
   - `adapters/markdown_tasks.py`: `MarkdownTasks`, the `Tasks` port over the task folders, the
     sidecar JSON and the `## Log`/`## Questions` sections (stale-save merge, hand-move detection).
   - `app/tick.py`: `Tick` (observe hand moves, reconcile running workers, clean up workspaces,
@@ -63,7 +65,6 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `orchestrator.py`: startup, poll loop, workers, retries, transitions; calls `Tick`.
   - `app/machine.py`: `Machine.fire` and `observe`, the only path that moves a task
     (`docs/spec/states.md`): loads the `Task`, applies the domain row, saves.
-  - `lock.py`: `repo_lock`, the `.samba/lock` flock shared by commands and orchestrator ticks.
   - `adapters/claude_cli.py`: `ClaudeCliRunner`, the only reader of Claude's stream-json: builds
     the argv, runs `claude`, maps the output into an `AgentReport`. `domain/agent.py`:
     `AgentRequest`, `AgentReport`, `Readiness`. `logfmt.py`: the `kv` log line format.

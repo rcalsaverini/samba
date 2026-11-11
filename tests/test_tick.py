@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
+from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
 from fake_terminal import FakeLock
 from test_scenarios import FakeClock
@@ -40,10 +41,11 @@ class Rig:
         self.running: dict[str, Running] = {}
         self.spawned: list[str] = []
         self.workspaces = workspaces or FakeWorkspaces()
-        machine = Machine(self.tasks, self.clock, self.guard)
+        self.journal = FakeJournal()
+        machine = Machine(self.tasks, self.clock, self.journal, self.guard)
         self.notes = Notes(self.tasks, self.running)
         self.tick = Tick(self.tasks, self.clock, lock or FakeLock(), self.workspaces, machine,
-                         max_concurrent, self.running, self.notes, self.spawn)
+                         max_concurrent, self.running, self.notes, self.spawn, self.journal)
 
     def guard(self, name: str, task: Task) -> bool:
         return name == "deps_met" and evaluate(
