@@ -63,5 +63,7 @@ reviewed next to the code diff at `work accept`. If the task made a real decisio
 between alternatives with a lasting reason), also propose an ADR in docs/adr/ with status
 proposed, one decision per file, as in ADR 0001.
 
+Commit messages: never add a Co-Authored-By trailer or any other attribution line.
+
 Decisions that shape the architecture live in docs/adr/. Before designing, run
 `uv run samba adr list` and read the relevant ones with `uv run samba adr show N`.
