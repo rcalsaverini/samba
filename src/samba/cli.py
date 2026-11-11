@@ -12,34 +12,25 @@ from pathlib import Path
 from typing import cast
 
 from samba import adr as adr_mod
-from samba import merge, workspace
+from samba.adapters.git_merger import GitMerger
 from samba.adapters.markdown_tasks import MarkdownTasks
 from samba.adapters.repo_lock import FileRepoLock
 from samba.adapters.system import SystemClock
 from samba.adapters.terminal import StdTerminal
+from samba.app.accept_work import AcceptWork, DryRun
 from samba.app.answer_question import AnswerQuestion
 from samba.app.change_state import ChangeState, FeedbackMode
-from samba.app.confirm import confirm as confirm_policy
+from samba.app.create_task import CreateTask
 from samba.app.machine import Machine
+from samba.app.resolve import ResolveError, resolve_task_id
 from samba.app.results import Refused
 from samba.config import Config, ConfigError, load_config
 from samba.domain.questions import round_questions
 from samba.domain.states import STATES
-from samba.domain.task import Task
-from samba.domain.task_id import TaskId
-from samba.domain.transitions import human_events, render_markdown_table
-from samba.lock import repo_lock
+from samba.domain.transitions import render_markdown_table
 from samba.orchestrator import Orchestrator, StartupError
 from samba.ports import Tasks
-from samba.views import (
-    ResolveError,
-    print_table,
-    question_rows,
-    render_show,
-    resolve_states,
-    resolve_task_id,
-    task_rows,
-)
+from samba.views import print_table, question_rows, render_show, resolve_states, task_rows
 
 
 def _setup_logging(config: Config) -> None:
@@ -97,14 +88,6 @@ def _store(config: Config) -> Tasks:
     return MarkdownTasks(sym / "tasks", sym / "state", SystemClock())
 
 
-def _log(tasks: Tasks, task_id: TaskId, line: str) -> None:
-    """Append one `## Log` line to a stored task."""
-    task = tasks.get(task_id)
-    if task is not None:
-        task.add_log(line)
-        tasks.save(task)
-
-
 def cmd_task_show(config: Config, text: str) -> int:
     tasks = _store(config)
     try:
@@ -117,14 +100,6 @@ def cmd_task_show(config: Config, text: str) -> int:
         return 2
     print("\n".join(render_show(tasks, task)))
     return 0
-
-
-def confirm(prompt: str, command: str, yes: bool) -> int | None:
-    """The confirmation policy for `work accept` (it moves in a later part), over the port."""
-    declined = confirm_policy(StdTerminal(), prompt, command, yes)
-    if declined is None:
-        return None
-    return _report(declined)
 
 
 def _report(result: Refused) -> int:
@@ -227,186 +202,40 @@ def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: b
                     dry_run: bool) -> int:
     """`work accept` (spec: cli): the command pattern with a merge as the outside effect."""
     tasks = _store(config)
-    event = "work.accept"
-
-    def err(msg: str) -> None:
-        print(f"samba: {msg}", file=sys.stderr)
-
-    def check(task_id: TaskId) -> bool:
-        """State and preflight checks; reports the failure."""
-        task = tasks.get(task_id)
-        if task is None:
-            err(f"task {task_id!r} has no file")
-            return False
-        state = task.status
-        events = [r.event for r in human_events(state, task)]
-        if event not in events:
-            err(f"{task_id} is in {state}; {event} not allowed. Legal events: "
-                f"{', '.join(events) or 'none'}")
-            return False
-        if not no_merge:
-            problem = merge.preflight(config.layout.repo, config.layout.base_branch, branch)
-            if problem:
-                err(f"{problem}; nothing changed")
-                return False
-        return True
-
     try:
         task_id = resolve_task_id(tasks, text)
     except ResolveError as e:
-        err(e.render())
+        _err(e.render())
         return 2
-    branch = workspace.branch_name(task_id)
-    layout = config.layout
-    validation = config.validation
-    base = layout.base_branch
-    if not check(task_id):
-        return 1
-    do_validate = not no_merge and not no_validate and validation.command is not None
-    count = 0 if no_merge else merge.commit_count(layout.repo, base, branch)
-    plural = "" if count == 1 else "s"
-    if no_merge:
-        plan = f"Mark {task_id} done without merging (--no-merge)"
-    else:
-        plan = f"Merge {branch} into {base} ({count} commit{plural})"
-        if do_validate:
-            plan += f", then validate with `{validation.command}`"
-    if dry_run:
-        print(f"{plan}")
-        print(f"branch: {branch}\nbase: {base}\ncommits: {count}")
-        print(f"merge: {'no' if no_merge else 'yes (--no-ff)'}")
-        print(f"validate: {validation.command if do_validate else 'skipped'}")
-        print("final state: done")
+    clock = SystemClock()
+    use_case = AcceptWork(
+        tasks, Machine(tasks, clock), StdTerminal(), FileRepoLock(config.layout.samba_dir),
+        GitMerger(config.layout, config.validation), config.layout.base_branch,
+        config.validation.command)
+    result = use_case.run(task_id, no_merge=no_merge, no_validate=no_validate, yes=yes,
+                          dry_run=dry_run)
+    if isinstance(result, Refused):
+        return _report(result)
+    if isinstance(result, DryRun):
+        for line in result.lines:
+            print(line)
         return 0
-    code = confirm(plan, "work accept", yes)
-    if code is not None:
-        return code
-
-    with repo_lock(layout.samba_dir) as held:
-        if not held:
-            err("another command or the orchestrator holds .samba/lock; try again")
-            return 1
-        if not check(task_id):
-            return 1
-        message = "validation skipped" if no_validate else ""
-        if no_merge:
-            message = "no merge"
-        else:
-            found = tasks.get(task_id)
-            title = found.title if found else task_id
-            res = merge.merge_branch(
-                layout.repo, branch, f"Merge {branch}: {title}", shell=validation.shell,
-                validate_command=validation.command if do_validate else None,
-                timeout_s=validation.timeout_s, tail_lines=validation.tail_lines,
-                log_path=layout.samba_dir / "runs" / task_id / "accept-validate.log")
-            if res.status == "conflict":
-                _log(tasks, task_id, f"work.accept: merge failed (conflicts: {res.detail})")
-                err(f"merge conflict in: {res.detail}; merge aborted, task stays in work-review")
-                return 1
-            if res.status == "error":
-                _log(tasks, task_id, f"work.accept: merge failed ({res.detail})")
-                err(f"merge failed: {res.detail}; merge aborted, task stays in work-review")
-                return 1
-            if res.status == "validation_failed":
-                _log(tasks, task_id,
-                     f"work.accept: validation failed after merge: {res.detail}")
-                err(f"validation failed after merge; merge aborted, task stays in work-review: "
-                    f"{res.detail}")
-                err(f"full output: {res.log_path}")
-                return 1
-            if res.status == "already":
-                err(f"{branch} is already merged into {base}; nothing to merge")
-                message = "already merged"
-            else:
-                message = f"merged {res.detail}" + (
-                    ", validated" if res.validated else ", validation skipped" if no_validate
-                    else "")
-                if validation.command is None:
-                    err("no validate.command; merged without validation")
-        if not Machine(tasks, SystemClock()).fire(task_id, event, message=message):
-            err(f"{event} did not apply to {task_id}"
-                + ("" if no_merge else f" after the merge ({message}); the merge is in {base}"))
-            return 1
-    if tasks.get(task_id) is not None:
-        print(tasks.location(task_id))
+    if result.location is not None:
+        print(result.location)
+    for line in result.notes:
+        print(line, file=sys.stderr)
     return 0
-
-
-DEPENDS_PROMPT = "Depends on (ids or prefixes, comma separated, empty for none): "
-
-
-def _resolve_deps(tasks: Tasks, text: str) -> list[TaskId]:
-    """Comma separated ids or prefixes to full ids, in order, without repeats. Raises ResolveError."""
-    ids: list[TaskId] = []
-    for part in text.split(","):
-        part = part.strip()
-        if part:
-            found = resolve_task_id(tasks, part)
-            if found not in ids:
-                ids.append(found)
-    return ids
-
-
-def _ask(prompt: str) -> str:
-    """One line from stdin after `prompt`. EOF ends the whole command (exit 1)."""
-    print(prompt, end="", flush=True)
-    line = sys.stdin.readline()
-    if not line:
-        raise EOFError
-    return line.rstrip("\r\n")
 
 
 def cmd_task_new(config: Config, title: str | None, body: str | None, depends: str | None,
                  priority: int, skip_plan: bool) -> int:
-    """`task new` (spec: cli): flags give every field; on a terminal the missing ones are asked."""
+    """`task new` (spec: cli): run the `CreateTask` use case, print its result."""
     tasks = _store(config)
-    tty = sys.stdin.isatty() and sys.stdout.isatty()
-    if title is None and not tty:
-        print("samba: task new needs a TITLE (or run it on a terminal to be asked); "
-              "usage: samba task new TITLE [--body TEXT] [--depends-on IDS] [--priority N] "
-              "[--skip-plan]", file=sys.stderr)
-        return 2
-    dep_ids: list[TaskId] = []
-    if depends is not None:  # by flag: errors are fatal
-        try:
-            dep_ids = _resolve_deps(tasks, depends)
-        except ResolveError as e:
-            print(f"samba: {e.render()}", file=sys.stderr)
-            return 2
-    if tty:
-        try:
-            while not (title or "").strip():
-                title = _ask("Title: ").strip()
-            if body is None:
-                lines: list[str] = []
-                print("Description (end with an empty line):", flush=True)
-                while True:
-                    line = sys.stdin.readline().rstrip("\r\n")
-                    if not line:  # an empty line or EOF
-                        break
-                    lines.append(line)
-                body = "\n".join(lines)
-            if depends is None:
-                while True:
-                    try:
-                        dep_ids = _resolve_deps(tasks, _ask(DEPENDS_PROMPT))
-                        break
-                    except ResolveError as e:
-                        print(f"samba: {e.render()}", file=sys.stderr)
-            if not skip_plan:
-                skip_plan = _ask("Plan first? [Y/n] ").strip().lower() in ("n", "no")
-        except EOFError:
-            print("samba: input ended; nothing created", file=sys.stderr)
-            return 1
-    assert title is not None
-    title = title.strip()
-    base = TaskId.slug(title)
-    task_id, n = base, 2
-    while tasks.get(task_id) is not None:
-        task_id, n = TaskId(f"{base}-{n}"), n + 1
-    tasks.create(Task.new(task_id, title, body or "", priority, tuple(dep_ids),
-                          "work-todo" if skip_plan else "plan-todo", SystemClock()))
-    print(tasks.location(task_id))
+    result = CreateTask(tasks, StdTerminal(), SystemClock()).run(
+        title, body, depends, priority, skip_plan)
+    if isinstance(result, Refused):
+        return _report(result)
+    print(result.location)
     return 0
 
 

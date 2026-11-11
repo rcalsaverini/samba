@@ -5,29 +5,19 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable
 
+from samba.app.resolve import ResolveError, resolve_task_id
 from samba.domain.deps import deps_snapshot, evaluate
 from samba.domain.questions import open_questions
 from samba.domain.states import STATES, State
 from samba.domain.task import Task
-from samba.domain.task_id import AmbiguousTask, TaskId, UnknownTask
 from samba.domain.transitions import human_events
 from samba.ports import Tasks
 
 HEADER = ["ID", "STATE", "ATTEMPTS", "TURNS", "COST", "LAST", "ERROR"]
 
 
-class ResolveError(Exception):
-    """A state or task id argument did not resolve. `candidates` lists the valid or close names."""
-
-    def __init__(self, message: str, candidates: tuple[str, ...] = ()) -> None:
-        super().__init__(message)
-        self.candidates = candidates
-
-    def render(self) -> str:
-        text = str(self)
-        if self.candidates:
-            text += "\n" + "\n".join(f"  {c}" for c in self.candidates)
-        return text
+__all__ = ["ResolveError", "resolve_task_id", "resolve_states", "task_rows", "question_rows",
+           "print_table", "render_show"]
 
 
 def resolve_states(args: Iterable[str]) -> tuple[State, ...]:
@@ -42,16 +32,6 @@ def resolve_states(args: Iterable[str]) -> tuple[State, ...]:
             raise ResolveError(f"unknown state {arg!r}; valid states:", STATES)
         wanted.update(matches)
     return tuple(s for s in STATES if s in wanted)
-
-
-def resolve_task_id(tasks: Tasks, text: str) -> TaskId:
-    """An exact id, else a unique prefix of an id in any status (`TaskId.resolve`)."""
-    try:
-        return TaskId.resolve(tasks.ids(), text)
-    except UnknownTask:
-        raise ResolveError(f"unknown task {text!r}") from None
-    except AmbiguousTask as e:
-        raise ResolveError(f"ambiguous task id {text!r}; candidates:", e.candidates) from None
 
 
 def task_rows(tasks: Tasks, states: Iterable[State] = STATES) -> list[list[str]]:

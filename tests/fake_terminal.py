@@ -16,6 +16,7 @@ class FakeTerminal:
         self.edits = list(edits or [])
         self.prompts: list[str] = []
         self.edit_initials: list[str] = []
+        self.warnings: list[str] = []
 
     def is_interactive(self) -> bool:
         return self.interactive
@@ -34,6 +35,9 @@ class FakeTerminal:
         if self.lines:
             self.lines.pop(0)
         return block
+
+    def warn(self, line: str) -> None:
+        self.warnings.append(line)
 
     def edit(self, initial: str) -> EditResult:
         self.edit_initials.append(initial)
