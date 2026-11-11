@@ -152,19 +152,47 @@ def test_the_cli_adapter_holds_no_rule() -> None:
         assert word not in code, f"cli.py mentions {word}"
 
 
-def test_app_modules_import_no_io() -> None:
+APP_FORBIDDEN = {"os", "subprocess", "pathlib", "logging"}  # asyncio is fine: use cases await ports
+
+
+def app_violations(path: Path) -> list[str]:
+    return [n for n in imported_modules(path)
+            if n.split(".")[0] in APP_FORBIDDEN or is_adapter(n)]
+
+
+def test_app_modules_import_no_io_no_logging_no_adapter() -> None:
     for rel in APP_MODULES:
-        for name in imported_modules(SRC / rel):
-            assert name.split(".")[0] not in {"os", "subprocess", "pathlib"}, f"{rel} imports {name}"
+        assert app_violations(SRC / rel) == [], rel
 
 
-def test_the_orchestrator_imports_no_io_or_old_module() -> None:
-    forbidden = {"os", "subprocess", "pathlib", "logging", "samba.proc", "samba.workspace",
-                 "samba.merge", "samba.lock"}
-    for name in imported_modules(SRC / "orchestrator.py"):
-        assert name not in forbidden and name.split(".")[0] not in {"subprocess", "pathlib",
-                                                                    "logging", "os"}, name
+def test_every_domain_and_app_module_is_listed() -> None:
+    listed = {*DOMAIN_MODULES, *APP_MODULES}
+    found = {p.relative_to(SRC).as_posix() for sub in ("domain", "app")
+             for p in (SRC / sub).rglob("*.py")}
+    assert found - listed == set(), f"add to DOMAIN_MODULES or APP_MODULES: {sorted(found - listed)}"
 
+
+ORCHESTRATOR_FORBIDDEN = {"os", "subprocess", "pathlib", "logging", "samba.proc", "samba.workspace",
+                          "samba.merge", "samba.lock", "samba.logfmt"}
+
+
+def orchestrator_violations(path: Path) -> list[str]:
+    return [n for n in imported_modules(path)
+            if n in ORCHESTRATOR_FORBIDDEN or n.split(".")[0] in {"os", "subprocess", "pathlib",
+                                                                   "logging"} or is_adapter(n)]
+
+
+def test_the_orchestrator_imports_no_io_adapter_or_old_module() -> None:
+    assert orchestrator_violations(SRC / "orchestrator.py") == []
+
+
+def test_the_new_checks_catch_logging_pathlib_and_old_modules(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("import logging\nfrom pathlib import Path\nimport samba.merge\n"
+                   "from samba.adapters.git_vcs import GitVcs\n")
+    assert app_violations(bad) == ["logging", "pathlib", "samba.adapters.git_vcs"]
+    assert orchestrator_violations(bad) == ["logging", "pathlib", "samba.merge",
+                                            "samba.adapters.git_vcs"]
 
 def test_the_check_catches_import_os(tmp_path: Path) -> None:
     bad = tmp_path / "bad.py"

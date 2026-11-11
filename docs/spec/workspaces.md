@@ -12,6 +12,10 @@ If `workspaces/<id>` does not exist:
 
 If it exists, reuse it as is (no reset).
 
+Creation, the hook, removal and the validation run are the business of the `Vcs` and `Validator`
+adapters (`GitVcs`, `ShellValidator`; architecture, Ports). The use cases and the orchestrator see
+only opaque location strings and never build paths.
+
 ## Safety invariants
 
 - The workspace path, resolved to absolute, must be inside `<workspaces_root>/<repo-key>/`.

@@ -1,8 +1,8 @@
 # Architecture
 
 Samba is layered so the rules of the core can be tested without a clock, a disk, a subprocess or a
-network (ADR 0011, ADR 0012). The refactor that gets there runs in a chain of tasks. This chapter
-describes the target and says where each piece lives today.
+network (ADR 0011, ADR 0012). This chapter describes the layers, the ports and where each piece
+lives.
 
 ## Layers
 
@@ -93,7 +93,7 @@ files and sidecars are formatted by the clock (`iso_seconds`, `log_stamp`), beca
 not import `datetime`. The clock is always a required parameter, in the domain and in the
 constructors of `MarkdownTasks` and `Orchestrator`; only the composition root builds `SystemClock`.
 
-## Where each concern lives today
+## Where each concern lives
 
 Moved into `domain/`: states and causes (`states.py`), question records (`questions.py`), the
 `Task` aggregate and `TaskId`, the transition table, effects, `find_row`, `human_row`,
@@ -135,12 +135,25 @@ behind ports. `orchestrator.py` (startup, poll loop, workers) imports no adapter
 
 ## The architecture test
 
-`tests/test_architecture.py` reads sources with `ast` and never imports `samba`. It checks that the
-domain modules (`DOMAIN_MODULES`) import no I/O module and no adapter; that every use case module
-(`APP_MODULES`) imports no adapter and none of `os`, `subprocess`, `pathlib`; that domain and use
-case code use no storage vocabulary and call no clock or uuid; that only `compose.py` constructs
-`MarkdownTasks` and neither `cli.py` nor `orchestrator.py` imports an adapter; and that `cli.py`
-holds no rule (`human_events`, `merge.`, `TaskId.slug`, `Machine`).
+`tests/test_architecture.py` reads sources with `ast` and never imports `samba`. It checks that:
+
+- the domain modules (`DOMAIN_MODULES`, which also holds `ports.py`, `template.py` and
+  `prompts.py`) import no I/O module and no adapter;
+- every use case module (`APP_MODULES`) imports no adapter and none of `os`, `subprocess`,
+  `pathlib`, `logging` (`asyncio` is allowed: use cases await ports);
+- every `.py` under `domain/` and `app/` is listed in one of the two lists, so a new module cannot
+  escape the checks;
+- `orchestrator.py` imports no adapter, `proc`, `logfmt`, `workspace`, `merge`, `lock`, `logging`,
+  `os`, `subprocess` or `pathlib`;
+- the orchestrator, the use cases and the domain make no direct `time.time`, `time.monotonic`,
+  `datetime.now` or `uuid` call, and the code of `domain/` and `app/` (comments stripped) matches
+  none of `Path`, `mtime`, `sidecar`, `front matter`;
+- only `compose.py` constructs `MarkdownTasks`, neither `cli.py` nor `orchestrator.py` imports an
+  adapter, `cli.py` holds no rule (`human_events`, `merge.`, `TaskId.slug`, `Machine`), and
+  `tests/test_scenarios.py` imports no adapter;
+- only `adapters/claude_cli.py` mentions Claude's JSON fields, and `samba.tasks` does not exist.
+
+The scanners are themselves tested against temporary modules that break each rule.
 
 ## Scenarios
 
@@ -165,24 +178,11 @@ it needs.
 | `budget` | `cap` (or null), `spent`, `expect` | `left` and `exceeded` of a `Budget`. |
 | `turn_decision` | `stage`, `validate`, optional `budget` (`cap`, `spent`), `report` (`AgentReport` fields), `expect` | `decide_after_turn`: `action` (`fail`, `finish`, `run_validation`, `record_questions`, `continue`) with its `error`, or `event`, `what`, `summary`. |
 | `turn_rule` | `rule` (`session_reset`, `budget_gate`, `exhausted`, `reflect`) and its inputs, `expect` | The small rules: session reset on a missing session, the pre-turn budget gate, `max_turns` exhaustion, the give-up reflection. |
-| `turn_flow` | `setup` (stage, prompts, limits), `task`, `reports` (scripted `AgentRunner`), `validate` (results), `expect` | `TurnFlow.run` end to end with the fake runner and `FakeTasks`: the result, the requests sent, plan and assumptions set, questions recorded, validation calls and task fields. |
+| `turn_flow` | `setup` (stage, prompts, limits), `task`, `reports` (scripted `AgentRunner`), `validate` (results, a scripted `FakeValidator`), `expect` | `TurnFlow.run` end to end with the fake runner and `FakeTasks`: the result, the requests sent, plan and assumptions set, questions recorded, validation calls and task fields. |
+| `lifecycle` | `config` (`require_plan`, `validate`, `max_turns`), `status` (initial), `reports`, `validator` (`[ok, output]` per call), optional `merge`, `steps`, `expect` | The whole life of a task over fakes only (`FakeTasks`, `FakeAgentRunner`, `FakeVcs`, `FakeValidator`, `FakeLock`, `FakeJournal`): `Orchestrator.startup`, then `tick` and await the workers (no poll sleep). A step is `tick`, `plan_accept` (`ChangeState`), `answer` (`AnswerQuestion`) or `work_accept` (`AcceptWork`), each with the status expected after it. `expect`: the `Vcs` call names, the validator calls (location, log name), the workspaces left, the journal events as an ordered subsequence, `## Log` fragments, and optionally text in a sent prompt. A test asserts all scenarios run in under a second. |
 
 Coverage rule: a test fails when a row of the transition table, keyed by `(src, event, guard,
 dst)`, is picked by no `transition` scenario that fires. Adding a row therefore needs a scenario.
 
-## Architecture test
-
-`tests/test_architecture.py` reads source files with `ast` and never imports `samba`. It asserts
-that the modules in its `DOMAIN_MODULES` list import none of the forbidden modules and no adapter,
-that the `app/` modules import no adapter, that `orchestrator.py` imports no adapter, `proc`,
-`workspace`, `merge`, `lock`, `logging`, `subprocess` or `pathlib`, that `orchestrator.py`, the `app/`
-modules and the domain modules make no direct `time.time`,
-`time.monotonic`, `datetime.now` or `uuid` call, and that the scanner does flag an `adapters` or
-`datetime` import in a temporary module. It also asserts that `tests/test_scenarios.py` imports no
-adapter, and that no module but `adapters/claude_cli.py` mentions Claude's
-JSON fields. The list holds `ports.py`, `template.py`, `prompts.py` and the
-modules of `domain/` (including `agent.py`, `policy.py`, `task.py` and `task_id.py`), and grows as
-more modules move in. With comments stripped, the code of `domain/` and `app/` must also match none
-of `Path`, `mtime`, `sidecar`, `front matter`: storage vocabulary stays in the adapter (the check is
-itself tested against a temporary module). Finally, `samba.tasks` must not exist, and `orchestrator.py`
-and `cli.py` import `samba.adapters.markdown_tasks` and no folder helper.
+The lifecycle scenarios are the end-to-end check of the layering: they run the orchestrator and the
+use cases with no adapter at all.

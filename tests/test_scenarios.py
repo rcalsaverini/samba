@@ -11,6 +11,7 @@ import asyncio
 import copy
 import dataclasses
 import json
+import time
 from pathlib import Path
 from typing import Any, cast
 
@@ -18,9 +19,27 @@ import pytest
 from fake_agent import FakeAgentRunner
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
+from fake_terminal import FakeLock, FakeTerminal
 from fake_validator import FakeValidator, failing, passing
+from fake_vcs import FakeVcs
 
+from samba.app.accept_work import Accepted, AcceptWork
+from samba.app.answer_question import Answered, AnswerQuestion
+from samba.app.change_state import ChangeState, StateChanged
+from samba.app.machine import Machine
+from samba.app.results import Refused
 from samba.app.turn import TurnFlow, TurnSetup
+from samba.config import (
+    AgentSettings,
+    Config,
+    Hooks,
+    Layout,
+    Policy,
+    Prompts,
+    Validation,
+)
+from samba.orchestrator import Orchestrator
+from samba.ports import MergeAttempt
 from samba.domain.agent import AgentReport, Failure, QuestionDraft
 from samba.domain.deps import TaskRef, evaluate
 from samba.domain.policy import (
@@ -344,8 +363,98 @@ def test_turn_flow(sc: Scenario) -> None:
         assert want in got
 
 
+# ---- the whole lifecycle over fakes ----------------------------------------------------------
+
+LIFECYCLE = load("lifecycle")
+
+
+def lifecycle_config(sc: Scenario) -> Config:
+    c = cast(dict[str, Any], sc["config"])
+    return Config(
+        policy=Policy(max_turns=c["max_turns"], max_attempts=1, retry_base_s=1.0,
+                      max_retry_backoff_s=1.0, max_cost_usd_per_task=None,
+                      reflect_on_give_up=False, require_plan=c["require_plan"],
+                      max_concurrent=2, poll_interval_s=1.0),
+        agent=AgentSettings(command=["claude"], model=None, permission_mode="dontAsk", allow=[],
+                            args=[], isolate_user_config=True, turn_timeout_s=60.0,
+                            stall_timeout_s=60.0),
+        layout=Layout(repo=Path("/repo"), samba_dir=Path("/repo/.samba"),
+                      workspaces_root=Path("/ws"), base_branch="main"),
+        prompts=Prompts(template="Do {{ task.title }}"),
+        validation=Validation(command=c["validate"], timeout_s=60.0, tail_lines=20,
+                              shell=["bash", "-c"]),
+        hooks=Hooks(after_create=None, timeout_s=60.0))
+
+
+async def play(sc: Scenario) -> tuple[FakeTasks, FakeVcs, FakeValidator, FakeJournal,
+                                      FakeAgentRunner]:
+    """Run the steps of a scenario: orchestrator ticks, `ChangeState`, `AnswerQuestion`, `AcceptWork`."""
+    config = lifecycle_config(sc)
+    clock, tasks, journal, lock = FakeClock(), FakeTasks(), FakeJournal(), FakeLock()
+    merge = sc.get("merge")
+    vcs = FakeVcs(merge=MergeAttempt(merge["status"], merge["detail"], merge["restore_point"])
+                  if merge else None)
+    validator = FakeValidator(*[passing(out) if ok else failing(out)
+                                for ok, out in sc["validator"]])
+    agent = FakeAgentRunner([report_of(r) for r in sc["reports"]])
+    orch = Orchestrator(config, clock, SeqIds(), agent, tasks, vcs, validator, lock, journal)
+    terminal = FakeTerminal()
+    machine = Machine(tasks, clock, journal, orch._guard)  # pyright: ignore[reportPrivateUsage]
+    change = ChangeState(tasks, machine, terminal, lock)
+    answer = AnswerQuestion(tasks, machine, terminal, lock, clock)
+    accept = AcceptWork(tasks, machine, terminal, lock, vcs, validator, "main",
+                        config.validation.command)
+    tid = TaskId("t1")
+    tasks.create(Task.new(tid, "feature", "", 3, (), cast(State, sc["status"]), clock))
+    await orch.startup()
+    for step in cast(list[dict[str, Any]], sc["steps"]):
+        match step["do"]:
+            case "tick":
+                await orch.tick()
+                await asyncio.gather(*(e.task for e in list(orch.running.values())))
+            case "plan_accept":
+                assert isinstance(change.run(tid, "plan.accept", "plan.accept"), StateChanged)
+            case "answer":
+                assert isinstance(answer.run(tid, None, step["text"], False), Answered)
+            case "work_accept":
+                res = await accept.run(tid, yes=True)
+                if step["result"] == "accepted":
+                    assert isinstance(res, Accepted), res
+                else:
+                    assert isinstance(res, Refused), res
+                    assert step["message"] in "\n".join(res.messages)
+            case other:
+                raise AssertionError(f"unknown step {other}")
+        assert tasks.records[tid].status == step["status"], step
+    return tasks, vcs, validator, journal, agent
+
+
+@pytest.mark.parametrize("sc", LIFECYCLE, ids=ids(LIFECYCLE))
+def test_lifecycle(sc: Scenario) -> None:
+    tasks, vcs, validator, journal, agent = asyncio.run(play(sc))
+    expect = cast(dict[str, Any], sc["expect"])
+    assert [c[0] for c in vcs.calls] == expect["vcs"]
+    assert [list(c) for c in validator.calls] == expect["validator"]
+    assert sorted(vcs.workspaces) == expect["workspaces"]
+    events = iter(journal.events())
+    for event in expect["journal"]:  # an ordered subsequence of what the journal recorded
+        assert any(e == event for e in events), f"journal lacks {event} in order"
+    log = tasks.records[TaskId("t1")].log
+    for want in expect["log"]:
+        assert any(want in line for line in log), want
+    for index, text in cast(list[tuple[int, str]], expect.get("prompts_contain", [])):
+        assert text in agent.requests[index].prompt
+
+
+def test_the_lifecycle_scenarios_run_in_well_under_a_second() -> None:
+    start = time.perf_counter()
+    for sc in LIFECYCLE:
+        asyncio.run(play(sc))
+    assert time.perf_counter() - start < 1.0
+
+
 def test_every_scenario_file_has_a_known_kind() -> None:
     known = {"transition", "human_row", "human_events", "deps", "retry_policy", "budget",
-             "turn_decision", "turn_rule", "turn_flow"}
+             "turn_decision", "turn_rule", "turn_flow", "lifecycle"}
     for path in SCENARIO_DIR.glob("*.json"):
         assert json.loads(path.read_text())["kind"] in known, path.name
