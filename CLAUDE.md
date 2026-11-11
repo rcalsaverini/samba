@@ -15,18 +15,25 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   you add, rename or remove a command.
 - `src/samba/`: the root holds only `__init__.py`, `__main__.py`, `bootstrap.py` and the packages
   `domain`, `app`, `adapters` and `entrypoints` (guarded by `tests/test_architecture.py`).
-  - `entrypoints/cli.py`: the thin argparse adapter (no rule): `run` and `<noun> <verb>` commands, no aliases:
+  - `entrypoints/cli.py`: parse, one call, render (no rule): `run` and `<noun> <verb>` commands, no aliases:
     `task new|list|show|retry|stop|discard`, `plan`/`work` review commands (including
-    `work accept`), `question list|show|answer` (answers are recorded per question,
-    `cmd_question_answer`), `adr list|show|accept|reject|supersede` (`cmd_adr`, needs no
-    WORKFLOW.md), `explore [topic]` (`cmd_explore`, an interactive claude session),
-    `dev transitions`. It calls `bootstrap.build`, one use case, prints the result and
-    maps its kind to the exit code. The script entry is `samba.entrypoints.cli:main`.
+    `work accept`), `question list|show|answer` (answers are recorded per question),
+    `adr list|show|accept|reject|supersede` (needs no WORKFLOW.md), `explore [topic]`
+    (`cmd_explore`, an interactive claude session), `dev transitions`. Each leaf parser binds one
+    call (`bind`) that passes plain values to one use case, and `render(result)` prints it and maps
+    the kind to the exit code. No `cmd_*` helper per command and no if/elif on command names;
+    `run` (`cmd_run`), `explore` and `dev transitions` keep their own small paths. It imports
+    neither `app/resolve.py` nor `domain/task_id.py` nor another entry point.
+    The script entry is `samba.entrypoints.cli:main`.
   - `bootstrap.py`: the composition root, called by every entry point; the only module that may
     import every layer and the only place that builds adapters. `build(repo)` reads
-    `WORKFLOW.md` and returns `Services` (use cases, `Tasks`, `Config`, `Orchestrator`);
-    `build_adr(repo)` is the config-free entry for the ADR commands; `build_explore(repo)` needs
-    only `claude.command` and `claude.model`. Constructors take their ports, no defaults.
+    `WORKFLOW.md` and returns `Commands` (use cases only: `AcceptPlan`, `RejectPlan`, `RejectWork`,
+    `RetryTask`, `StopTask`, `DiscardTask`, the four queries, `AnswerQuestion`, `AcceptWork`,
+    `CreateTask`); `build_orchestrator(repo)` is the separate builder used only by `samba run`;
+    `build_adr(repo)` returns `AdrCommands`, the config-free entry for the ADR commands;
+    `build_explore(repo)` needs only `claude.command` and `claude.model`. Constructors take their ports, no defaults.
+  - `app/task_commands.py`: the six named use cases over `ChangeState` (event strings, labels and
+    feedback modes live here, not in the CLI).
   - `domain/launch.py`: `LaunchSpec` and `explore_launch` (the argv of `samba explore`; the guide
     and the allow and deny lists are `EXPLORE_*` in `domain/prompts.py`). `app/explore.py`: `StartExplore`,
     over the `InteractiveSession` port; `adapters/interactive_session.py` (`TerminalSession`) runs
@@ -67,7 +74,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `adapters/terminal.py` (`StdTerminal`, the `Terminal` port: tty, prompts, `$EDITOR`),
     `adapters/file_lock.py` (`FileLock`, the `Lock` port: the `.samba/lock` flock shared by commands
     and orchestrator ticks), `adapters/log_journal.py` (`LogJournal`, `NullJournal`: the `Journal`
-    port, and the `kv` log line format; only `samba run` gets the log, `bootstrap.build(repo, for_run=True)`).
+    port, and the `kv` log line format; only `samba run` gets the log, `bootstrap.build_orchestrator(repo)`).
   - `adapters/markdown_tasks.py`: `MarkdownTasks`, the `Tasks` port over the task folders, the
     sidecar JSON and the `## Log`/`## Questions` sections (stale-save merge, hand-move detection).
   - `app/tick.py`: `Tick` (observe hand moves, reconcile running workers, clean up workspaces,

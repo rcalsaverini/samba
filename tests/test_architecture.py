@@ -24,7 +24,8 @@ APP_MODULES = ["app/__init__.py", "app/turn.py", "app/machine.py", "app/results.
                "app/confirm.py", "app/change_state.py", "app/answer_question.py",
                "app/resolve.py", "app/accept_work.py", "app/create_task.py",
                "app/adr.py", "app/queries.py", "app/tick.py", "app/explore.py", "app/guard.py",
-               "app/startup.py", "app/prompt_builder.py", "app/finish.py", "app/run_task.py"]
+               "app/startup.py", "app/prompt_builder.py", "app/finish.py", "app/run_task.py",
+               "app/task_commands.py"]
 
 FORBIDDEN = {"os", "time", "datetime", "uuid", "subprocess", "asyncio", "logging", "pathlib"}
 
@@ -240,6 +241,36 @@ def test_the_cli_adapter_holds_no_rule() -> None:
     code = code_without_comments(SRC / "entrypoints" / "cli.py")
     for word in ("human_events", "merge.", "TaskId.slug", "Machine", "subprocess"):
         assert word not in code, f"entrypoints/cli.py mentions {word}"
+
+
+CLI_FORBIDDEN = {"samba.app.resolve", "samba.domain.task_id", "samba.entrypoints.orchestrator",
+                 "samba.entrypoints.workers"}
+
+
+def cli_violations(path: Path) -> list[str]:
+    """Imports a CLI module may not have: id resolution (use cases resolve ids) and other entry points."""
+    return [n for n in imported_modules(path) if n in CLI_FORBIDDEN]
+
+
+def test_the_cli_resolves_no_id_and_calls_no_other_entry_point() -> None:
+    assert cli_violations(SRC / "entrypoints" / "cli.py") == []
+
+
+def test_the_cli_check_catches_resolution_and_entry_points(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("from samba.app.resolve import find_task\nfrom samba.domain.task_id import TaskId\n"
+                   "from samba.entrypoints.orchestrator import Orchestrator\n"
+                   "from samba.entrypoints.table import print_table\n")
+    assert cli_violations(bad) == ["samba.app.resolve", "samba.domain.task_id",
+                                   "samba.entrypoints.orchestrator"]
+
+
+def test_app_modules_never_import_argparse(tmp_path: Path) -> None:
+    for rel in APP_MODULES:
+        assert "argparse" not in [n.split(".")[0] for n in imported_modules(SRC / rel)], rel
+    bad = tmp_path / "bad.py"
+    bad.write_text("import argparse\n")
+    assert "argparse" in imported_modules(bad)
 
 
 APP_FORBIDDEN = {"os", "subprocess", "pathlib", "logging", "asyncio"}  # use cases await ports, never the loop
