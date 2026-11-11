@@ -38,7 +38,21 @@ $ samba task --help
 ```
 
 Every command is `samba run` or `samba <noun> <verb>`. There are no top-level shortcuts such as
-`samba new` or `samba status`. Spec chapter cli.
+`samba new` or `samba status`. Put `--repo PATH` after the command and its arguments. Spec chapter cli.
+
+### Shell completion
+
+Samba can complete command names and options in bash, zsh and fish (and PowerShell). Install it
+once for the shell you are using, then restart the terminal:
+
+```
+$ samba --install-completion
+$ samba --show-completion      # print the script instead, to put it where you want
+```
+
+`--install-completion` edits your shell configuration; use `--show-completion` if you would rather
+add the script yourself. Task ids, question ids and ADR numbers are not completed yet: that comes
+in a later step, so `samba plan accept <TAB>` does not offer ids for now. Spec chapter cli.
 
 ## 3. Setting up a repository
 

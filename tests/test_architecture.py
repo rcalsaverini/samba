@@ -265,12 +265,21 @@ def test_the_cli_check_catches_resolution_and_entry_points(tmp_path: Path) -> No
                                    "samba.entrypoints.orchestrator"]
 
 
-def test_app_modules_never_import_argparse(tmp_path: Path) -> None:
-    for rel in APP_MODULES:
-        assert "argparse" not in [n.split(".")[0] for n in imported_modules(SRC / rel)], rel
+CLI_LIBRARIES = {"argparse", "typer", "click"}
+
+
+def cli_library_imports(path: Path) -> list[str]:
+    return [n for n in imported_modules(path) if n.split(".")[0] in CLI_LIBRARIES]
+
+
+def test_domain_and_app_import_no_cli_library_and_nothing_uses_argparse(tmp_path: Path) -> None:
+    for rel in [*DOMAIN_MODULES, *APP_MODULES]:
+        assert cli_library_imports(SRC / rel) == [], rel
+    for path in sorted(SRC.rglob("*.py")):
+        assert "argparse" not in [n.split(".")[0] for n in imported_modules(path)], path
     bad = tmp_path / "bad.py"
-    bad.write_text("import argparse\n")
-    assert "argparse" in imported_modules(bad)
+    bad.write_text("import argparse\nimport typer\nfrom click import Command\n")
+    assert cli_library_imports(bad) == ["argparse", "typer", "click"]
 
 
 APP_FORBIDDEN = {"os", "subprocess", "pathlib", "logging", "asyncio"}  # use cases await ports, never the loop
