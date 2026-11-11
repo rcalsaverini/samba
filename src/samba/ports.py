@@ -5,6 +5,8 @@ Protocols only. Adapters in `samba.adapters` implement them; nothing here may im
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from samba.domain.agent import AgentReport, AgentRequest, Readiness
@@ -90,6 +92,45 @@ class Tasks(Protocol):
 
     def location(self, id: TaskId) -> str:
         """Opaque: where the agent finds its task (the `task.path` prompt variable)."""
+        ...
+
+
+@dataclass(frozen=True)
+class EditResult:
+    """What `Terminal.edit` returns: the text, or `error` (a message without the `samba: `
+    prefix) when the editor could not run or failed."""
+
+    text: str | None = None
+    error: str | None = None
+
+
+class Terminal(Protocol):
+    """The person at the keyboard (spec: cli, confirmation policy)."""
+
+    def is_interactive(self) -> bool:
+        """Whether both input and output are a terminal."""
+        ...
+
+    def ask(self, prompt: str) -> str:
+        """Print `prompt` (no newline), read one line without its line end. Raises `EOFError`
+        at end of input."""
+        ...
+
+    def read_block(self, prompt: str) -> list[str]:
+        """Print `prompt` (and a newline), read lines until an empty line or end of input."""
+        ...
+
+    def edit(self, initial: str) -> EditResult:
+        """Let the person edit `initial` in their editor. Returns the file's content."""
+        ...
+
+
+class RepoLock(Protocol):
+    """The advisory lock that serialises state-changing commands and the orchestrator."""
+
+    def acquire(self, blocking: bool = True) -> AbstractContextManager[bool]:
+        """Hold the lock for a `with` block. Yields True once held, False (holding nothing) if
+        it could not be had."""
         ...
 
 
