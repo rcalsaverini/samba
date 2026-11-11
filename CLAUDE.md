@@ -81,7 +81,9 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `test_manual.py`: drift check for `docs/manual.md`. Runs the CLI's `--help` and reads files,
     never imports `samba`.
   - `test_scenarios.py` and `scenarios/*.json`: the scenario runner and its data (ADR 0012,
-    `architecture` chapter, Scenarios). Imports the domain only, never an adapter.
+    `architecture` chapter, Scenarios), including `lifecycle.json`: the whole life of a task over
+    the orchestrator, the use cases and the fakes. Imports the domain, `app/` and
+    `orchestrator.py`, never an adapter.
   - `test_architecture.py`: guards the dependency rule. Reads sources with `ast`, never imports
     `samba`; append moved domain modules to its `DOMAIN_MODULES`.
   - `fake_claude.py`: scripted fake of the `claude` CLI. Standard library only.
