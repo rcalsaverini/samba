@@ -120,10 +120,47 @@ def test_the_old_task_store_is_gone_and_the_adapter_is_used() -> None:
     assert not (SRC / "tasks.py").exists(), "tasks.py moved to adapters/markdown_tasks.py"
     assert not (SRC / "transitions.py").exists(), "transitions.py moved to app/machine.py"
     assert not (SRC / "domain" / "sidecar.py").exists()
-    for rel in ["orchestrator.py", "cli.py"]:
-        names = imported_modules(SRC / rel)
-        assert "samba.adapters.markdown_tasks" in names, f"{rel} must use the markdown adapter"
-        assert "samba.tasks" not in names, f"{rel} imports the old folder helpers"
+    assert "samba.adapters.markdown_tasks" in imported_modules(SRC / "compose.py")
+    for path in sorted(SRC.rglob("*.py")):
+        assert "samba.tasks" not in imported_modules(path), f"{path} imports the old folder helpers"
+
+
+def is_adapter(name: str) -> bool:
+    return name == "samba.adapters" or name.startswith("samba.adapters.")
+
+
+def adapter_imports(path: Path) -> list[str]:
+    return [n for n in imported_modules(path) if is_adapter(n)]
+
+
+def test_only_the_composition_root_builds_adapters() -> None:
+    for rel in ["cli.py", "orchestrator.py"]:
+        assert adapter_imports(SRC / rel) == [], f"{rel} reaches an adapter outside the root"
+    root = code_without_comments(SRC / "compose.py")
+    assert "MarkdownTasks(" in root
+    for path in sorted(SRC.rglob("*.py")):
+        rel = path.relative_to(SRC).as_posix()
+        if rel in ("compose.py", "adapters/markdown_tasks.py"):
+            continue
+        assert "MarkdownTasks(" not in code_without_comments(path), rel
+
+
+def test_the_cli_adapter_holds_no_rule() -> None:
+    code = code_without_comments(SRC / "cli.py")
+    for word in ("human_events", "merge.", "TaskId.slug", "Machine", "subprocess"):
+        assert word not in code, f"cli.py mentions {word}"
+
+
+def test_app_modules_import_no_io() -> None:
+    for rel in APP_MODULES:
+        for name in imported_modules(SRC / rel):
+            assert name.split(".")[0] not in {"os", "subprocess", "pathlib"}, f"{rel} imports {name}"
+
+
+def test_the_check_catches_import_os(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("import os\n")
+    assert violations(bad) == ["os"]
 
 
 def test_only_the_adapter_splits_task_front_matter() -> None:

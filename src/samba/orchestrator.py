@@ -9,11 +9,8 @@ import logging
 import re
 from pathlib import Path
 
-from samba.adapters.claude_cli import ClaudeCliRunner
-from samba.adapters.git_workspaces import GitWorkspaces
-from samba.adapters.markdown_tasks import MarkdownTasks
-from samba.adapters.repo_lock import FileRepoLock
-from samba.adapters.system import SystemClock, UuidGenerator
+from typing import Protocol
+
 from samba.app.machine import Machine
 from samba.app.tick import Notes, Running, Tick, running_folder, stage_of
 from samba.app.turn import TurnFlow, TurnSetup
@@ -24,9 +21,11 @@ from samba.ports import (
     AgentRunner,
     Clock,
     IdGenerator,
+    RepoLock,
     StoreError,
     Tasks,
     WorkspaceError,
+    Workspaces,
 )
 from samba.proc import git, run_shell
 from samba.prompts import (
@@ -52,29 +51,35 @@ class StartupError(Exception):
     pass
 
 
+class WorkerWorkspaces(Workspaces, Protocol):
+    """The workspaces as the workers use them: the tick's port plus path and creation."""
+
+    def path(self, task_id: str) -> Path: ...
+
+    async def ensure(self, task_id: str) -> tuple[Path, bool]: ...
+
+
 class Orchestrator:
-    def __init__(self, config: Config, clock: Clock | None = None,
-                 ids: IdGenerator | None = None, agent: AgentRunner | None = None,
-                 tasks: Tasks | None = None) -> None:
+    def __init__(self, config: Config, clock: Clock, ids: IdGenerator, agent: AgentRunner,
+                 tasks: Tasks, workspaces: WorkerWorkspaces, lock: RepoLock) -> None:
+        """Every port is passed in; the composition root (`samba.compose`) builds them."""
         self.config = config
         self.policy = config.policy
         self.layout = config.layout
         self.prompts = config.prompts
         self.validation = config.validation
-        self.clock: Clock = clock or SystemClock()
-        self.ids: IdGenerator = ids or UuidGenerator()
+        self.clock: Clock = clock
+        self.ids: IdGenerator = ids
         self.sym = config.layout.samba_dir
-        self.tasks: Tasks = tasks or MarkdownTasks(self.sym / "tasks", self.sym / "state",
-                                                    self.clock)
+        self.tasks: Tasks = tasks
         self.runs_dir = self.sym / "runs"
-        self.agent: AgentRunner = agent or ClaudeCliRunner(
-            config.agent, (self.sym / "tasks").resolve(), self.runs_dir, config.layout.repo)
-        self.workspaces = GitWorkspaces(config.layout, config.hooks, config.validation.shell)
+        self.agent: AgentRunner = agent
+        self.workspaces = workspaces
         self.turns = TurnFlow(self.agent, self.ids, self.tasks, self.clock)
         self.running: dict[str, Running] = {}
         self.machine = Machine(self.tasks, self.clock, self._guard)
         self.notes = Notes(self.tasks, self.running)  # `## Log` lines held while an agent runs
-        self.ticker = Tick(self.tasks, self.clock, FileRepoLock(self.sym), self.workspaces,
+        self.ticker = Tick(self.tasks, self.clock, lock, self.workspaces,
                            self.machine, self.policy.max_concurrent, self.running, self.notes,
                            self._spawn)
 
