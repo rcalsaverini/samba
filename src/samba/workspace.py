@@ -6,11 +6,8 @@ import hashlib
 from pathlib import Path
 
 from samba.config import Hooks, Layout
+from samba.ports import WorkspaceError
 from samba.proc import git, run_shell
-
-
-class WorkspaceError(Exception):
-    pass
 
 
 def repo_key(repo: Path) -> str:

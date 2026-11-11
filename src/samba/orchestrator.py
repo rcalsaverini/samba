@@ -7,19 +7,27 @@ import contextlib
 import functools
 import logging
 import re
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 from samba.adapters.claude_cli import ClaudeCliRunner
+from samba.adapters.git_workspaces import GitWorkspaces
 from samba.adapters.markdown_tasks import MarkdownTasks
+from samba.adapters.repo_lock import FileRepoLock
 from samba.adapters.system import SystemClock, UuidGenerator
 from samba.app.machine import Machine
+from samba.app.tick import Notes, Running, Tick, running_folder, stage_of
 from samba.app.turn import TurnFlow, TurnSetup
 from samba.config import Config
 from samba.domain.policy import Fail, Retry, RetryPolicy, should_reflect
 from samba.logfmt import kv
-from samba.ports import AgentRunner, Clock, IdGenerator, StoreError, Tasks
+from samba.ports import (
+    AgentRunner,
+    Clock,
+    IdGenerator,
+    StoreError,
+    Tasks,
+    WorkspaceError,
+)
 from samba.proc import git, run_shell
 from samba.prompts import (
     APPROVED_PLAN_RULE,
@@ -34,31 +42,14 @@ from samba.domain.questions import open_questions, round_pairs
 from samba.domain.states import Stage, State, running_of, todo_of
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-from samba.domain.transitions import human_row, log_line
-from samba.lock import repo_lock
 from samba.template import TemplateError, render
-from samba.workspace import WorkspaceError, Workspaces, branch_name
+from samba.workspace import branch_name
 
 log = logging.getLogger("samba")
-
-StopReason = Literal["moved", "shutdown"]
 
 
 class StartupError(Exception):
     pass
-
-
-def stage_of(task: Task) -> Stage:
-    return "plan" if task.last_stage == "plan" else "work"
-
-
-@dataclass
-class Running:
-    task: asyncio.Task[None]
-    started_at: float
-    folder: State  # the running folder the task was claimed into
-    turn: int = 0
-    stop_reason: StopReason | None = None
 
 
 class Orchestrator:
@@ -78,14 +69,14 @@ class Orchestrator:
         self.runs_dir = self.sym / "runs"
         self.agent: AgentRunner = agent or ClaudeCliRunner(
             config.agent, (self.sym / "tasks").resolve(), self.runs_dir, config.layout.repo)
-        self.workspaces = Workspaces(config.layout, config.hooks, config.validation.shell)
+        self.workspaces = GitWorkspaces(config.layout, config.hooks, config.validation.shell)
         self.turns = TurnFlow(self.agent, self.ids, self.tasks, self.clock)
         self.running: dict[str, Running] = {}
-        self.warned_invalid: set[str] = set()
-        self.warned_deps: set[tuple[str, str]] = set()
         self.machine = Machine(self.tasks, self.clock, self._guard)
-        self.pending_notes: dict[str, list[str]] = {}  # `## Log` lines held while an agent runs
-        self.held: dict[str, tuple[str, ...]] = {}  # todo tasks waiting on dependencies
+        self.notes = Notes(self.tasks, self.running)  # `## Log` lines held while an agent runs
+        self.ticker = Tick(self.tasks, self.clock, FileRepoLock(self.sym), self.workspaces,
+                           self.machine, self.policy.max_concurrent, self.running, self.notes,
+                           self._spawn)
 
     def _guard(self, name: str, task: Task) -> bool:
         if name == "plan_required":
@@ -97,12 +88,6 @@ class Orchestrator:
     def _status(self, task_id: str) -> State | None:
         task = self.tasks.get(TaskId(task_id))
         return task.status if task is not None else None
-
-    def _append_log(self, task_id: str, line: str) -> None:
-        task = self.tasks.get(TaskId(task_id))
-        if task is not None:
-            task.add_log(line)
-            self.tasks.save(task)
 
     # ---- startup ------------------------------------------------------------------------
 
@@ -160,7 +145,7 @@ class Orchestrator:
         try:
             while True:
                 await self.tick()
-                if exit_when_idle and not self.running and not self._runnable_todo():
+                if exit_when_idle and not self.running and not self.ticker.runnable_todo():
                     await self.cleanup_workspaces()
                     log.info(kv("idle_exit"))
                     return
@@ -168,131 +153,22 @@ class Orchestrator:
         finally:
             await self.shutdown()
 
-    def _runnable_todo(self) -> list[str]:
-        """Todo tasks that will run eventually: not held only by dependencies (spec: cli)."""
-        return [tid for status in ("plan-todo", "work-todo") for tid in self.tasks.ids(status)
-                if tid not in self.held]
-
     async def tick(self) -> None:
-        # A state-changing command holds the repo lock for its whole rename + sidecar + log
-        # sequence (spec: task-files, Write discipline). Skip the tick while it does: observe() would misread the half-done
-        # move as a hand move, and dispatch could claim the task before the command saved.
-        with repo_lock(self.sym, blocking=False) as held:
-            if not held:
-                log.debug(kv("tick_skipped", reason="repo lock held"))
-                return
-            self.observe()
-            self.reconcile()
-            await self.cleanup_workspaces()
-            self.dispatch()
-
-    def _note(self, task_id: str, line: str) -> None:
-        """Append to `## Log`, or hold the line until the agent stops (spec: task-files, Write discipline)."""
-        if task_id in self.running:
-            self.pending_notes.setdefault(task_id, []).append(line)
-        else:
-            self._append_log(task_id, line)
-
-    def observe(self) -> None:
-        """Interpret hand moves: a task in another status than the store last knew (spec: states)."""
-        for move in self.tasks.observe_moves():
-            task = self.tasks.get(move.task_id)
-            if task is None:
-                continue
-            row = human_row(move.src, move.dst, task)
-            if row is not None:
-                self._note(move.task_id, self.machine.observe(move, row, task))
-                continue
-            if not self.tasks.revert_move(move):
-                continue
-            log.warning(kv("illegal_move", task=move.task_id, src=move.src, dst=move.dst))
-            self._note(move.task_id, log_line(
-                f"illegal move: {move.src} -> {move.dst}, moved back to {move.src}", self.clock))
-
-    def reconcile(self) -> None:
-        for task_id, entry in list(self.running.items()):
-            status = self._status(task_id)
-            if entry.stop_reason is None and status != entry.folder:
-                entry.stop_reason = "moved"
-                entry.task.cancel()
-                log.info(kv("stopping", task=task_id, reason=f"task file left {entry.folder}/",
-                            now=status or "deleted"))
+        await self.ticker.run()
 
     async def cleanup_workspaces(self) -> None:
-        for task_id in self.workspaces.existing_ids():
-            if task_id in self.running:
-                continue
-            state = self._status(task_id)
-            if state in (None, "done", "discarded"):
-                try:
-                    await self.workspaces.remove(task_id)
-                    log.info(kv("workspace_removed", task=task_id))
-                except WorkspaceError as e:
-                    log.warning(kv("workspace_remove_failed", task=task_id, error=e))
+        await self.ticker.cleanup_workspaces()
 
-    def dispatch(self) -> None:
-        for status in ("plan-todo", "work-todo"):
-            for name in self.tasks.rejected_names(status):
-                if name not in self.warned_invalid:
-                    self.warned_invalid.add(name)
-                    log.warning(kv("invalid_task_name", file=name,
-                                   hint="use only letters, digits, '.', '_' and '-'"))
-        now = self.clock.time()
-        self.held = {}
-        candidates: list[Task] = []
-        for status in ("plan-todo", "work-todo"):
-            for task in self.tasks.list(status):
-                if task.id in self.running or not self._deps_ready(task):
-                    continue
-                if task.not_before is not None and task.not_before > now:
-                    continue
-                candidates.append(task)
-        candidates.sort(key=lambda t: (t.priority is None, t.priority or 0, t.queued_at or 0.0,
-                                       t.id))
-        for task in candidates:
-            if len(self.running) >= self.policy.max_concurrent:
-                break
-            if task.status == "work-todo":
-                self.machine.fire(task.id, "route_to_plan", task=task)  # to plan-todo, if it applies
-            if not self.machine.fire(task.id, "dispatch_plan" if task.status == "plan-todo"
-                                     else "dispatch_work", task=task):
-                continue
-            stage = stage_of(task)
-            running_folder = running_of(stage)
-            log.info(kv("dispatch", task=task.id, attempt=task.attempts, stage=stage,
-                        resume=bool(task.plan_session_id if stage == "plan"
-                                    else task.session_id)))
-            worker = asyncio.create_task(self.work(task.id))
-            self.running[task.id] = Running(task=worker, started_at=self.clock.monotonic(),
-                                            folder=running_folder)
-            worker.add_done_callback(functools.partial(self._on_worker_done, task.id))
-
-    def _deps_ready(self, task: Task) -> bool:
-        """The dependency guard of the dispatch rows (spec: orchestrator, Dependencies). Fires the stuck rows."""
-        status = evaluate(deps_snapshot(task, self.tasks.get), task.id)
-        if status.kind == "ready":
-            return True
-        if status.kind == "cycle":
-            self.machine.fire(task.id, "dependency_cycle", message="dependency cycle")
-        elif status.kind == "discarded":
-            self.machine.fire(task.id, "dependency_discarded", message=(
-                "a dependency was discarded: " + ", ".join(status.waiting)))
-        else:
-            self.held[task.id] = status.waiting
-            for dep_id in status.unknown:
-                if (task.id, dep_id) not in self.warned_deps:
-                    self.warned_deps.add((task.id, dep_id))
-                    log.warning(kv("unknown_dependency", task=task.id, dependency=dep_id))
-        return False
+    def _spawn(self, task: Task) -> None:
+        """Start the worker of a task the tick just claimed."""
+        worker = asyncio.create_task(self.work(task.id))
+        self.running[task.id] = Running(task=worker, started_at=self.clock.monotonic(),
+                                        folder=running_folder(task))
+        worker.add_done_callback(functools.partial(self._on_worker_done, task.id))
 
     def _on_worker_done(self, task_id: str, _worker: asyncio.Task[None]) -> None:
         self.running.pop(task_id, None)
-        lines = self.pending_notes.pop(task_id, [])
-        task = self.tasks.get(TaskId(task_id)) if lines else None
-        if task is not None:
-            for line in lines:
-                task.add_log(line)
-            self.tasks.save(task)
+        self.notes.release(task_id)
 
     async def shutdown(self) -> None:
         if not self.running:

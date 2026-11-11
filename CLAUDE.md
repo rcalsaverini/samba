@@ -50,7 +50,11 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `adapters/repo_lock.py` (`FileRepoLock`, the `RepoLock` port over `lock.py`).
   - `adapters/markdown_tasks.py`: `MarkdownTasks`, the `Tasks` port over the task folders, the
     sidecar JSON and the `## Log`/`## Questions` sections (stale-save merge, hand-move detection).
-  - `orchestrator.py`: poll loop, dispatch, workers, retries, transitions.
+  - `app/tick.py`: `Tick` (observe hand moves, reconcile running workers, clean up workspaces,
+    dispatch with dependency rows), `Notes` (held `## Log` lines) and `Running`; starts workers
+    through a `spawn` callback. `adapters/git_workspaces.py` (`GitWorkspaces`, the `Workspaces`
+    port over `workspace.py`).
+  - `orchestrator.py`: startup, poll loop, workers, retries, transitions; calls `Tick`.
   - `app/machine.py`: `Machine.fire` and `observe`, the only path that moves a task
     (`docs/spec/states.md`): loads the `Task`, applies the domain row, saves.
   - `lock.py`: `repo_lock`, the `.samba/lock` flock shared by commands and orchestrator ticks.
