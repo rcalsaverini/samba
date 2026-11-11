@@ -66,8 +66,8 @@ for the event, do the **outside effect** (here: write the feedback into the task
 command moves a task or writes the sidecar except through `fire`. Later commands reuse the pattern.
 
 The pattern lives in the use cases of `app/`, not in `cli.py`: `ChangeState` (plan accept and
-reject, work reject, task retry, stop, discard), `AnswerQuestion`, `AcceptWork` (over the `Merger`
-port) and `CreateTask` (`task new`). The confirmation policy (`--yes`, no TTY, `[y/N]`) is
+reject, work reject, task retry, stop, discard), `AnswerQuestion`, `AcceptWork` (async, over the `Vcs`
+and `Validator` ports) and `CreateTask` (`task new`). The confirmation policy (`--yes`, no TTY, `[y/N]`) is
 `app/confirm.py`, over the `Terminal` port. The use cases never print, read stdin or return exit
 codes: they return result objects, and the CLI adapter prints their messages and maps the result
 kind to the exit code. The adapters are built only by the composition root (`compose.py`).

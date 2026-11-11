@@ -18,6 +18,7 @@ import pytest
 from fake_agent import FakeAgentRunner
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
+from fake_validator import FakeValidator, failing, passing
 
 from samba.app.turn import TurnFlow, TurnSetup
 from samba.domain.agent import AgentReport, Failure, QuestionDraft
@@ -315,17 +316,13 @@ def test_turn_flow(sc: Scenario) -> None:
     side = store.get(TaskId("t1"))
     assert side is not None
     agent = FakeAgentRunner([report_of(r) for r in sc["reports"]])
-    flow = TurnFlow(agent, SeqIds(), store, FakeClock(), FakeJournal())
-    validations = iter(sc.get("validate", []))
-    calls: list[int] = []
-
-    async def validate() -> tuple[bool, str]:
-        calls.append(1)
-        ok, tail = next(validations)
-        return ok, tail
+    validator = FakeValidator(*[passing(tail) if ok else failing(tail)
+                                for ok, tail in sc.get("validate", [])])
+    flow = TurnFlow(agent, SeqIds(), store, FakeClock(), validator, FakeJournal())
+    calls = validator.calls
 
     turns: list[int] = []
-    result = asyncio.run(flow.run(side, setup, validate, turns.append))
+    result = asyncio.run(flow.run(side, setup, turns.append))
     if expect["result"]["kind"] == "fail":
         assert result == Fail(expect["result"]["error"])
     else:

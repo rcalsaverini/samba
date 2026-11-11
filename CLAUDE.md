@@ -29,7 +29,6 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     use cases (`ListAdrs`, `ShowAdr`, `SetAdrStatus`, `SupersedeAdr`) and `app/queries.py` the
     read-only ones (`ListTasks`, `ShowTask`, `ListQuestions`, `ShowQuestion`), returning
     `Table`/`Text`/`Written` from `app/results.py`.
-  - `merge.py`: git steps of `work accept`: preflight, `--no-commit` merge, validate, commit/abort.
   - `views.py`: the table printer of the CLI adapter (the rows come from `app/queries.py`, which
     also holds the state-prefix matcher and the `task show` renderer).
   - `config.py`: loads and validates `WORKFLOW.md` (front matter + prompt body).
@@ -46,12 +45,14 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     port; the orchestrator fires the transition for what it returns.
   - `app/change_state.py`: `ChangeState` (the command pattern of plan/work reject, task
     retry/stop/discard, plan accept) and `check_legal`, the single legality check;
-    `app/answer_question.py`: `AnswerQuestion`; `app/accept_work.py`: `AcceptWork` (`work accept`, over the
-    `Merger` port); `app/create_task.py`: `CreateTask` (`task new`); `app/resolve.py`:
+    `app/answer_question.py`: `AnswerQuestion`; `app/accept_work.py`: `AcceptWork` (`work accept`, async: the
+    merge sequence over the `Vcs` and `Validator` ports); `app/create_task.py`: `CreateTask` (`task new`); `app/resolve.py`:
     `resolve_task_id`, `resolve_deps`, `ResolveError`; `app/confirm.py`: the confirmation policy over the
     `Terminal` port; `app/results.py`: `Refused` and message helpers. Use cases never print: the
     CLI prints their results and maps `kind` to the exit code.
-  - `adapters/git_merger.py` (`GitMerger`, the `Merger` port over `merge.py`),
+  - `adapters/git_vcs.py` (`GitVcs`, the `Vcs` port: worktrees outside the repo, the after_create
+    hook, the git steps of `work accept`), `adapters/shell_validator.py` (`ShellValidator`, the
+    `Validator` port),
     `adapters/terminal.py` (`StdTerminal`, the `Terminal` port: tty, prompts, `$EDITOR`),
     `adapters/file_lock.py` (`FileLock`, the `Lock` port: the `.samba/lock` flock shared by commands
     and orchestrator ticks), `adapters/log_journal.py` (`LogJournal`, `NullJournal`: the `Journal`
@@ -60,8 +61,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     sidecar JSON and the `## Log`/`## Questions` sections (stale-save merge, hand-move detection).
   - `app/tick.py`: `Tick` (observe hand moves, reconcile running workers, clean up workspaces,
     dispatch with dependency rows), `Notes` (held `## Log` lines) and `Running`; starts workers
-    through a `spawn` callback. `adapters/git_workspaces.py` (`GitWorkspaces`, the `Workspaces`
-    port over `workspace.py`).
+    through a `spawn` callback.
   - `orchestrator.py`: startup, poll loop, workers, retries, transitions; calls `Tick`.
   - `app/machine.py`: `Machine.fire` and `observe`, the only path that moves a task
     (`docs/spec/states.md`): loads the `Task`, applies the domain row, saves.
@@ -70,7 +70,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `AgentRequest`, `AgentReport`, `Readiness`. `logfmt.py`: the `kv` log line format.
   - `ports.py`: the ports (Protocols `Clock`, `IdGenerator`, `AgentRunner`, `Tasks`); `adapters/system.py`: the system
     clock and uuid generator. The layers and the dependency rule are in the `architecture` chapter.
-  - `workspace.py`: git worktrees outside the repo; `proc.py`: subprocess helpers (process groups).
+  - `proc.py`: subprocess helpers (process groups), used only inside adapters.
   - `prompts.py`: built-in prompts, the protocol prompt, the outcome schema.
   - `template.py`: strict `{{ name }}` rendering.
 - `tests/`
@@ -86,6 +86,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `samba`; append moved domain modules to its `DOMAIN_MODULES`.
   - `fake_claude.py`: scripted fake of the `claude` CLI. Standard library only.
   - `fake_agent.py`: in-memory fake `AgentRunner` (scripted reports), tested in `test_agent_port.py`.
+  - `fake_vcs.py`, `fake_validator.py`, `fake_journal.py`, `fake_terminal.py` (with `FakeLock`):
+    in-memory fakes of the `Vcs`, `Validator`, `Journal`, `Terminal` and `Lock` ports.
 
 ## Checks
 

@@ -11,11 +11,11 @@ from pathlib import Path
 
 from samba.adapters.adr_files import FileAdrs
 from samba.adapters.claude_cli import ClaudeCliRunner
-from samba.adapters.git_merger import GitMerger
-from samba.adapters.git_workspaces import GitWorkspaces
-from samba.adapters.markdown_tasks import MarkdownTasks
 from samba.adapters.file_lock import FileLock
+from samba.adapters.git_vcs import GitVcs
 from samba.adapters.log_journal import LogJournal, NullJournal
+from samba.adapters.markdown_tasks import MarkdownTasks
+from samba.adapters.shell_validator import ShellValidator
 from samba.adapters.system import SystemClock, UuidGenerator
 from samba.adapters.terminal import StdTerminal
 from samba.app.accept_work import AcceptWork
@@ -67,22 +67,22 @@ def build(repo: Path, *, for_run: bool = False) -> Services:
     machine = Machine(tasks, clock, journal)
     agent = ClaudeCliRunner(config.agent, (sym / "tasks").resolve(), sym / "runs", layout.repo,
                             journal)
-    workspaces = GitWorkspaces(layout, config.hooks, config.validation.shell)
+    vcs = GitVcs(layout, config.hooks, config.validation.shell)
+    validator = ShellValidator(config.validation, sym / "runs")
     return Services(
         config=config,
         tasks=tasks,
         change_state=ChangeState(tasks, machine, terminal, lock),
         answer_question=AnswerQuestion(tasks, machine, terminal, lock, clock),
-        accept_work=AcceptWork(tasks, machine, terminal, lock,
-                               GitMerger(layout, config.validation), layout.base_branch,
-                               config.validation.command),
+        accept_work=AcceptWork(tasks, machine, terminal, lock, vcs, validator,
+                               layout.base_branch, config.validation.command),
         create_task=CreateTask(tasks, terminal, clock),
         list_tasks=ListTasks(tasks, clock),
         show_task=ShowTask(tasks, clock),
         list_questions=ListQuestions(tasks),
         show_question=ShowQuestion(tasks),
-        orchestrator=Orchestrator(config, clock, UuidGenerator(), agent, tasks, workspaces, lock,
-                                    journal),
+        orchestrator=Orchestrator(config, clock, UuidGenerator(), agent, tasks, vcs, validator,
+                                  lock, journal),
     )
 
 
