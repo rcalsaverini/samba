@@ -11,6 +11,7 @@ import shutil
 import signal
 import sys
 from pathlib import Path
+from collections.abc import Callable
 from typing import Annotated, Any
 
 import typer
@@ -35,9 +36,70 @@ class OrderedGroup(TyperGroup):
 
 Repo = Annotated[Path | None, typer.Option("--repo", show_default=False,
                                            help="repository root (default: current directory)")]
-Id = Annotated[str, typer.Argument(metavar="ID", help="task id or unique prefix")]
-TaskQid = Annotated[str, typer.Argument(metavar="TASK[/QID]", help="task id or prefix, optionally /QID")]
-AdrNumber = Annotated[str, typer.Argument(metavar="N", help="ADR number: 3, 03 or 0003")]
+Candidates = list[tuple[str, str]]
+Completer = Callable[[typer.Context, str], Candidates]
+
+
+def _repo(ctx: typer.Context) -> Path:
+    """`--repo` as typed before the cursor, else the current directory."""
+    repo = ctx.params.get("repo")
+    return repo if isinstance(repo, Path) else Path.cwd()
+
+
+def _completer(query: Callable[[Path, str], Candidates]) -> Completer:
+    """A completion callback: one query through bootstrap, no output, every error is no
+    candidates (no repo, no WORKFLOW.md, broken config)."""
+
+    def complete(ctx: typer.Context, incomplete: str) -> Candidates:
+        try:
+            return query(_repo(ctx), incomplete)
+        except Exception:
+            return []
+
+    return complete
+
+
+def task_ids(command: str) -> Completer:
+    return _completer(lambda repo, text: build(repo).complete_tasks.run(command, text))
+
+
+def question_ids() -> Completer:
+    return _completer(lambda repo, text: build(repo).complete_questions.run(text))
+
+
+def adr_numbers(command: str) -> Completer:
+    return _completer(lambda repo, text: build_adr(repo).complete.run(command, text))
+
+
+def _id(command: str) -> Any:
+    return typer.Argument(metavar="ID", help="task id or unique prefix",
+                          autocompletion=task_ids(command))
+
+
+PlanId = Annotated[str, _id("plan accept")]
+PlanRejectId = Annotated[str, _id("plan reject")]
+WorkAcceptId = Annotated[str, _id("work accept")]
+WorkRejectId = Annotated[str, _id("work reject")]
+RetryId = Annotated[str, _id("task retry")]
+StopId = Annotated[str, _id("task stop")]
+DiscardId = Annotated[str, _id("task discard")]
+ShowId = Annotated[str, _id("task show")]
+QuestionTarget = Annotated[str, typer.Argument(
+    metavar="TASK[/QID]", help="task id or prefix, optionally /QID", autocompletion=question_ids())]
+AnswerTarget = Annotated[str, typer.Argument(
+    metavar="TASK[/QID]", help="task id or prefix; /QID may be left out with one open question",
+    autocompletion=question_ids())]
+
+
+def _adr(command: str) -> Any:
+    return typer.Argument(metavar="N", help="ADR number: 3, 03 or 0003",
+                          autocompletion=adr_numbers(command))
+
+
+AdrShow = Annotated[str, _adr("show")]
+AdrAccept = Annotated[str, _adr("accept")]
+AdrReject = Annotated[str, _adr("reject")]
+AdrSupersede = Annotated[str, _adr("supersede")]
 Yes = Annotated[bool, typer.Option("--yes", help="skip the confirmation prompt")]
 Feedback = Annotated[str | None, typer.Option("--feedback", metavar="TEXT", help="feedback for the agent")]
 Edit = Annotated[bool, typer.Option("--edit", help="write the feedback in $EDITOR")]
@@ -179,37 +241,37 @@ def task_list(
 
 
 @task_app.command("show")
-def task_show(id: Id, repo: Repo = None) -> None:
+def task_show(id: ShowId, repo: Repo = None) -> None:
     """show one task in detail"""
     finish(build(root(repo)).show_task.run(id))
 
 
 @task_app.command("retry")
-def task_retry(id: Id, repo: Repo = None) -> None:
+def task_retry(id: RetryId, repo: Repo = None) -> None:
     """send a stuck task back to its todo folder"""
     finish(build(root(repo)).retry_task.run(id))
 
 
 @task_app.command("stop")
-def task_stop(id: Id, repo: Repo = None) -> None:
+def task_stop(id: StopId, repo: Repo = None) -> None:
     """stop a running task; it goes to stuck until `task retry`"""
     finish(build(root(repo)).stop_task.run(id))
 
 
 @task_app.command("discard")
-def task_discard(id: Id, yes: Yes = False, repo: Repo = None) -> None:
+def task_discard(id: DiscardId, yes: Yes = False, repo: Repo = None) -> None:
     """discard a task (asks for confirmation)"""
     finish(build(root(repo)).discard_task.run(id, yes))
 
 
 @plan_app.command("accept")
-def plan_accept(id: Id, repo: Repo = None) -> None:
+def plan_accept(id: PlanId, repo: Repo = None) -> None:
     """approve the plan; the task goes to work-todo"""
     finish(build(root(repo)).accept_plan.run(id))
 
 
 @plan_app.command("reject")
-def plan_reject(id: Id, feedback: Feedback = None, edit: Edit = False, repo: Repo = None) -> None:
+def plan_reject(id: PlanRejectId,feedback: Feedback = None, edit: Edit = False, repo: Repo = None) -> None:
     """send the plan back; the task goes to plan-todo"""
     exclusive(feedback, edit)
     finish(build(root(repo)).reject_plan.run(id, feedback, edit))
@@ -217,7 +279,7 @@ def plan_reject(id: Id, feedback: Feedback = None, edit: Edit = False, repo: Rep
 
 @work_app.command("reject")
 def work_reject(
-    id: Id, feedback: Feedback = None, edit: Edit = False,
+    id: WorkRejectId, feedback: Feedback = None, edit: Edit = False,
     fresh: Annotated[bool, typer.Option(
         "--fresh", help="also clear the session so rework starts a fresh conversation")] = False,
     repo: Repo = None,
@@ -229,7 +291,7 @@ def work_reject(
 
 @work_app.command("accept")
 def work_accept(
-    id: Id,
+    id: WorkAcceptId,
     no_merge: Annotated[bool, typer.Option(
         "--no-merge", help="mark done without merging (already merged by hand)")] = False,
     no_validate: Annotated[bool, typer.Option(
@@ -251,15 +313,14 @@ def question_list(repo: Repo = None) -> None:
 
 
 @question_app.command("show")
-def question_show(id: TaskQid, repo: Repo = None) -> None:
+def question_show(id: QuestionTarget, repo: Repo = None) -> None:
     """show a question, or the latest round of a task"""
     finish(build(root(repo)).show_question.run(id))
 
 
 @question_app.command("answer")
 def question_answer(
-    id: Annotated[str, typer.Argument(
-        metavar="TASK[/QID]", help="task id or prefix; /QID may be left out with one open question")],
+    id: AnswerTarget,
     text: Annotated[str | None, typer.Argument(help="the answer (or use --edit)")] = None,
     edit: Annotated[bool, typer.Option("--edit", help="write the answer in $EDITOR")] = False,
     repo: Repo = None,
@@ -281,26 +342,26 @@ def adr_list(
 
 
 @adr_app.command("show")
-def adr_show(number: AdrNumber, repo: Repo = None) -> None:
+def adr_show(number: AdrShow, repo: Repo = None) -> None:
     """print one ADR"""
     finish(build_adr(root(repo)).show.run(number))
 
 
 @adr_app.command("accept")
-def adr_accept(number: AdrNumber, repo: Repo = None) -> None:
+def adr_accept(number: AdrAccept, repo: Repo = None) -> None:
     """mark a proposed ADR accepted (edits the file, no commit)"""
     finish(build_adr(root(repo)).set_status.run("accept", number))
 
 
 @adr_app.command("reject")
-def adr_reject(number: AdrNumber, repo: Repo = None) -> None:
+def adr_reject(number: AdrReject, repo: Repo = None) -> None:
     """mark a proposed ADR rejected (edits the file, no commit)"""
     finish(build_adr(root(repo)).set_status.run("reject", number))
 
 
 @adr_app.command("supersede")
 def adr_supersede(
-    number: AdrNumber,
+    number: AdrSupersede,
     new: Annotated[str, typer.Argument(metavar="NEW", help="number of the ADR that replaces N")],
     repo: Repo = None,
 ) -> None:

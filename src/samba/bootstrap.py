@@ -26,6 +26,7 @@ from samba.app.accept_work import AcceptWork
 from samba.app.adr import ListAdrs, SetAdrStatus, ShowAdr, SupersedeAdr
 from samba.app.answer_question import AnswerQuestion
 from samba.app.change_state import ChangeState
+from samba.app.completion import CompleteAdrs, CompleteQuestions, CompleteTaskIds
 from samba.app.create_task import CreateTask
 from samba.app.explore import StartExplore
 from samba.app.machine import Machine
@@ -44,6 +45,7 @@ class AdrCommands:
     show: ShowAdr
     set_status: SetAdrStatus
     supersede: SupersedeAdr
+    complete: CompleteAdrs
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,8 @@ class Commands:
     answer_question: AnswerQuestion
     accept_work: AcceptWork
     create_task: CreateTask
+    complete_tasks: CompleteTaskIds
+    complete_questions: CompleteQuestions
 
 
 @dataclass(frozen=True)
@@ -113,6 +117,8 @@ def build(repo: Path) -> Commands:
         accept_work=AcceptWork(p.tasks, machine, p.terminal, p.lock, p.vcs, p.validator,
                                p.config.repository.base_branch, p.config.validation.command),
         create_task=CreateTask(p.tasks, p.terminal, p.clock),
+        complete_tasks=CompleteTaskIds(p.tasks),
+        complete_questions=CompleteQuestions(p.tasks),
     )
 
 
@@ -138,4 +144,5 @@ def build_explore(repo: Path) -> StartExplore:
 def build_adr(repo: Path) -> AdrCommands:
     """The ADR commands are plain file edits: no WORKFLOW.md, no lock."""
     adrs = FileAdrs(repo)
-    return AdrCommands(ListAdrs(adrs), ShowAdr(adrs), SetAdrStatus(adrs), SupersedeAdr(adrs))
+    return AdrCommands(ListAdrs(adrs), ShowAdr(adrs), SetAdrStatus(adrs), SupersedeAdr(adrs),
+                       CompleteAdrs(adrs))

@@ -62,14 +62,27 @@ detection for `--install-completion`), `rich`, `markdown-it-py`, `mdurl`, `pygme
 
 ## Shell completion
 
-Completion lands in two steps. **Now (static):** command names and options complete. Install it with
+Completion is static for command names and options, and dynamic for ids. Install it with
 `samba --install-completion` (writes to the shell's config; bash, zsh, fish, PowerShell) or print the
 script with `samba --show-completion` to place it by hand. A script is driven by the environment
 variable `_SAMBA_COMPLETE` (for example `_SAMBA_COMPLETE=complete_bash` with `COMP_WORDS` and
-`COMP_CWORD`), which the black-box tests use. `dev` is hidden from the completions. **Next
-(dynamic, a separate task):** task ids, question ids (`TASK[/QID]`) and ADR numbers, read through
-the use cases, so that `samba plan accept <TAB>` offers the tasks that can be accepted. Until then
-ids are not completed.
+`COMP_CWORD`), which the black-box tests use. `dev` is hidden from the completions.
+
+The id arguments complete from the repository, with a short help text (the state and title, or the
+question text):
+
+- Task ids, by the states the verb acts on, taken from the transition table (`find_row`), not from
+  the CLI: `plan accept` and `plan reject` offer `plan-review`; `work accept` and `work reject`
+  offer `work-review`; `task retry` offers `stuck`; `task stop` the running states; `task
+  discard` the states with a `task.discard` row; `task show` every task.
+- `question show` and `question answer` offer `TASK/QID` of every open question.
+- ADR numbers (`0003`) by status: `adr accept` and `adr reject` offer `proposed`, `adr supersede`
+  offers `accepted` (only the first argument), `adr show` every ADR.
+
+The callbacks go through `bootstrap` and the completion queries (`app/completion.py`) only. They
+read `--repo` from the command line typed so far (before the cursor) and fall back to the current
+directory. Any error (no repo, no `WORKFLOW.md`, broken config) gives no candidates, exit code 0
+and nothing on stderr. The ADR numbers need no `WORKFLOW.md`.
 
 **`task new`** creates the whole task, so the file need not be opened afterwards. It does not take
 the repo lock: it only writes one new file.

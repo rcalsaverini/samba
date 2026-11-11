@@ -25,7 +25,7 @@ APP_MODULES = ["app/__init__.py", "app/turn.py", "app/machine.py", "app/results.
                "app/resolve.py", "app/accept_work.py", "app/create_task.py",
                "app/adr.py", "app/queries.py", "app/tick.py", "app/explore.py", "app/guard.py",
                "app/startup.py", "app/prompt_builder.py", "app/finish.py", "app/run_task.py",
-               "app/task_commands.py"]
+               "app/task_commands.py", "app/completion.py"]
 
 FORBIDDEN = {"os", "time", "datetime", "uuid", "subprocess", "asyncio", "logging", "pathlib"}
 
@@ -293,6 +293,14 @@ def app_violations(path: Path) -> list[str]:
 def test_app_modules_import_no_io_no_logging_no_adapter() -> None:
     for rel in APP_MODULES:
         assert app_violations(SRC / rel) == [], rel
+
+
+def test_completion_queries_stay_in_app_without_typer_or_click(tmp_path: Path) -> None:
+    assert (SRC / "app" / "completion.py").is_file()
+    assert cli_library_imports(SRC / "app" / "completion.py") == []
+    bad = tmp_path / "bad.py"
+    bad.write_text("import typer\nimport click\n")
+    assert cli_library_imports(bad) == ["typer", "click"]
 
 
 def test_every_domain_and_app_module_is_listed() -> None:
