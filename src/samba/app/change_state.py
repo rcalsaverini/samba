@@ -12,7 +12,8 @@ from typing import Literal
 
 from samba.app.confirm import confirm
 from samba.app.machine import Machine
-from samba.app.results import LOCK_BUSY, Refused, refused, usage
+from samba.app.resolve import find_task
+from samba.app.results import LOCK_BUSY, Done, Refused, refused, usage
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
 from samba.domain.transitions import human_events
@@ -53,14 +54,6 @@ def retry_hint(cause: str | None) -> str | None:
     return None
 
 
-@dataclass(frozen=True)
-class StateChanged:
-    """Done. `location` goes to stdout, `notes` (complete lines) to stderr."""
-
-    location: str | None
-    notes: tuple[str, ...] = ()
-
-
 FeedbackMode = Literal["none", "optional", "required"]
 
 
@@ -72,13 +65,16 @@ class ChangeState:
         self.terminal = terminal
         self.lock = lock
 
-    def run(self, task_id: TaskId, event: str, label: str, *, feedback: str | None = None,
+    def run(self, id: str, event: str, label: str, *, feedback: str | None = None,
             edit: bool = False, feedback_mode: FeedbackMode = "none",
             confirm_plan: str | None = None, yes: bool = False,
-            hints: bool = False) -> StateChanged | Refused:
-        """`confirm_plan` marks a dangerous command: it asks after the legality check, before
-        the lock."""
+            hints: bool = False) -> Done | Refused:
+        """`id` is the task id or unique prefix as typed. `confirm_plan` marks a dangerous
+        command: it asks after the legality check, before the lock."""
         tasks = self.tasks
+        task_id = find_task(tasks, id)
+        if isinstance(task_id, Refused):
+            return task_id
         first = check_legal(tasks, task_id, event, label)
         if isinstance(first, NotAllowed):
             return refused(first.message)
@@ -118,4 +114,4 @@ class ChangeState:
         if hint:
             notes.append(hint)
         location = tasks.location(task_id) if tasks.get(task_id) is not None else None
-        return StateChanged(location, tuple(notes))
+        return Done(location, tuple(notes))

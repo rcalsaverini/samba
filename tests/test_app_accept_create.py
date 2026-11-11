@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from samba.app.accept_work import Accepted, AcceptWork, DryRun
-from samba.app.create_task import Created, CreateTask
+from samba.app.accept_work import AcceptWork
+from samba.app.create_task import CreateTask
 from samba.app.machine import Machine
-from samba.app.results import Refused
+from samba.app.results import Done, Refused, Text
+from samba.domain.task import Task
 from samba.domain.task_id import TaskId
 from samba.domain.ports import CommitResult, MergeAttempt
 
@@ -30,7 +31,7 @@ def accept_uc(tasks: FakeTasks, vcs: FakeVcs, terminal: FakeTerminal | None = No
                       lock or FakeLock(), vcs, validator or FakeValidator(), "main", command)
 
 
-def accept(uc: AcceptWork, tid: TaskId, **flags: bool) -> Accepted | DryRun | Refused:
+def accept(uc: AcceptWork, tid: str, **flags: bool) -> Done | Text | Refused:
     return asyncio.run(uc.run(tid, **flags))
 
 
@@ -42,22 +43,23 @@ def test_dry_run_prints_the_plan_and_changes_nothing() -> None:
     tasks, tid = make("work-review")
     vcs = FakeVcs(commits=1)
     res = accept(accept_uc(tasks, vcs), tid, dry_run=True)
-    assert res == DryRun((
-        "Merge samba/t1 into main (1 commit), then validate with `make check`",
-        "branch: samba/t1\nbase: main\ncommits: 1", "merge: yes (--no-ff)",
-        "validate: make check", "final state: done"))
+    assert res == Text(
+        "Merge samba/t1 into main (1 commit), then validate with `make check`\n"
+        "branch: samba/t1\nbase: main\ncommits: 1\nmerge: yes (--no-ff)\n"
+        "validate: make check\nfinal state: done\n")
     assert "begin_merge" not in names(vcs) and tasks.records[tid].status == "work-review"
     skipped = accept(accept_uc(tasks, vcs), tid, dry_run=True, no_merge=True)
-    assert isinstance(skipped, DryRun)
-    assert skipped.lines[0] == "Mark t1 done without merging (--no-merge)"
-    assert skipped.lines[2:4] == ("merge: no", "validate: skipped")
+    assert isinstance(skipped, Text)
+    lines = skipped.text.splitlines()
+    assert lines[0] == "Mark t1 done without merging (--no-merge)"
+    assert lines[4:6] == ["merge: no", "validate: skipped"]
 
 
 def test_accept_merges_validates_and_fires() -> None:
     tasks, tid = make("work-review")
     vcs, validator = FakeVcs(), FakeValidator()
     res = accept(accept_uc(tasks, vcs, validator=validator), tid, yes=True)
-    assert res == Accepted("fake://t1")
+    assert res == Done("fake://t1")
     assert vcs.calls[-2:] == [("begin_merge", "samba/t1", "Merge samba/t1: T"),
                               ("commit_merge", "pre0001")]
     assert validator.calls == [("/repo", "t1/accept-validate.log")]
@@ -69,7 +71,7 @@ def test_accept_without_a_validate_command_says_so() -> None:
     tasks, tid = make("work-review")
     validator = FakeValidator()
     res = accept(accept_uc(tasks, FakeVcs(), command=None, validator=validator), tid, yes=True)
-    assert isinstance(res, Accepted)
+    assert isinstance(res, Done)
     assert res.notes == ("samba: no validate.command; merged without validation",)
     assert validator.calls == []
 
@@ -78,20 +80,20 @@ def test_accept_no_validate_skips_the_validator() -> None:
     tasks, tid = make("work-review")
     validator = FakeValidator()
     res = accept(accept_uc(tasks, FakeVcs(), validator=validator), tid, yes=True, no_validate=True)
-    assert isinstance(res, Accepted) and validator.calls == []
+    assert isinstance(res, Done) and validator.calls == []
     assert any("merged abc1234, validation skipped" in ln for ln in tasks.records[tid].log)
 
 
 def test_accept_no_merge_and_already_merged() -> None:
     tasks, tid = make("work-review")
     vcs = FakeVcs()
-    assert isinstance(accept(accept_uc(tasks, vcs), tid, yes=True, no_merge=True), Accepted)
+    assert isinstance(accept(accept_uc(tasks, vcs), tid, yes=True, no_merge=True), Done)
     assert names(vcs) == []
     assert any("no merge" in ln for ln in tasks.records[tid].log)
     tasks, tid = make("work-review")
     vcs = FakeVcs(merge=MergeAttempt("already", "", "pre0001"))
     res = accept(accept_uc(tasks, vcs), tid, yes=True)
-    assert isinstance(res, Accepted)
+    assert isinstance(res, Done)
     assert res.notes == ("samba: samba/t1 is already merged into main; nothing to merge",)
     assert any("already merged" in ln for ln in tasks.records[tid].log)
     assert "commit_merge" not in names(vcs)
@@ -106,8 +108,8 @@ def test_accept_refusals_before_any_change() -> None:
                  tid, yes=True)
     assert isinstance(pre, Refused) and pre.kind == "refused"
     assert messages(pre) == "samba: the main checkout has uncommitted changes; nothing changed"
-    gone = accept(accept_uc(tasks, FakeVcs()), TaskId("nope"), yes=True)
-    assert isinstance(gone, Refused) and messages(gone) == "samba: task 'nope' has no file"
+    gone = accept(accept_uc(tasks, FakeVcs()), "nope", yes=True)
+    assert gone == Refused("usage", ("samba: unknown task 'nope'",))
     busy = accept(accept_uc(tasks, FakeVcs(), lock=FakeLock(held=False)), tid, yes=True)
     assert isinstance(busy, Refused) and "holds .samba/lock" in messages(busy)
     no_tty = accept(accept_uc(tasks, FakeVcs(), FakeTerminal(interactive=False)), tid)
@@ -115,6 +117,21 @@ def test_accept_refusals_before_any_change() -> None:
     declined = accept(accept_uc(tasks, FakeVcs(), FakeTerminal(lines=["n"])), tid)
     assert isinstance(declined, Refused) and declined.kind == "refused"
     assert tasks.records[tid].status == "work-review"
+
+
+def test_accept_resolves_a_unique_prefix_and_refuses_ambiguous_or_unknown() -> None:
+    tasks, _ = make("work-review", "alpha-1")
+    for other in ("alpha-2", "beta"):
+        tasks.create(Task.new(TaskId(other), "T", "", 3, (), "work-review", FakeClock()))
+    vcs = FakeVcs()
+    amb = accept(accept_uc(tasks, vcs), "alpha", yes=True)
+    assert amb == Refused("usage", (
+        "samba: ambiguous task id 'alpha'; candidates:\n  alpha-1\n  alpha-2",))
+    unk = accept(accept_uc(tasks, vcs), "zz", yes=True)
+    assert unk == Refused("usage", ("samba: unknown task 'zz'",))
+    assert names(vcs) == [] and {t.status for t in tasks.records.values()} == {"work-review"}
+    assert accept(accept_uc(tasks, vcs), "bet", yes=True) == Done("fake://beta")
+    assert tasks.records[TaskId("beta")].status == "done"
 
 
 @pytest.mark.parametrize("vcs,message,log", [
@@ -187,13 +204,13 @@ def test_slug_collisions_get_numeric_suffixes() -> None:
     ids: list[TaskId] = []
     for _ in range(3):
         res = uc.run("Fix the thing", None, None, 3, False)
-        assert isinstance(res, Created)
-        ids.append(res.task_id)
+        assert isinstance(res, Done) and res.location is not None
+        ids.append(TaskId(res.location.removeprefix("fake://")))
     assert ids == ["fix-the-thing", "fix-the-thing-2", "fix-the-thing-3"]
     assert tasks.records[ids[0]].status == "plan-todo"
     skip = uc.run("Other", "body", None, 1, True)
-    assert isinstance(skip, Created)
-    rec = tasks.records[skip.task_id]
+    assert skip == Done("fake://other")
+    rec = tasks.records[TaskId("other")]
     assert rec.status == "work-todo" and rec.priority == 1 and rec.body == "body"
 
 
@@ -201,7 +218,8 @@ def test_dependencies_by_flag_resolve_prefixes_or_fail() -> None:
     tasks, _ = make("work-todo", "alpha-one")
     uc = create_uc(tasks)
     res = uc.run("T2", None, "alpha, alpha-one", 3, False)
-    assert isinstance(res, Created) and tasks.records[res.task_id].depends_on == ("alpha-one",)
+    assert res == Done("fake://t2")
+    assert tasks.records[TaskId("t2")].depends_on == ("alpha-one",)
     bad = uc.run("T3", None, "zzz", 3, False)
     assert isinstance(bad, Refused) and bad.kind == "usage"
     assert messages(bad) == "samba: unknown task 'zzz'"
@@ -218,8 +236,8 @@ def test_missing_fields_are_asked_on_a_terminal() -> None:
     term = FakeTerminal(lines=["", "  Asked title ", "line one", "line two", "", "nope", "alpha",
                                "n"])
     res = create_uc(tasks, term).run(None, None, None, 3, False)
-    assert isinstance(res, Created) and res.task_id == "asked-title"
-    rec = tasks.records[res.task_id]
+    assert res == Done("fake://asked-title")
+    rec = tasks.records[TaskId("asked-title")]
     assert rec.body == "line one\nline two" and rec.depends_on == ("alpha",)
     assert rec.status == "work-todo"  # "n" to "Plan first?"
     assert term.warnings == ["samba: unknown task 'nope'"]

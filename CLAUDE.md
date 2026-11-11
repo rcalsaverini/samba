@@ -57,8 +57,9 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     retry/stop/discard, plan accept) and `check_legal`, the single legality check;
     `app/answer_question.py`: `AnswerQuestion`; `app/accept_work.py`: `AcceptWork` (`work accept`, async: the
     merge sequence over the `Vcs` and `Validator` ports); `app/create_task.py`: `CreateTask` (`task new`); `app/resolve.py`:
-    `resolve_task_id`, `resolve_deps`, `ResolveError`; `app/confirm.py`: the confirmation policy over the
-    `Terminal` port; `app/results.py`: `Refused` and message helpers. Use cases never print: the
+    `find_task` (id or prefix to a `TaskId` or a `usage` refusal; use cases resolve ids, the CLI does not),
+    `split_target`, `resolve_task_id`, `resolve_deps`, `ResolveError`; `app/confirm.py`: the confirmation policy over the
+    `Terminal` port; `app/results.py`: the closed `Result` set (`Done`, `Table`, `Text`, `Written`, `Refused`) and message helpers. Use cases never print: the
     CLI prints their results and maps `kind` to the exit code.
   - `adapters/git_vcs.py` (`GitVcs`, the `Vcs` port: worktrees outside the repo, the after_create
     hook, the git steps of `work accept`), `adapters/shell_validator.py` (`ShellValidator`, the

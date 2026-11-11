@@ -46,6 +46,18 @@ class Written:
 
 
 @dataclass(frozen=True)
+class Done:
+    """A command changed something. `location` goes to stdout, `notes` (complete lines) to stderr."""
+
+    location: str | None
+    notes: tuple[str, ...] = ()
+
+
+Result = Done | Table | Text | Written | Refused
+"""The closed set of results a command returns (ADR 0013; `Explored` is `explore` only)."""
+
+
+@dataclass(frozen=True)
 class Explored:
     """An interactive session ended; the CLI exits with its code."""
 

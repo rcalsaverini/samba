@@ -3,25 +3,16 @@ the round is still open (spec: cli, question answer)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from samba.app.change_state import NotAllowed, check_legal
 from samba.app.machine import Machine
-from samba.app.results import LOCK_BUSY, Refused, refused, usage
+from samba.app.resolve import find_task, split_target
+from samba.app.results import LOCK_BUSY, Done, Refused, refused, usage
 from samba.domain.questions import Question, open_questions, round_questions
 from samba.domain.task_id import TaskId
 from samba.domain.transitions import log_line
 from samba.domain.ports import Clock, Lock, Tasks, Terminal
 
 EVENT = "question.answer"
-
-
-@dataclass(frozen=True)
-class Answered:
-    """Done. `location` goes to stdout, `notes` (complete lines) to stderr."""
-
-    location: str | None
-    notes: tuple[str, ...] = ()
 
 
 def editor_text(q: Question) -> str:
@@ -69,8 +60,12 @@ class AnswerQuestion:
             return refused(f"{task_id}/{qid} is {found.status}, not open; nothing changed")
         return found
 
-    def run(self, task_id: TaskId, qid: str | None, text: str | None,
-            edit: bool) -> Answered | Refused:
+    def run(self, target: str, text: str | None, edit: bool) -> Done | Refused:
+        """`target` is `TASK[/QID]` as typed; the task part may be a unique prefix."""
+        name, qid = split_target(target)
+        task_id = find_task(self.tasks, name)
+        if isinstance(task_id, Refused):
+            return task_id
         q = self._check(task_id, qid)
         if isinstance(q, Refused):
             return q
@@ -104,4 +99,4 @@ class AnswerQuestion:
             notes = (f"samba: {len(left)} question(s) still open: " + ", ".join(
                 f"{task_id}/{r.id}" for r in left),)
         location = tasks.location(task_id) if tasks.get(task_id) is not None else None
-        return Answered(location, notes)
+        return Done(location, notes)
