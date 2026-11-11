@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = ["pyyaml>=6.0"]
 
 [project.scripts]
-samba = "samba.cli:main"
+samba = "samba.entrypoints.cli:main"
 
 [build-system]
 requires = ["hatchling"]

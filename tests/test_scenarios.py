@@ -38,7 +38,7 @@ from samba.domain.settings import (
     Repository,
     Validation,
 )
-from samba.orchestrator import Orchestrator
+from samba.entrypoints.orchestrator import Orchestrator
 from samba.domain.ports import MergeAttempt
 from samba.domain.agent import AgentReport, Failure, QuestionDraft
 from samba.domain.deps import TaskRef, evaluate

@@ -1,5 +1,5 @@
 import sys
 
-from samba.cli import main
+from samba.entrypoints.cli import main
 
 sys.exit(main())

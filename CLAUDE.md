@@ -13,15 +13,17 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
 - `docs/manual.md`: the user manual (setup, daily loop, troubleshooting), for people using Samba.
   `tests/test_manual.py` fails when a CLI subcommand is not mentioned in it, so update it when
   you add, rename or remove a command.
-- `src/samba/`
-  - `cli.py`: the thin argparse adapter (no rule): `run` and `<noun> <verb>` commands, no aliases:
+- `src/samba/`: the root holds only `__init__.py`, `__main__.py`, `bootstrap.py` and the packages
+  `domain`, `app`, `adapters` and `entrypoints` (guarded by `tests/test_architecture.py`).
+  - `entrypoints/cli.py`: the thin argparse adapter (no rule): `run` and `<noun> <verb>` commands, no aliases:
     `task new|list|show|retry|stop|discard`, `plan`/`work` review commands (including
     `work accept`), `question list|show|answer` (answers are recorded per question,
     `cmd_question_answer`), `adr list|show|accept|reject|supersede` (`cmd_adr`, needs no
     WORKFLOW.md), `explore [topic]` (`cmd_explore`, an interactive claude session),
-    `dev transitions`. It calls `compose.build`, one use case, prints the result and
-    maps its kind to the exit code.
-  - `compose.py`: the composition root, the only place that builds adapters. `build(repo)` reads
+    `dev transitions`. It calls `bootstrap.build`, one use case, prints the result and
+    maps its kind to the exit code. The script entry is `samba.entrypoints.cli:main`.
+  - `bootstrap.py`: the composition root, called by every entry point; the only module that may
+    import every layer and the only place that builds adapters. `build(repo)` reads
     `WORKFLOW.md` and returns `Services` (use cases, `Tasks`, `Config`, `Orchestrator`);
     `build_adr(repo)` is the config-free entry for the ADR commands; `build_explore(repo)` needs
     only `claude.command` and `claude.model`. Constructors take their ports, no defaults.
@@ -34,7 +36,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     use cases (`ListAdrs`, `ShowAdr`, `SetAdrStatus`, `SupersedeAdr`) and `app/queries.py` the
     read-only ones (`ListTasks`, `ShowTask`, `ListQuestions`, `ShowQuestion`), returning
     `Table`/`Text`/`Written` from `app/results.py`.
-  - `views.py`: the table printer of the CLI adapter (the rows come from `app/queries.py`, which
+  - `entrypoints/table.py`: the table printer of the CLI (the rows come from `app/queries.py`, which
     also holds the state-prefix matcher and the `task show` renderer).
   - `domain/settings.py`: the plain settings (`Policy`, `AgentSettings`, `Repository`, `Prompts`,
     `Validation`, `Hooks`, `Config`), `ConfigError` and the `DEFAULT_*` lists; no location, no
@@ -64,13 +66,13 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `adapters/terminal.py` (`StdTerminal`, the `Terminal` port: tty, prompts, `$EDITOR`),
     `adapters/file_lock.py` (`FileLock`, the `Lock` port: the `.samba/lock` flock shared by commands
     and orchestrator ticks), `adapters/log_journal.py` (`LogJournal`, `NullJournal`: the `Journal`
-    port, and the `kv` log line format; only `samba run` gets the log, `compose.build(repo, for_run=True)`).
+    port, and the `kv` log line format; only `samba run` gets the log, `bootstrap.build(repo, for_run=True)`).
   - `adapters/markdown_tasks.py`: `MarkdownTasks`, the `Tasks` port over the task folders, the
     sidecar JSON and the `## Log`/`## Questions` sections (stale-save merge, hand-move detection).
   - `app/tick.py`: `Tick` (observe hand moves, reconcile running workers, clean up workspaces,
     dispatch with dependency rows), `Notes` (held `## Log` lines) and `Running`; starts workers
     through a `spawn` callback.
-  - `orchestrator.py`: startup, poll loop, workers, retries, transitions; calls `Tick`.
+  - `entrypoints/orchestrator.py`: startup, poll loop, workers, retries, transitions; calls `Tick`.
   - `app/machine.py`: `Machine.fire` and `observe`, the only path that moves a task
     (`docs/spec/states.md`): loads the `Task`, applies the domain row, saves.
   - `adapters/claude_cli.py`: `ClaudeCliRunner`, the only reader of Claude's stream-json: builds
@@ -92,7 +94,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `test_scenarios.py` and `scenarios/*.json`: the scenario runner and its data (ADR 0012,
     `architecture` chapter, Scenarios), including `lifecycle.json`: the whole life of a task over
     the orchestrator, the use cases and the fakes. Imports the domain, `app/` and
-    `orchestrator.py`, never an adapter.
+    `entrypoints/orchestrator.py`, never an adapter.
   - `test_architecture.py`: guards the dependency rule. Reads sources with `ast`, never imports
     `samba`; append moved domain modules to its `DOMAIN_MODULES`.
   - `fake_claude.py`: scripted fake of the `claude` CLI. Standard library only.
