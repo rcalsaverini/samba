@@ -23,7 +23,8 @@ DOMAIN_MODULES = ["domain/template.py", "domain/prompts.py", "domain/__init__.py
 APP_MODULES = ["app/__init__.py", "app/turn.py", "app/machine.py", "app/results.py",
                "app/confirm.py", "app/change_state.py", "app/answer_question.py",
                "app/resolve.py", "app/accept_work.py", "app/create_task.py",
-               "app/adr.py", "app/queries.py", "app/tick.py", "app/explore.py"]
+               "app/adr.py", "app/queries.py", "app/tick.py", "app/explore.py", "app/guard.py",
+               "app/startup.py", "app/prompt_builder.py", "app/finish.py", "app/run_task.py"]
 
 FORBIDDEN = {"os", "time", "datetime", "uuid", "subprocess", "asyncio", "logging", "pathlib"}
 
@@ -241,7 +242,7 @@ def test_the_cli_adapter_holds_no_rule() -> None:
         assert word not in code, f"entrypoints/cli.py mentions {word}"
 
 
-APP_FORBIDDEN = {"os", "subprocess", "pathlib", "logging"}  # asyncio is fine: use cases await ports
+APP_FORBIDDEN = {"os", "subprocess", "pathlib", "logging", "asyncio"}  # use cases await ports, never the loop
 
 
 def app_violations(path: Path) -> list[str]:
@@ -282,6 +283,14 @@ def test_the_new_checks_catch_logging_pathlib_and_old_modules(tmp_path: Path) ->
     assert app_violations(bad) == ["logging", "pathlib", "samba.adapters.git_vcs"]
     assert orchestrator_violations(bad) == ["logging", "pathlib", "samba.merge",
                                             "samba.adapters.git_vcs"]
+
+def test_app_modules_import_no_asyncio(tmp_path: Path) -> None:
+    for rel in APP_MODULES:
+        assert "asyncio" not in [n.split(".")[0] for n in imported_modules(SRC / rel)], rel
+    bad = tmp_path / "bad.py"
+    bad.write_text("import asyncio\n")
+    assert app_violations(bad) == ["asyncio"]
+
 
 def test_the_check_catches_import_os(tmp_path: Path) -> None:
     bad = tmp_path / "bad.py"

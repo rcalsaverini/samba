@@ -72,7 +72,13 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `app/tick.py`: `Tick` (observe hand moves, reconcile running workers, clean up workspaces,
     dispatch with dependency rows), `Notes` (held `## Log` lines) and `Running`; starts workers
     through a `spawn` callback.
-  - `entrypoints/orchestrator.py`: startup, poll loop, workers, retries, transitions; calls `Tick`.
+  - `entrypoints/orchestrator.py`: poll loop and asyncio workers; delegates the rules to `app/`; split
+    further by the next task (ADR 0015, step 2: `Workers` and a thin loop). It builds the parts below.
+  - `app/guard.py` (`Guard`: `plan_required`, `deps_met`), `app/startup.py` (`Startup` and
+    `StartupError`: checks, config warnings, recovery), `app/run_task.py` (`RunTask`: the run of one
+    task), `app/prompt_builder.py` (`PromptBuilder`: variables, prompts, `TurnSetup`), `app/finish.py`
+    (`Finisher`: finish, or retry, reflect, give up). App modules import no `asyncio`
+    (`Running.task` is a `Cancellable` in `app/tick.py`).
   - `app/machine.py`: `Machine.fire` and `observe`, the only path that moves a task
     (`docs/spec/states.md`): loads the `Task`, applies the domain row, saves.
   - `adapters/claude_cli.py`: `ClaudeCliRunner`, the only reader of Claude's stream-json: builds
@@ -95,6 +101,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `architecture` chapter, Scenarios), including `lifecycle.json`: the whole life of a task over
     the orchestrator, the use cases and the fakes. Imports the domain, `app/` and
     `entrypoints/orchestrator.py`, never an adapter.
+  - `test_app_startup.py`, `test_app_run_task.py`: `Startup`, `RunTask` (with `PromptBuilder`,
+    `Finisher`) and `Guard` over the fakes, no loop of their own.
   - `test_architecture.py`: guards the dependency rule. Reads sources with `ast`, never imports
     `samba`; append moved domain modules to its `DOMAIN_MODULES`.
   - `fake_claude.py`: scripted fake of the `claude` CLI. Standard library only.

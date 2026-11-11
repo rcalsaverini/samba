@@ -26,6 +26,7 @@ from fake_vcs import FakeVcs
 from samba.app.accept_work import Accepted, AcceptWork
 from samba.app.answer_question import Answered, AnswerQuestion
 from samba.app.change_state import ChangeState, StateChanged
+from samba.app.guard import Guard
 from samba.app.machine import Machine
 from samba.app.results import Refused
 from samba.app.turn import TurnFlow, TurnSetup
@@ -398,7 +399,7 @@ async def play(sc: Scenario) -> tuple[FakeTasks, FakeVcs, FakeValidator, FakeJou
     agent = FakeAgentRunner([report_of(r) for r in sc["reports"]])
     orch = Orchestrator(config, clock, SeqIds(), agent, tasks, vcs, validator, lock, journal)
     terminal = FakeTerminal()
-    machine = Machine(tasks, clock, journal, orch._guard)  # pyright: ignore[reportPrivateUsage]
+    machine = Machine(tasks, clock, journal, Guard(config.policy.require_plan, tasks))
     change = ChangeState(tasks, machine, terminal, lock)
     answer = AnswerQuestion(tasks, machine, terminal, lock, clock)
     accept = AcceptWork(tasks, machine, terminal, lock, vcs, validator, "main",
@@ -410,7 +411,7 @@ async def play(sc: Scenario) -> tuple[FakeTasks, FakeVcs, FakeValidator, FakeJou
         match step["do"]:
             case "tick":
                 await orch.tick()
-                await asyncio.gather(*(e.task for e in list(orch.running.values())))
+                await orch.wait_workers()
             case "plan_accept":
                 assert isinstance(change.run(tid, "plan.accept", "plan.accept"), StateChanged)
             case "answer":
