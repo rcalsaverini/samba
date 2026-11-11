@@ -23,8 +23,8 @@ from samba.domain.agent import (
     Readiness,
 )
 from samba.domain.ports import Journal
-from samba.proc import kill_group, run_cmd
-from samba.prompts import OUTCOME_SCHEMA_JSON, PLAN_OUTCOME_SCHEMA_JSON
+from samba.adapters.process import kill_group, run_cmd
+from samba.domain.prompts import OUTCOME_SCHEMA_JSON, PLAN_OUTCOME_SCHEMA_JSON
 
 LINE_LIMIT = 10 * 1024 * 1024
 STDERR_KEEP = 20_000

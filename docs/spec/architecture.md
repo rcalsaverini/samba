@@ -8,7 +8,7 @@ lives.
 
 | Layer | Target location | Holds |
 |---|---|---|
-| Domain | `src/samba/domain/` | Pure rules and data: states, question records, the transition table, dependency evaluation. No I/O. (`template.py` and `prompts.py` are pure and follow later.) |
+| Domain | `src/samba/domain/` | Pure rules and data: states, question records, the transition table, dependency evaluation. No I/O. (This includes `domain/template.py` and `domain/prompts.py`.) |
 | Use cases | `src/samba/app/` | The operations of the orchestrator and the commands, written against ports. |
 | Ports | `src/samba/domain/ports.py` | Protocols for everything the core needs from the outside world. They sit at the domain level: the domain's `Task` depends on the clock port. |
 | Adapters | `src/samba/adapters/` | Implementations of the ports: system clock, files, git, the `claude` runner, the terminal. |
@@ -41,7 +41,7 @@ case, prints the result's messages and maps its kind to the exit code (`ok` 0, `
 | `Vcs` | All async, locations opaque text: `branch_name(task_id)`, `workspace_location(task_id)`, `ensure_workspace(task_id) -> Workspace(location, created)` (runs the `after_create` hook, removes the worktree if it fails, raises `WorkspaceError`), `remove_workspace(task_id)`, `existing_workspaces()`, `repository_problem() -> str \| None`, `preflight(branch)`, `commit_count(branch)`, `begin_merge(branch, message) -> MergeAttempt(status, detail, restore_point)` (`pending`, `already`, `conflict`, `error`; conflict and error are already undone), `abort_merge(restore_point)`, `commit_merge(restore_point) -> CommitResult(ok, detail)`, `checkout_location()`, `exclude_samba_dir()`. The restore point is returned, so the adapter keeps no merge state | `GitVcs` in `adapters/git_vcs.py` (replaces `workspace.py`, `merge.py`, `GitMerger` and `GitWorkspaces`). `AcceptWork` (async, one `asyncio.run` in `cli.py`) runs the merge sequence over it: `begin_merge`, the validator in `checkout_location()`, then `abort_merge` or `commit_merge` |
 | `Validator` | `run(location, log_name) -> ValidationResult` (async; stores the full output under the runs directory; `domain/validation.py` holds the result and the two tail formats `agent_tail` and `accept_tail`) | `ShellValidator` in `adapters/shell_validator.py`; `TurnFlow` and `AcceptWork` call it, and it creates the directories of the logs it writes |
 | `Journal` | `debug`, `info`, `warning`, `exception(event, **fields)`; `exception` adds the traceback | `LogJournal` in `adapters/log_journal.py` (`samba.log` at DEBUG, stderr at INFO, the `kv` format), `NullJournal` for commands that write no log. Injected into `Machine`, `Tick`, `TurnFlow`, `Orchestrator` and `ClaudeCliRunner`; `compose.build(repo, for_run=True)` builds the `LogJournal` for `samba run` only |
-| `Adrs` | `parse_number(text)`, `load_all() -> list[AdrInfo]`, `find(number)`, `set_status(number, verb, allowed_from, status) -> files`, `supersede(old, new) -> files`; every method may raise `AdrError(message, code)` (`code` 1 refused, 2 usage); `AdrInfo` carries `file` as text | `FileAdrs` in `adapters/adr_files.py` (wraps `adr.py`) |
+| `Adrs` | `parse_number(text)`, `load_all() -> list[AdrInfo]`, `find(number)`, `set_status(number, verb, allowed_from, status) -> files`, `supersede(old, new) -> files`; every method may raise `AdrError(message, code)` (`code` 1 refused, 2 usage); `AdrInfo` carries `file` as text | `FileAdrs` in `adapters/adr_files.py` (wraps `adapters/adr_format.py`) |
 | `InteractiveSession` | `run(LaunchSpec(argv, cwd)) -> exit code`, not async; runs the program attached to the person's terminal. Raises `LaunchError(message)` when it cannot start (for example `claude` not found). `LaunchSpec` is in `domain/launch.py` | `TerminalSession` in `adapters/interactive_session.py`: `subprocess.run` with the terminal inherited, SIGINT ignored in Samba while the child runs. It reads no stream-json and is not an `AgentRunner`. Used by `StartExplore` (`app/explore.py`) |
 | `Tasks` | `get(id)`, `list(status)`, `ids(status?)`, `create(task)`, `save(task) -> bool`, `observe_moves()`, `accept_move(move)`, `revert_move(move)`, `rejected_names(status)`, `location(id)`, `prepare()` | `MarkdownTasks` in `adapters/markdown_tasks.py`; the in-memory `FakeTasks` for tests is `tests/fake_tasks.py` |
 
@@ -128,10 +128,10 @@ lines, shell) and `Hooks` (`after_create`, timeout). `Config` holds one of each 
 `DEFAULT_PLANNING_ALLOW` stay in `config.py`.
 
 The terminal, git (workspaces and merge), validation, the lock, the journal and the ADR files are
-behind ports. `orchestrator.py` (startup, poll loop, workers) imports no adapter, `proc`, `logging`,
+behind ports. `orchestrator.py` (startup, poll loop, workers) imports no adapter, `logging`,
 `subprocess` or `pathlib`; the decisions are in `app/`. What is not behind a port:
 
-- Subprocess helpers: `proc.py`, used only inside adapters.
+- Subprocess helpers: `adapters/process.py`, used only inside adapters.
 - The table printer `views.py`, the CLI adapter's output (it reads `time.time` for column widths).
 - The test-only `SAMBA_DEBUG_FIRE_DELAY` sleep is in `MarkdownTasks.save`, between the rename and
   the sidecar write.
@@ -140,13 +140,13 @@ behind ports. `orchestrator.py` (startup, poll loop, workers) imports no adapter
 
 `tests/test_architecture.py` reads sources with `ast` and never imports `samba`. It checks that:
 
-- the domain modules (`DOMAIN_MODULES`, which also holds `domain/ports.py`, `template.py` and
-  `prompts.py`) import no I/O module and no adapter;
+- the domain modules (`DOMAIN_MODULES`, which also holds `domain/ports.py`, `domain/template.py` and
+  `domain/prompts.py`) import no I/O module and no adapter;
 - every use case module (`APP_MODULES`) imports no adapter and none of `os`, `subprocess`,
   `pathlib`, `logging` (`asyncio` is allowed: use cases await ports);
 - every `.py` under `domain/` and `app/` is listed in one of the two lists, so a new module cannot
   escape the checks;
-- `orchestrator.py` imports no adapter, `proc`, `logfmt`, `workspace`, `merge`, `lock`, `logging`,
+- `orchestrator.py` imports no adapter, `workspace`, `merge`, `lock`, `logging`,
   `os`, `subprocess` or `pathlib`;
 - the orchestrator, the use cases and the domain make no direct `time.time`, `time.monotonic`,
   `datetime.now` or `uuid` call, and the code of `domain/` and `app/` (comments stripped) matches

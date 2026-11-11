@@ -6,7 +6,7 @@ from fake_session import FakeSession
 
 from samba.app.explore import StartExplore
 from samba.app.results import Explored, Refused
-from samba.prompts import EXPLORE_ALLOW, EXPLORE_GUIDE
+from samba.domain.prompts import EXPLORE_ALLOW, EXPLORE_GUIDE
 
 FORBIDDEN = ["plan", "work", "adr accept", "adr reject", "adr supersede", "task discard",
              "task stop", "task retry", "question answer"]

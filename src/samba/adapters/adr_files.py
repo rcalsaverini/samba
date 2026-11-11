@@ -1,10 +1,10 @@
-"""`FileAdrs`: the `Adrs` port over the ADR files under `docs/adr/` (wraps `samba.adr`)."""
+"""`FileAdrs`: the `Adrs` port over the ADR files under `docs/adr/` (wraps `adr_format`)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from samba import adr
+from samba.adapters import adr_format as adr
 from samba.domain.ports import AdrInfo
 
 

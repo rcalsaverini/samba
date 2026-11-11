@@ -13,7 +13,7 @@ SRC = Path(__file__).resolve().parent.parent / "src" / "samba"
 
 # Modules that belong to the pure domain, relative to src/samba. Later tasks of the refactor
 # chain append to this list as they move modules in.
-DOMAIN_MODULES = ["template.py", "prompts.py", "domain/__init__.py",
+DOMAIN_MODULES = ["domain/template.py", "domain/prompts.py", "domain/__init__.py",
                   "domain/ports.py", "domain/states.py", "domain/questions.py",
                   "domain/transitions.py", "domain/deps.py", "domain/agent.py",
                   "domain/policy.py", "domain/task.py", "domain/task_id.py",
@@ -105,8 +105,8 @@ STORAGE_WORDS = re.compile(r"Path|mtime|sidecar|front matter")
 
 
 def test_domain_and_app_code_has_no_storage_vocabulary() -> None:
-    # Only domain/ and app/: prompts.py talks to the agent about its task file's front matter.
-    for rel in [r for r in [*DOMAIN_MODULES, *APP_MODULES] if "/" in r]:
+    # domain/prompts.py talks to the agent about its task file's front matter: exempt.
+    for rel in [r for r in [*DOMAIN_MODULES, *APP_MODULES] if r != "domain/prompts.py"]:
         hits = STORAGE_WORDS.findall(code_without_comments(SRC / rel))
         assert not hits, f"{rel} mentions storage details: {hits}"
 
@@ -124,6 +124,13 @@ def test_the_old_task_store_is_gone_and_the_adapter_is_used() -> None:
     assert "samba.adapters.markdown_tasks" in imported_modules(SRC / "compose.py")
     for path in sorted(SRC.rglob("*.py")):
         assert "samba.tasks" not in imported_modules(path), f"{path} imports the old folder helpers"
+
+
+def test_the_root_modules_moved_into_their_layers() -> None:
+    for old in ("prompts.py", "template.py", "proc.py", "logfmt.py", "adr.py"):
+        assert not (SRC / old).exists(), f"{old} moved into domain/ or adapters/"
+    assert (SRC / "adapters" / "process.py").is_file()
+    assert (SRC / "adapters" / "adr_format.py").is_file()
 
 
 def is_adapter(name: str) -> bool:
@@ -172,8 +179,8 @@ def test_every_domain_and_app_module_is_listed() -> None:
     assert found - listed == set(), f"add to DOMAIN_MODULES or APP_MODULES: {sorted(found - listed)}"
 
 
-ORCHESTRATOR_FORBIDDEN = {"os", "subprocess", "pathlib", "logging", "samba.proc", "samba.workspace",
-                          "samba.merge", "samba.lock", "samba.logfmt"}
+ORCHESTRATOR_FORBIDDEN = {"os", "subprocess", "pathlib", "logging", "samba.workspace",
+                          "samba.merge", "samba.lock"}
 
 
 def orchestrator_violations(path: Path) -> list[str]:
@@ -203,7 +210,7 @@ def test_the_check_catches_import_os(tmp_path: Path) -> None:
 def test_only_the_adapter_splits_task_front_matter() -> None:
     for path in sorted(SRC.rglob("*.py")):
         rel = path.relative_to(SRC).as_posix()
-        if rel in ("adapters/markdown_tasks.py", "config.py", "adr.py"):
+        if rel in ("adapters/markdown_tasks.py", "config.py", "adapters/adr_format.py"):
             continue  # config reads WORKFLOW.md, adr reads ADR files: their own front matter
         assert "split_front_matter" not in code_without_comments(path), rel
 

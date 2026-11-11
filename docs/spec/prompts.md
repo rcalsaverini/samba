@@ -127,7 +127,7 @@ keeps `plan_approved = true` and resumes the execution session.
 
 ## Explore guide
 
-`samba explore` appends this text (`EXPLORE_GUIDE` in `prompts.py`, fixed, not configurable) to the
+`samba explore` appends this text (`EXPLORE_GUIDE` in `domain/prompts.py`, fixed, not configurable) to the
 system prompt of the interactive session (cli, explore). It is not the headless protocol prompt.
 Sections:
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from samba.config import Validation
 from samba.domain.validation import ValidationResult
-from samba.proc import run_shell
+from samba.adapters.process import run_shell
 
 
 class ShellValidator:
