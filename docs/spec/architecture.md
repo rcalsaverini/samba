@@ -22,7 +22,8 @@ The composition root, `compose.py`, is the only place that builds adapters and h
 cases. `build(repo)` loads `WORKFLOW.md` and returns `Services`: the use cases (`ChangeState`,
 `AnswerQuestion`, `AcceptWork`, `CreateTask`, the read-only queries), the `Tasks` port for id
 resolution, the `Config` and the `Orchestrator`. `build_adr(repo)` serves the ADR commands, which
-need no config. Constructors take their ports as required parameters and have no defaults.
+need no config. `build_explore(repo)` serves `samba explore`: it loads `WORKFLOW.md` but uses only
+`claude.command` and `claude.model`. Constructors take their ports as required parameters and have no defaults.
 `cli.py` is a thin argparse adapter: it parses, calls `build`, resolves the id, calls one use
 case, prints the result's messages and maps its kind to the exit code (`ok` 0, `refused` 1,
 `usage` 2). It holds no rule.
@@ -40,6 +41,7 @@ case, prints the result's messages and maps its kind to the exit code (`ok` 0, `
 | `Validator` | `run(location, log_name) -> ValidationResult` (async; stores the full output under the runs directory; `domain/validation.py` holds the result and the two tail formats `agent_tail` and `accept_tail`) | `ShellValidator` in `adapters/shell_validator.py`; `TurnFlow` and `AcceptWork` call it, and it creates the directories of the logs it writes |
 | `Journal` | `debug`, `info`, `warning`, `exception(event, **fields)`; `exception` adds the traceback | `LogJournal` in `adapters/log_journal.py` (`samba.log` at DEBUG, stderr at INFO, the `kv` format), `NullJournal` for commands that write no log. Injected into `Machine`, `Tick`, `TurnFlow`, `Orchestrator` and `ClaudeCliRunner`; `compose.build(repo, for_run=True)` builds the `LogJournal` for `samba run` only |
 | `Adrs` | `parse_number(text)`, `load_all() -> list[AdrInfo]`, `find(number)`, `set_status(number, verb, allowed_from, status) -> files`, `supersede(old, new) -> files`; every method may raise `AdrError(message, code)` (`code` 1 refused, 2 usage); `AdrInfo` carries `file` as text | `FileAdrs` in `adapters/adr_files.py` (wraps `adr.py`) |
+| `InteractiveSession` | `run(LaunchSpec(argv, cwd)) -> exit code`, not async; runs the program attached to the person's terminal. Raises `LaunchError(message)` when it cannot start (for example `claude` not found). `LaunchSpec` is in `domain/launch.py` | `TerminalSession` in `adapters/interactive_session.py`: `subprocess.run` with the terminal inherited, SIGINT ignored in Samba while the child runs. It reads no stream-json and is not an `AgentRunner`. Used by `StartExplore` (`app/explore.py`) |
 | `Tasks` | `get(id)`, `list(status)`, `ids(status?)`, `create(task)`, `save(task) -> bool`, `observe_moves()`, `accept_move(move)`, `revert_move(move)`, `rejected_names(status)`, `location(id)`, `prepare()` | `MarkdownTasks` in `adapters/markdown_tasks.py`; the in-memory `FakeTasks` for tests is `tests/fake_tasks.py` |
 
 ### The Tasks port and stale saves

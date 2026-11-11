@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Protocol
 
 from samba.domain.agent import AgentReport, AgentRequest, Readiness
+from samba.domain.launch import LaunchSpec
 from samba.domain.validation import ValidationResult
 
 if TYPE_CHECKING:  # the domain's Task imports Clock from here
@@ -296,6 +297,19 @@ class Adrs(Protocol):
 
     def supersede(self, old: int, new: int) -> list[str]:
         """Mark `old` superseded by `new`. Returns the files written."""
+        ...
+
+
+class LaunchError(Exception):
+    """An interactive program could not be started (for example `claude` is not installed)."""
+
+
+class InteractiveSession(Protocol):
+    """A program run attached to the person's terminal (spec: architecture, Ports; cli, explore)."""
+
+    def run(self, spec: LaunchSpec) -> int:
+        """Run it until it exits and return its exit code. Raises `LaunchError(message)` when it
+        cannot be started."""
         ...
 
 

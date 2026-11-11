@@ -1,7 +1,8 @@
 """The composition root: the only place that builds adapters and wires use cases (spec: architecture).
 
 `build(repo)` reads `WORKFLOW.md` and returns the use cases of the commands that need it;
-`build_adr(repo)` serves the ADR commands, which need no config.
+`build_adr(repo)` serves the ADR commands, which need no config; `build_explore(repo)` serves
+`samba explore`, which needs only the `claude` command and model.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from samba.adapters.claude_cli import ClaudeCliRunner
 from samba.adapters.file_lock import FileLock
 from samba.adapters.git_vcs import GitVcs
 from samba.adapters.log_journal import LogJournal, NullJournal
+from samba.adapters.interactive_session import TerminalSession
 from samba.adapters.markdown_tasks import MarkdownTasks
 from samba.adapters.shell_validator import ShellValidator
 from samba.adapters.system import SystemClock, UuidGenerator
@@ -23,6 +25,7 @@ from samba.app.adr import ListAdrs, SetAdrStatus, ShowAdr, SupersedeAdr
 from samba.app.answer_question import AnswerQuestion
 from samba.app.change_state import ChangeState
 from samba.app.create_task import CreateTask
+from samba.app.explore import StartExplore
 from samba.app.machine import Machine
 from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask
 from samba.config import Config, load_config
@@ -84,6 +87,14 @@ def build(repo: Path, *, for_run: bool = False) -> Services:
         orchestrator=Orchestrator(config, clock, UuidGenerator(), agent, tasks, vcs, validator,
                                   lock, journal),
     )
+
+
+def build_explore(repo: Path) -> StartExplore:
+    """`samba explore` needs only `claude.command` and `claude.model` from `WORKFLOW.md` (raises
+    `ConfigError`): no lock, no journal, nothing under `.samba/`."""
+    config = load_config(repo)
+    return StartExplore(config.agent.command, config.agent.model, str(config.layout.repo),
+                        TerminalSession())
 
 
 def build_adr(repo: Path) -> AdrServices:

@@ -125,6 +125,25 @@ record what and why in `## Log`. Tick the plan's checkboxes as you complete step
 else is as for any work run (continue loop, validation, `work-review`). Rework from `work-review/`
 keeps `plan_approved = true` and resumes the execution session.
 
+## Explore guide
+
+`samba explore` appends this text (`EXPLORE_GUIDE` in `prompts.py`, fixed, not configurable) to the
+system prompt of the interactive session (cli, explore). It is not the headless protocol prompt.
+Sections:
+
+- **Role:** an interactive exploration with the human; the output is decisions as ADRs, not code.
+- **Writing ADRs:** start with `samba adr list --all` and `samba adr show N`; one decision per ADR,
+  split a draft that holds two; write `docs/adr/NNNN-short-title.md`, the number taken from the
+  filename (the next free one); format of the project's first ADR, with front matter
+  `status: proposed`, `date` and `supersedes: []`, then Context, Decision and Consequences; never
+  edit an accepted ADR, write a superseding one; never accept, reject or supersede.
+- **Background research:** subagents inside the chat; `samba task new` only for work that must
+  outlive the chat, read with `samba task show`, nothing merged, findings worth keeping go into an
+  ADR; the commands the human keeps (plan, work, task discard, stop, retry, question answer, adr
+  accept, reject, supersede) may not be run.
+- **Reporting:** when a task is spawned, say which one and why; at the end of the session, list
+  every spawned task again with its reason (ADR 0004).
+
 ## Where the agent's context comes from
 
 | Layer | Owner | Delivered by |

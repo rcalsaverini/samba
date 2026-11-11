@@ -1,4 +1,4 @@
-"""Command line: `samba run`, and `<noun> <verb>` for task, plan, work, question, adr, dev (spec: cli)."""
+"""Command line: `samba run`, `samba explore`, and `<noun> <verb>` for task, plan, work, question, adr, dev (spec: cli)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from samba.app.change_state import FeedbackMode
 from samba.app.queries import split_target
 from samba.app.resolve import ResolveError, resolve_task_id
 from samba.app.results import Refused, Table, Text, Written
-from samba.compose import Services, build, build_adr
+from samba.compose import Services, build, build_adr, build_explore
 from samba.config import ConfigError
 from samba.domain.transitions import render_markdown_table
 from samba.orchestrator import StartupError
@@ -159,6 +159,19 @@ def cmd_adr(args: argparse.Namespace) -> int:
     return _show(result)
 
 
+def cmd_explore(args: argparse.Namespace) -> int:
+    """`explore` (spec: cli, explore): run the `StartExplore` use case, exit with the session's code."""
+    try:
+        explore = build_explore(cast(Path, args.repo))
+    except ConfigError as e:
+        print(f"samba: config error: {e}", file=sys.stderr)
+        return 2
+    result = explore.run(cast(str | None, args.topic))
+    if isinstance(result, Refused):
+        return _report(result)
+    return result.exit_code
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="samba", formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -251,6 +264,9 @@ def main(argv: list[str] | None = None) -> int:
         if verb == "supersede":
             p_a.add_argument("new", metavar="NEW", help="number of the ADR that replaces N")
         adr_parsers.append(p_a)
+    p_expl = sub.add_parser("explore", help="start an interactive session to explore a topic and "
+                                            "write ADRs")
+    p_expl.add_argument("topic", nargs="?", metavar="TOPIC", help="what to explore (first prompt)")
     p_tretry = task_sub.add_parser("retry",help="send a stuck task back to its todo folder")
     p_tretry.add_argument("id", help="task id or unique prefix")
     p_tstop = task_sub.add_parser("stop", help="stop a running task; it goes to stuck until `task retry`")
@@ -258,7 +274,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tdisc = task_sub.add_parser("discard", help="discard a task (asks for confirmation)")
     p_tdisc.add_argument("id", help="task id or unique prefix")
     p_tdisc.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
-    for p in (p_run, p_tnew, p_trans, p_tlist, p_tshow, p_pacc, p_prej,
+    for p in (p_run, p_expl, p_tnew, p_trans, p_tlist, p_tshow, p_pacc, p_prej,
               p_wrej, p_wacc, p_qlist, p_qshow, p_qans, p_tretry, p_tstop, p_tdisc, *adr_parsers):
         p.add_argument("--repo", type=Path, default=Path.cwd(),
                        help="repository root (default: current directory)")
@@ -273,6 +289,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "adr":  # plain files under docs/adr/: no WORKFLOW.md needed
         return cmd_adr(args)
+
+    if args.command == "explore":  # needs WORKFLOW.md only for claude.command and claude.model
+        return cmd_explore(args)
 
     try:
         svc = build(cast(Path, args.repo), for_run=args.command == "run")
