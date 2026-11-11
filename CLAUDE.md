@@ -18,12 +18,17 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `task new|list|show|retry|stop|discard`, `plan`/`work` review commands (including
     `work accept`), `question list|show|answer` (answers are recorded per question,
     `cmd_question_answer`), `adr list|show|accept|reject|supersede` (`cmd_adr`, needs no
-    WORKFLOW.md), `dev transitions`. It calls `compose.build`, one use case, prints the result and
+    WORKFLOW.md), `explore [topic]` (`cmd_explore`, an interactive claude session),
+    `dev transitions`. It calls `compose.build`, one use case, prints the result and
     maps its kind to the exit code.
   - `compose.py`: the composition root, the only place that builds adapters. `build(repo)` reads
     `WORKFLOW.md` and returns `Services` (use cases, `Tasks`, `Config`, `Orchestrator`);
-    `build_adr(repo)` is the config-free entry for the ADR commands. Constructors take their ports,
-    no defaults.
+    `build_adr(repo)` is the config-free entry for the ADR commands; `build_explore(repo)` needs
+    only `claude.command` and `claude.model`. Constructors take their ports, no defaults.
+  - `domain/launch.py`: `LaunchSpec` and `explore_launch` (the argv of `samba explore`; the guide
+    and the allow and deny lists are `EXPLORE_*` in `prompts.py`). `app/explore.py`: `StartExplore`,
+    over the `InteractiveSession` port; `adapters/interactive_session.py` (`TerminalSession`) runs
+    it on the terminal. Not an `AgentRunner`, no stream-json.
   - `adr.py`: ADR files under `docs/adr/`: front matter parsing, summary line, status edits.
     `adapters/adr_files.py` (`FileAdrs`) is the `Adrs` port over it; `app/adr.py` holds the ADR
     use cases (`ListAdrs`, `ShowAdr`, `SetAdrStatus`, `SupersedeAdr`) and `app/queries.py` the
@@ -88,7 +93,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `samba`; append moved domain modules to its `DOMAIN_MODULES`.
   - `fake_claude.py`: scripted fake of the `claude` CLI. Standard library only.
   - `fake_agent.py`: in-memory fake `AgentRunner` (scripted reports), tested in `test_agent_port.py`.
-  - `fake_vcs.py`, `fake_validator.py`, `fake_journal.py`, `fake_terminal.py` (with `FakeLock`):
+  - `fake_session.py` (`FakeSession`, the `InteractiveSession` fake; `test_app_explore.py`,
+    `test_explore.py`), `fake_vcs.py`, `fake_validator.py`, `fake_journal.py`, `fake_terminal.py` (with `FakeLock`):
     in-memory fakes of the `Vcs`, `Validator`, `Journal`, `Terminal` and `Lock` ports.
 
 ## Checks

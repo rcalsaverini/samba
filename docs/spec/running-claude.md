@@ -188,6 +188,18 @@ Rejected alternatives:
 
 If a repo needs MCP servers, a later version can pass them explicitly with `--mcp-config`.
 
+## Interactive explore session
+
+`samba explore` (cli, explore) is the one place Samba starts `claude` for a person to talk to. It
+is not a headless run and does not go through `AgentRunner`: the `InteractiveSession` port runs
+`claude` with the terminal inherited, nothing captured and no stream-json read, so
+`ClaudeCliRunner` stays the only reader of Claude's JSON. It is not isolated: the user's own
+settings, `CLAUDE.md`, skills and MCP servers apply (the person is at the keyboard, unlike the
+unattended case above), and no `--permission-mode` is given. Permissions are passed explicitly:
+`--allowedTools` is the ADR 0004 allow list plus read tools and `docs/adr/` edits, and
+`--disallowedTools` hard-blocks the commands that are the human's. Not verified against a real
+`claude`: rule syntax (`Bash(prefix:*)`, `Edit(docs/adr/**)`) and deny-over-allow precedence.
+
 ## Verified Claude Code behavior (2.1.220, 2026-11-06)
 
 Tested with throwaway repos and `--model haiku`:

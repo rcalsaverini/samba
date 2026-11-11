@@ -32,11 +32,14 @@ samba adr supersede N NEW [--repo PATH]
 samba task retry ID   [--repo PATH]
 samba task stop ID    [--repo PATH]
 samba task discard ID [--yes] [--repo PATH]
+samba explore [TOPIC] [--repo PATH]
+                  # interactive claude session to explore a topic and write ADRs.
 ```
 
-Every command is `run` or `<noun> <verb>`, with nouns `task`, `plan`, `work`, `question`, `adr` and `dev`.
-There are no top-level `new`, `list`, `show`, `status` or `transitions`, and no aliases: they are
-usage errors (exit 2). `samba --help` lists `run`, `task`, `plan`, `work`, `question` and `adr`, then
+Every command is `run`, `explore` or `<noun> <verb>`, with nouns `task`, `plan`, `work`, `question`,
+`adr` and `dev`. There are no top-level `new`, `list`, `show`, `status` or `transitions`, and no
+aliases: they are usage errors (exit 2). `samba --help` lists `run`, `task`, `plan`, `work`,
+`question`, `adr` and `explore`, then
 `dev` apart under "development commands" (its help says it is for working on Samba itself).
 `dev transitions` accepts `--repo` and ignores it; it loads no config.
 
@@ -166,6 +169,32 @@ and they never commit. Only the front matter of ADR 0001 is parsed (`status`, `d
   files that `git diff` shows and `git checkout` undoes, and the human reviews them as a diff.
 - The default agent allow lists have `adr list` and `adr show` but not the status commands
   (workflow-config, Permissions): accepting is a human decision.
+
+**`explore`** (phase 2 of the ADR flow, ADRs 0002 and 0004) starts an interactive `claude` session
+in the repo, for the human to explore a question with the agent and write ADRs. Whether this should
+be a command or only a skill (the open point of ADR 0002) is settled here: it is a command, because
+it passes the allow list explicitly and is testable with the fake claude.
+
+- The `StartExplore` use case builds a `LaunchSpec` (`domain/launch.py`, pure) and hands it to the
+  `InteractiveSession` port. argv: `claude.command`, then `TOPIC` if given (the first prompt),
+  `--append-system-prompt <guide>`, `--allowedTools <allow...>`, `--disallowedTools <deny...>`
+  and `--model M` when `claude.model` is set. cwd is the repo. Nothing else: no `-p`, no
+  `--permission-mode`, no `--setting-sources` or `--settings`. The session is not isolated from the
+  user's own settings and CLAUDE.md (running-claude, Interactive explore session), and a tool that
+  is neither allowed nor denied asks the human.
+- Allow list (ADR 0004): `Bash(samba task new:*)`, `task list`, `task show`, `question list`,
+  `question show`, `adr list`, `adr show` (same form), plus `Read`, `Grep`, `Glob`,
+  `Edit(docs/adr/**)` and `Write(docs/adr/**)`. Deny list, a hard block even if the user's settings
+  allow them: `samba plan`, `work`, `adr accept`, `adr reject`, `adr supersede`, `task discard`,
+  `task stop`, `task retry` and `question answer`. The guide text is in prompts, Explore guide.
+- Exit code: that of `claude`. `WORKFLOW.md` is read only for `claude.command` and `claude.model`:
+  a missing or invalid one is exit 2 (`samba: config error: ...`) and nothing starts. If `claude`
+  cannot be started the exit code is 1 with a `samba: cannot start ...` message.
+- No repo lock, no journal, nothing is written under `.samba/`: the session's `samba task new`
+  calls take the same locks as usual. Samba ignores SIGINT while the session runs, so Ctrl-C
+  reaches `claude`.
+- The allow and deny rule syntax and their precedence follow Claude Code's and have not been
+  verified against a real `claude` by the tests (the fake cannot): check them in one real run.
 
 **`work accept`** merges a reviewed task's branch and fires `work.accept` (`work-review -> done`).
 It is the first dangerous command. Moving the file to `done/` by hand stays a plain observed

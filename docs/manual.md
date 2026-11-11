@@ -455,6 +455,29 @@ $ samba adr supersede 3 12
 
 Spec chapter cli.
 
+### Exploring with `samba explore`
+
+```
+$ samba explore "how should we cache lookups?"
+$ samba explore
+```
+
+This opens an interactive `claude` session in the repository, with a guide for writing ADRs added
+to its instructions (one decision per ADR, status `proposed`, numbered by file name, the format of
+ADR 0001). The topic is optional and is the first prompt. Your own Claude Code settings still
+apply. It needs `WORKFLOW.md` only for `claude.command` and `claude.model`.
+
+- The session may run `samba task new`, `task list`, `task show`, `question list`,
+  `question show`, `adr list` and `adr show`, read files, and edit files under `docs/adr/`
+  without asking. It is blocked from `plan`, `work`, `adr accept|reject|supersede`,
+  `task discard|stop|retry` and `question answer`: those are yours.
+- Tasks it creates start in `plan-todo` and wait for your plan review. The guide tells it to say
+  what it spawned and why.
+- ADRs come out as `proposed`. Review them, then run `samba adr accept N` or `samba adr reject N`.
+- The exit code is `claude`'s.
+
+Spec chapter cli.
+
 ## 10. Worktrees and branches
 
 Each task works in its own git worktree, outside your repo:

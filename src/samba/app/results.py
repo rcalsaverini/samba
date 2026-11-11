@@ -45,4 +45,11 @@ class Written:
     files: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class Explored:
+    """An interactive session ended; the CLI exits with its code."""
+
+    exit_code: int
+
+
 LOCK_BUSY = "another command or the orchestrator holds .samba/lock; try again"
