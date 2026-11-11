@@ -3,23 +3,13 @@ are asked through the `Terminal` port."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from samba.app.resolve import ResolveError, resolve_deps
-from samba.app.results import Refused, refused, usage
+from samba.app.results import Done, Refused, refused, usage
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
 from samba.domain.ports import Clock, Tasks, Terminal
 
 DEPENDS_PROMPT = "Depends on (ids or prefixes, comma separated, empty for none): "
-
-
-@dataclass(frozen=True)
-class Created:
-    """Done. `location` goes to stdout."""
-
-    task_id: TaskId
-    location: str
 
 
 class CreateTask:
@@ -29,7 +19,7 @@ class CreateTask:
         self.clock = clock
 
     def run(self, title: str | None, body: str | None, depends: str | None, priority: int,
-            skip_plan: bool) -> Created | Refused:
+            skip_plan: bool) -> Done | Refused:
         tasks = self.tasks
         terminal = self.terminal
         tty = terminal.is_interactive()
@@ -68,4 +58,4 @@ class CreateTask:
             task_id, n = TaskId(f"{base}-{n}"), n + 1
         tasks.create(Task.new(task_id, title, body or "", priority, tuple(dep_ids),
                               "work-todo" if skip_plan else "plan-todo", self.clock))
-        return Created(task_id, tasks.location(task_id))
+        return Done(tasks.location(task_id))

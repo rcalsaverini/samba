@@ -23,12 +23,12 @@ from fake_terminal import FakeLock, FakeTerminal
 from fake_validator import FakeValidator, failing, passing
 from fake_vcs import FakeVcs
 
-from samba.app.accept_work import Accepted, AcceptWork
-from samba.app.answer_question import Answered, AnswerQuestion
-from samba.app.change_state import ChangeState, StateChanged
+from samba.app.accept_work import AcceptWork
+from samba.app.answer_question import AnswerQuestion
+from samba.app.change_state import ChangeState
 from samba.app.guard import Guard
 from samba.app.machine import Machine
-from samba.app.results import Refused
+from samba.app.results import Done, Refused
 from samba.app.turn import TurnFlow, TurnSetup
 from samba.domain.settings import (
     AgentSettings,
@@ -413,13 +413,13 @@ async def play(sc: Scenario) -> tuple[FakeTasks, FakeVcs, FakeValidator, FakeJou
                 await orch.tick()
                 await orch.workers.wait_all()
             case "plan_accept":
-                assert isinstance(change.run(tid, "plan.accept", "plan.accept"), StateChanged)
+                assert isinstance(change.run(tid, "plan.accept", "plan.accept"), Done)
             case "answer":
-                assert isinstance(answer.run(tid, None, step["text"], False), Answered)
+                assert isinstance(answer.run(tid, step["text"], False), Done)
             case "work_accept":
                 res = await accept.run(tid, yes=True)
                 if step["result"] == "accepted":
-                    assert isinstance(res, Accepted), res
+                    assert isinstance(res, Done), res
                 else:
                     assert isinstance(res, Refused), res
                     assert step["message"] in "\n".join(res.messages)

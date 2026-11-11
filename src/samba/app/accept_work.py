@@ -2,32 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from samba.app.change_state import Legal, NotAllowed, check_legal
 from samba.app.confirm import confirm
 from samba.app.machine import Machine
-from samba.app.results import LOCK_BUSY, Refused, refused
+from samba.app.resolve import find_task
+from samba.app.results import LOCK_BUSY, Done, Refused, Text, refused
 from samba.domain.task_id import TaskId
 from samba.domain.validation import accept_tail
 from samba.domain.ports import Lock, Tasks, Terminal, Validator, Vcs
 
 EVENT = "work.accept"
-
-
-@dataclass(frozen=True)
-class Accepted:
-    """Done. `location` goes to stdout, `notes` (complete lines) to stderr."""
-
-    location: str | None
-    notes: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class DryRun:
-    """What would happen, to print on stdout; nothing changed."""
-
-    lines: tuple[str, ...]
 
 
 class AcceptWork:
@@ -61,9 +45,13 @@ class AcceptWork:
             task.add_log(line)
             self.tasks.save(task)
 
-    async def run(self, task_id: TaskId, *, no_merge: bool = False, no_validate: bool = False,
-                  yes: bool = False, dry_run: bool = False) -> Accepted | DryRun | Refused:
+    async def run(self, id: str, *, no_merge: bool = False, no_validate: bool = False,
+                  yes: bool = False, dry_run: bool = False) -> Done | Text | Refused:
+        """`id` is the task id or unique prefix as typed. A dry run is a `Text`."""
         tasks = self.tasks
+        task_id = find_task(tasks, id)
+        if isinstance(task_id, Refused):
+            return task_id
         vcs = self.vcs
         branch = vcs.branch_name(task_id)
         base = self.base
@@ -81,12 +69,12 @@ class AcceptWork:
             if do_validate:
                 plan += f", then validate with `{command}`"
         if dry_run:
-            return DryRun((
+            return Text("\n".join((
                 plan,
                 f"branch: {branch}\nbase: {base}\ncommits: {count}",
                 f"merge: {'no' if no_merge else 'yes (--no-ff)'}",
                 f"validate: {command if do_validate else 'skipped'}",
-                "final state: done"))
+                "final state: done")) + "\n")
         declined = confirm(self.terminal, plan, "work accept", yes)
         if declined is not None:
             return declined
@@ -145,4 +133,4 @@ class AcceptWork:
                                + ("" if no_merge else
                                   f" after the merge ({message}); the merge is in {base}"))
         location = tasks.location(task_id) if tasks.get(task_id) is not None else None
-        return Accepted(location, tuple(notes))
+        return Done(location, tuple(notes))

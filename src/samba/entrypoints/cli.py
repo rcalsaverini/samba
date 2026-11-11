@@ -10,11 +10,8 @@ import sys
 from pathlib import Path
 from typing import cast
 
-from samba.app.accept_work import DryRun
 from samba.app.change_state import FeedbackMode
-from samba.app.queries import split_target
-from samba.app.resolve import ResolveError, resolve_task_id
-from samba.app.results import Refused, Table, Text, Written
+from samba.app.results import Done, Refused, Table, Text, Written
 from samba.bootstrap import Services, build, build_adr, build_explore
 from samba.domain.settings import ConfigError
 from samba.domain.transitions import render_markdown_table
@@ -65,77 +62,39 @@ def cmd_transition(svc: Services, text: str, event: str, label: str, *,
                    feedback_mode: FeedbackMode = "none",
                    confirm_plan: str | None = None, yes: bool = False,
                    hints: bool = False) -> int:
-    """Resolve the id, run the `ChangeState` use case, print its result (spec: cli)."""
-    try:
-        task_id = resolve_task_id(svc.tasks, text)
-    except ResolveError as e:
-        print(f"samba: {e.render()}", file=sys.stderr)
-        return 2
-    result = svc.change_state.run(task_id, event, label, feedback=feedback, edit=edit,
-                          feedback_mode=feedback_mode, confirm_plan=confirm_plan, yes=yes,
-                          hints=hints)
-    if isinstance(result, Refused):
-        return _report(result)
-    if result.location is not None:
-        print(result.location)
-    for line in result.notes:
-        print(line, file=sys.stderr)
-    return 0
+    """Run the `ChangeState` use case on the id as typed, print its result (spec: cli)."""
+    return _done(svc.change_state.run(text, event, label, feedback=feedback, edit=edit,
+                                      feedback_mode=feedback_mode, confirm_plan=confirm_plan,
+                                      yes=yes, hints=hints))
 
 
-def _err(msg: str) -> None:
-    print(f"samba: {msg}", file=sys.stderr)
+def _done(result: Done | Text | Refused) -> int:
+    """Print a command result: location on stdout, notes on stderr, text as it is."""
+    if isinstance(result, Done):
+        if result.location is not None:
+            print(result.location)
+        for line in result.notes:
+            print(line, file=sys.stderr)
+        return 0
+    return _show(result)
 
 
 def cmd_question_answer(svc: Services, target: str, text: str | None, edit: bool) -> int:
-    """`question answer` (spec: cli): resolve the id, run the `AnswerQuestion` use case."""
-    name, qid = split_target(target)
-    try:
-        task_id = resolve_task_id(svc.tasks, name)
-    except ResolveError as e:
-        _err(e.render())
-        return 2
-    result = svc.answer_question.run(task_id, qid, text, edit)
-    if isinstance(result, Refused):
-        return _report(result)
-    if result.location is not None:
-        print(result.location)
-    for line in result.notes:
-        print(line, file=sys.stderr)
-    return 0
+    """`question answer` (spec: cli): run the `AnswerQuestion` use case on the target as typed."""
+    return _done(svc.answer_question.run(target, text, edit))
 
 
 def cmd_work_accept(svc: Services, text: str, *, no_merge: bool, no_validate: bool, yes: bool,
                     dry_run: bool) -> int:
     """`work accept` (spec: cli): the command pattern with a merge as the outside effect."""
-    try:
-        task_id = resolve_task_id(svc.tasks, text)
-    except ResolveError as e:
-        _err(e.render())
-        return 2
-    result = asyncio.run(svc.accept_work.run(
-        task_id, no_merge=no_merge, no_validate=no_validate, yes=yes, dry_run=dry_run))
-    if isinstance(result, Refused):
-        return _report(result)
-    if isinstance(result, DryRun):
-        for line in result.lines:
-            print(line)
-        return 0
-    if result.location is not None:
-        print(result.location)
-    for line in result.notes:
-        print(line, file=sys.stderr)
-    return 0
+    return _done(asyncio.run(svc.accept_work.run(
+        text, no_merge=no_merge, no_validate=no_validate, yes=yes, dry_run=dry_run)))
 
 
 def cmd_task_new(svc: Services, title: str | None, body: str | None, depends: str | None,
                  priority: int, skip_plan: bool) -> int:
     """`task new` (spec: cli): run the `CreateTask` use case, print its result."""
-    result = svc.create_task.run(title, body, depends, priority, skip_plan)
-    if isinstance(result, Refused):
-        return _report(result)
-    print(result.location)
-    return 0
+    return _done(svc.create_task.run(title, body, depends, priority, skip_plan))
 
 
 def cmd_adr(args: argparse.Namespace) -> int:

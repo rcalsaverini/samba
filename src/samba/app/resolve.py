@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from samba.app.results import Refused, usage
 from samba.domain.task_id import AmbiguousTask, TaskId, UnknownTask
 from samba.domain.ports import Tasks
 
@@ -28,6 +29,20 @@ def resolve_task_id(tasks: Tasks, text: str) -> TaskId:
         raise ResolveError(f"unknown task {text!r}") from None
     except AmbiguousTask as e:
         raise ResolveError(f"ambiguous task id {text!r}; candidates:", e.candidates) from None
+
+
+def find_task(tasks: Tasks, text: str) -> TaskId | Refused:
+    """`resolve_task_id` for use cases: an unknown or ambiguous id is a `usage` refusal."""
+    try:
+        return resolve_task_id(tasks, text)
+    except ResolveError as e:
+        return usage(e.render())
+
+
+def split_target(target: str) -> tuple[str, str | None]:
+    """`TASK` or `TASK/QID`. Task ids never contain a slash."""
+    task, sep, qid = target.rpartition("/")
+    return (task, qid) if sep else (target, None)
 
 
 def resolve_deps(tasks: Tasks, text: str) -> list[TaskId]:

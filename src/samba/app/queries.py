@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from samba.app.resolve import ResolveError, resolve_task_id
+from samba.app.resolve import ResolveError, find_task, split_target
 from samba.app.results import Refused, Table, Text, usage
 from samba.domain.deps import deps_snapshot, evaluate
 from samba.domain.questions import open_questions, round_questions
@@ -73,10 +73,10 @@ class ShowTask:
         self._clock = clock
 
     def run(self, text: str) -> Text | Refused:
-        try:
-            task = self._tasks.get(resolve_task_id(self._tasks, text))
-        except ResolveError as e:
-            return usage(e.render())
+        task_id = find_task(self._tasks, text)
+        if isinstance(task_id, Refused):
+            return task_id
+        task = self._tasks.get(task_id)
         if task is None:
             return usage(f"unknown task {text!r}")
         return Text("\n".join(self._lines(task)) + "\n")
@@ -141,12 +141,6 @@ class ListQuestions:
         return Table(tuple(rows), flex=4)
 
 
-def split_target(target: str) -> tuple[str, str | None]:
-    """`TASK` or `TASK/QID`. Task ids never contain a slash."""
-    task, sep, qid = target.rpartition("/")
-    return (task, qid) if sep else (target, None)
-
-
 class ShowQuestion:
     """`question show TASK[/QID]`: one question, or the latest round of a task."""
 
@@ -155,10 +149,9 @@ class ShowQuestion:
 
     def run(self, target: str) -> Text | Refused:
         name, qid = split_target(target)
-        try:
-            task_id = resolve_task_id(self._tasks, name)
-        except ResolveError as e:
-            return usage(e.render())
+        task_id = find_task(self._tasks, name)
+        if isinstance(task_id, Refused):
+            return task_id
         task = self._tasks.get(task_id)
         questions = task.questions if task is not None else ()
         shown = [q for q in questions if q.id == qid] if qid else round_questions(questions)

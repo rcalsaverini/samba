@@ -63,7 +63,7 @@ the repo lock: it only writes one new file.
 
 State-changing commands (`plan accept`, `plan reject`, `work reject`, `work accept`,
 `question answer`, `task retry`, `task stop`, `task discard`) follow one **command
-pattern**: resolve the id, take the repo lock (task-files, Write discipline), check that the task's folder has a human row
+pattern**: resolve the id (inside the use case, from the text as typed), take the repo lock (task-files, Write discipline), check that the task's folder has a human row
 for the event, do the **outside effect** (here: write the feedback into the task file), then
 **fire** the event through `Machine.fire` (states, States). Table rows only change Samba's state, and no
 command moves a task or writes the sidecar except through `fire`. Later commands reuse the pattern.
@@ -72,8 +72,12 @@ The pattern lives in the use cases of `app/`, not in `entrypoints/cli.py`: `Chan
 reject, work reject, task retry, stop, discard), `AnswerQuestion`, `AcceptWork` (async, over the `Vcs`
 and `Validator` ports) and `CreateTask` (`task new`). The confirmation policy (`--yes`, no TTY, `[y/N]`) is
 `app/confirm.py`, over the `Terminal` port. The use cases never print, read stdin or return exit
-codes: they return result objects, and the CLI adapter prints their messages and maps the result
-kind to the exit code. The adapters are built only by the composition root (`bootstrap.py`).
+codes: they take plain values and return one of `Done`, `Table`, `Text`, `Written` or `Refused`
+(a `--dry-run` plan is a `Text`), and the CLI adapter prints the result and maps its kind to the
+exit code. An unknown or ambiguous id is a `usage` refusal from the use case, not a CLI check.
+The adapters are built only by the composition root (`bootstrap.py`). ADR 0013 lands in two
+steps: this is the first (results and id resolution); named use cases, `Commands` and the
+parse, call, render CLI follow in the second.
 
 - Exit codes: 0 done; 1 wrong state, lock timeout, editor failure, failed preflight, merge or
   validation failure, declined prompt, or a `fire` that did not apply; 2 usage error, unknown or

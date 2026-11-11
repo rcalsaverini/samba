@@ -33,9 +33,19 @@ by every entry point. `build(repo)` loads `WORKFLOW.md` and returns `Services`: 
 resolution, the `Config` and the `Orchestrator`. `build_adr(repo)` serves the ADR commands, which
 need no config. `build_explore(repo)` serves `samba explore`: it loads `WORKFLOW.md` but uses only
 `claude.command` and `claude.model`. Constructors take their ports as required parameters and have no defaults.
-`entrypoints/cli.py` is a thin argparse adapter: it parses, calls `build`, resolves the id, calls one use
-case, prints the result's messages and maps its kind to the exit code (`ok` 0, `refused` 1,
-`usage` 2). It holds no rule.
+`entrypoints/cli.py` is a thin argparse adapter: it parses, calls `build`, calls one use
+case with the id (or `TASK[/QID]`) as typed, prints the result and maps its kind to the exit code
+(`ok` 0, `refused` 1, `usage` 2). It holds no rule and does not resolve ids.
+
+The use cases take plain values (strings, numbers, booleans) and resolve the task id or unique
+prefix themselves (`find_task` in `app/resolve.py`: an unknown or ambiguous id is a `usage`
+refusal). Each returns one of a closed set (`Result` in `app/results.py`): `Done` (location on
+stdout, notes on stderr), `Table`, `Text` (a `work accept --dry-run` plan is a `Text`), `Written`
+(ADR files) or `Refused` (`refused` or `usage`). `Explored` stays apart, for `explore`.
+
+ADR 0013 lands in two steps. This one is the result set and the id resolution inside the use cases.
+Named use cases for the state-changing commands, a `Commands` object from `bootstrap` (replacing
+`Services`), and the CLI as parse, one call, render with one shared render function follow in the next step.
 
 ## Ports
 

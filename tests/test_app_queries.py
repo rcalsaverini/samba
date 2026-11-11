@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from samba.app.adr import ListAdrs, SetAdrStatus, ShowAdr, SupersedeAdr
-from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask, split_target
+from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask
+from samba.app.resolve import split_target
 from samba.app.results import Refused, Table, Text, Written
 from samba.domain.states import State
 from samba.domain.task import Task
@@ -151,6 +152,24 @@ def test_question_show_errors() -> None:
     assert refusal(ShowQuestion(tasks).run("a")) == Refused("usage", ("samba: a has no questions",))
     assert refusal(ShowQuestion(tasks).run("a/q9")).messages == ("samba: unknown question a/q9",)
     assert refusal(ShowQuestion(tasks).run("zz")).messages == ("samba: unknown task 'zz'",)
+
+
+def test_show_commands_resolve_prefixes() -> None:
+    tasks = store(("ab-1", "question"), ("ab-2", "work-todo"), ("c", "work-todo"))
+    tasks.records[TaskId("ab-1")].add_questions("plan", [("why?", "")], FakeClock())
+    shown = ShowTask(tasks, FakeClock()).run("ab-1")
+    assert isinstance(shown, Text) and shown.text.startswith("id: ab-1\n")
+    by_prefix = ShowTask(tasks, FakeClock()).run("c")
+    assert isinstance(by_prefix, Text) and by_prefix.text.startswith("id: c\n")
+    qs = ShowQuestion(tasks).run("ab-1")
+    assert isinstance(qs, Text) and qs.text.startswith("ab-1/")
+    ambiguous = Refused("usage", (
+        "samba: ambiguous task id 'ab'; candidates:\n  ab-1\n  ab-2",))
+    assert ShowTask(tasks, FakeClock()).run("ab") == ambiguous
+    assert ShowQuestion(tasks).run("ab/q1") == ambiguous
+    unknown = Refused("usage", ("samba: unknown task 'zz'",))
+    assert ShowTask(tasks, FakeClock()).run("zz") == unknown
+    assert ShowQuestion(tasks).run("zz/q1") == unknown
 
 
 def test_split_target() -> None:
