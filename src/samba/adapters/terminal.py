@@ -33,6 +33,9 @@ class StdTerminal:
             lines.append(line)
         return lines
 
+    def warn(self, line: str) -> None:
+        print(line, file=sys.stderr)
+
     def edit(self, initial: str) -> EditResult:
         """`$EDITOR`, then `$VISUAL`, then `vi`."""
         editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"

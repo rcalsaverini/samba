@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from samba.domain.agent import AgentReport, AgentRequest, Readiness
 
@@ -120,8 +120,47 @@ class Terminal(Protocol):
         """Print `prompt` (and a newline), read lines until an empty line or end of input."""
         ...
 
+    def warn(self, line: str) -> None:
+        """Show one complete line to the person (stderr), in the middle of a dialogue."""
+        ...
+
     def edit(self, initial: str) -> EditResult:
         """Let the person edit `initial` in their editor. Returns the file's content."""
+        ...
+
+
+MergeStatus = Literal["merged", "already", "conflict", "validation_failed", "error"]
+
+
+@dataclass(frozen=True)
+class MergeResult:
+    """What `Merger.merge` returns. `detail` is the short sha (merged), the files (conflict), the
+    log tail (validation_failed) or the git error; `log_path` names the full validation output."""
+
+    status: MergeStatus
+    detail: str = ""
+    validated: bool = False
+    log_path: str | None = None
+
+
+class Merger(Protocol):
+    """The git steps of `work accept` over the main checkout (spec: cli, work accept)."""
+
+    def branch_name(self, task_id: str) -> str:
+        """The branch the task's work lives on."""
+        ...
+
+    def preflight(self, branch: str) -> str | None:
+        """A message for the first failed check, or None when the merge may proceed."""
+        ...
+
+    def commit_count(self, branch: str) -> int:
+        """Commits on `branch` not yet in the base branch."""
+        ...
+
+    def merge(self, task_id: str, branch: str, message: str, validate: bool) -> MergeResult:
+        """Merge without committing, validate the result when asked, commit only on a pass. On any
+        failure the checkout is left as it was."""
         ...
 
 
