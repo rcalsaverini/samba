@@ -6,7 +6,18 @@ import logging
 import sys
 from pathlib import Path
 
-from samba.logfmt import kv
+
+def kv(event: str, **fields: object) -> str:
+    """The `key=value` log line format (spec: observability)."""
+    parts = [f"event={event}"]
+    for k, v in fields.items():
+        if v is None:
+            continue
+        s = str(v)
+        if any(c.isspace() for c in s) or "=" in s or '"' in s:
+            s = '"' + s.replace('"', "'") + '"'
+        parts.append(f"{k}={s}")
+    return " ".join(parts)
 
 
 class LogJournal:

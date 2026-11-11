@@ -24,7 +24,7 @@ from samba.domain.ports import (
     Vcs,
     WorkspaceError,
 )
-from samba.prompts import (
+from samba.domain.prompts import (
     APPROVED_PLAN_RULE,
     DEFAULT_PROMPTS,
     PLAN_PROTOCOL,
@@ -37,7 +37,7 @@ from samba.domain.questions import open_questions, round_pairs
 from samba.domain.states import Stage, State, running_of, todo_of
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-from samba.template import TemplateError, render
+from samba.domain.template import TemplateError, render
 
 
 class StartupError(Exception):

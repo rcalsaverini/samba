@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from samba.prompts import EXPLORE_ALLOW, EXPLORE_DENY, EXPLORE_GUIDE
+from samba.domain.prompts import EXPLORE_ALLOW, EXPLORE_DENY, EXPLORE_GUIDE
 
 
 @dataclass(frozen=True)

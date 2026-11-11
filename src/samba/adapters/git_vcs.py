@@ -7,7 +7,7 @@ from pathlib import Path
 
 from samba.config import Hooks, Layout
 from samba.domain.ports import CommitResult, MergeAttempt, Workspace, WorkspaceError
-from samba.proc import git, run_shell
+from samba.adapters.process import git, run_shell
 
 
 def repo_key(repo: Path) -> str:

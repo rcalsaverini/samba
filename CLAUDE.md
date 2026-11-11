@@ -26,10 +26,10 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `build_adr(repo)` is the config-free entry for the ADR commands; `build_explore(repo)` needs
     only `claude.command` and `claude.model`. Constructors take their ports, no defaults.
   - `domain/launch.py`: `LaunchSpec` and `explore_launch` (the argv of `samba explore`; the guide
-    and the allow and deny lists are `EXPLORE_*` in `prompts.py`). `app/explore.py`: `StartExplore`,
+    and the allow and deny lists are `EXPLORE_*` in `domain/prompts.py`). `app/explore.py`: `StartExplore`,
     over the `InteractiveSession` port; `adapters/interactive_session.py` (`TerminalSession`) runs
     it on the terminal. Not an `AgentRunner`, no stream-json.
-  - `adr.py`: ADR files under `docs/adr/`: front matter parsing, summary line, status edits.
+  - `adapters/adr_format.py`: ADR files under `docs/adr/`: front matter parsing, summary line, status edits.
     `adapters/adr_files.py` (`FileAdrs`) is the `Adrs` port over it; `app/adr.py` holds the ADR
     use cases (`ListAdrs`, `ShowAdr`, `SetAdrStatus`, `SupersedeAdr`) and `app/queries.py` the
     read-only ones (`ListTasks`, `ShowTask`, `ListQuestions`, `ShowQuestion`), returning
@@ -61,7 +61,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `adapters/terminal.py` (`StdTerminal`, the `Terminal` port: tty, prompts, `$EDITOR`),
     `adapters/file_lock.py` (`FileLock`, the `Lock` port: the `.samba/lock` flock shared by commands
     and orchestrator ticks), `adapters/log_journal.py` (`LogJournal`, `NullJournal`: the `Journal`
-    port; only `samba run` gets the log, `compose.build(repo, for_run=True)`).
+    port, and the `kv` log line format; only `samba run` gets the log, `compose.build(repo, for_run=True)`).
   - `adapters/markdown_tasks.py`: `MarkdownTasks`, the `Tasks` port over the task folders, the
     sidecar JSON and the `## Log`/`## Questions` sections (stale-save merge, hand-move detection).
   - `app/tick.py`: `Tick` (observe hand moves, reconcile running workers, clean up workspaces,
@@ -72,13 +72,13 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     (`docs/spec/states.md`): loads the `Task`, applies the domain row, saves.
   - `adapters/claude_cli.py`: `ClaudeCliRunner`, the only reader of Claude's stream-json: builds
     the argv, runs `claude`, maps the output into an `AgentReport`. `domain/agent.py`:
-    `AgentRequest`, `AgentReport`, `Readiness`. `logfmt.py`: the `kv` log line format.
+    `AgentRequest`, `AgentReport`, `Readiness`.
   - `domain/ports.py`: the ports (Protocols `Clock`, `IdGenerator`, `AgentRunner`, `Tasks` and the
     rest; at the domain level because `Task` uses the clock port); `adapters/system.py`: the system
     clock and uuid generator. The layers and the dependency rule are in the `architecture` chapter.
-  - `proc.py`: subprocess helpers (process groups), used only inside adapters.
-  - `prompts.py`: built-in prompts, the protocol prompt, the outcome schema.
-  - `template.py`: strict `{{ name }}` rendering.
+  - `adapters/process.py`: subprocess helpers (process groups), used only inside adapters.
+  - `domain/prompts.py`: built-in prompts, the protocol prompt, the outcome schema.
+  - `domain/template.py`: strict `{{ name }}` rendering.
 - `tests/`
   - `test_blackbox.py`: the main suite. It runs the `samba` CLI as a subprocess and asserts only
     on files and on calls recorded by the fake. **It must never import the `samba` package**:
