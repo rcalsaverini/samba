@@ -173,6 +173,22 @@ class RepoLock(Protocol):
         ...
 
 
+class WorkspaceError(Exception):
+    """A workspace could not be created or removed."""
+
+
+class Workspaces(Protocol):
+    """The per-task workspaces, the part the tick needs (spec: workspaces)."""
+
+    def existing_ids(self) -> list[str]:
+        """Ids of the tasks that have a workspace."""
+        ...
+
+    async def remove(self, task_id: str) -> None:
+        """Raises `WorkspaceError(message)` when it cannot be removed."""
+        ...
+
+
 class AdrError(Exception):
     """An ADR command refusal; `code` is the exit code (1 wrong state or bad file, 2 usage or
     unknown number)."""
