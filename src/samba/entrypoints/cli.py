@@ -18,7 +18,7 @@ from samba.app.results import Refused, Table, Text, Written
 from samba.bootstrap import Services, build, build_adr, build_explore
 from samba.domain.settings import ConfigError
 from samba.domain.transitions import render_markdown_table
-from samba.entrypoints.orchestrator import StartupError
+from samba.app.startup import StartupError
 from samba.entrypoints.table import print_table
 
 

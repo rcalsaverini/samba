@@ -6,10 +6,9 @@ dispatch the next tasks. Starting a worker is the orchestrator's business: `Tick
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol
 
 from samba.app.machine import Machine
 from samba.domain.deps import deps_snapshot, evaluate
@@ -26,9 +25,15 @@ def stage_of(task: Task) -> Stage:
     return "plan" if task.last_stage == "plan" else "work"
 
 
+class Cancellable(Protocol):
+    """What the tick needs of a worker: it can be cancelled (an event loop task is one)."""
+
+    def cancel(self) -> bool: ...
+
+
 @dataclass
 class Running:
-    task: asyncio.Task[None]
+    task: Cancellable
     started_at: float
     folder: State  # the running folder the task was claimed into
     turn: int = 0
