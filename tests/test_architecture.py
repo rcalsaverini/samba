@@ -16,7 +16,8 @@ SRC = Path(__file__).resolve().parent.parent / "src" / "samba"
 DOMAIN_MODULES = ["ports.py", "template.py", "prompts.py", "domain/__init__.py",
                   "domain/states.py", "domain/questions.py",
                   "domain/transitions.py", "domain/deps.py", "domain/agent.py",
-                  "domain/policy.py", "domain/task.py", "domain/task_id.py"]
+                  "domain/policy.py", "domain/task.py", "domain/task_id.py",
+                  "domain/validation.py"]
 
 # Use cases: may log and await, but import no adapter and call no clock or uuid directly.
 APP_MODULES = ["app/__init__.py", "app/turn.py", "app/machine.py", "app/results.py",

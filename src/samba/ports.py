@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Protocol
 
 from samba.domain.agent import AgentReport, AgentRequest, Readiness
+from samba.domain.validation import ValidationResult
 
 if TYPE_CHECKING:  # the domain's Task imports Clock from here
     from samba.domain.states import State
@@ -186,6 +187,118 @@ class Workspaces(Protocol):
 
     async def remove(self, task_id: str) -> None:
         """Raises `WorkspaceError(message)` when it cannot be removed."""
+        ...
+
+
+@dataclass(frozen=True)
+class Workspace:
+    """A task's workspace: where it is (opaque) and whether `ensure_workspace` just made it."""
+
+    location: str
+    created: bool
+
+
+MergeAttemptStatus = Literal["pending", "already", "conflict", "error"]
+
+
+@dataclass(frozen=True)
+class MergeAttempt:
+    """What `Vcs.begin_merge` returns. `pending`: merged without committing, `detail` empty;
+    `already`: nothing to merge; `conflict`: `detail` lists the files; `error`: the git error.
+    `restore_point` is what `abort_merge` and `commit_merge` need to put the checkout back."""
+
+    status: MergeAttemptStatus
+    detail: str = ""
+    restore_point: str = ""
+
+
+@dataclass(frozen=True)
+class CommitResult:
+    """What `Vcs.commit_merge` returns: `detail` is the short sha when `ok`, else the git error."""
+
+    ok: bool
+    detail: str = ""
+
+
+class Vcs(Protocol):
+    """The repository: per-task workspaces and the merge steps of `work accept` (spec: workspaces,
+    cli). Locations are opaque text. Every method is async."""
+
+    def branch_name(self, task_id: str) -> str:
+        """The branch the task's work lives on."""
+        ...
+
+    def workspace_location(self, task_id: str) -> str:
+        """Where the task's workspace is (or would be)."""
+        ...
+
+    async def ensure_workspace(self, task_id: str) -> Workspace:
+        """Create the workspace if needed, running the `after_create` hook on a new one. Raises
+        `WorkspaceError(message)`; a workspace whose hook failed is removed."""
+        ...
+
+    async def remove_workspace(self, task_id: str) -> None:
+        """Raises `WorkspaceError(message)` when it cannot be removed."""
+        ...
+
+    async def existing_workspaces(self) -> list[str]:
+        """Ids of the tasks that have a workspace."""
+        ...
+
+    async def repository_problem(self) -> str | None:
+        """A message when the repository root or the base branch is wrong, else None."""
+        ...
+
+    async def preflight(self, branch: str) -> str | None:
+        """A message for the first failed check of `work accept`, or None."""
+        ...
+
+    async def commit_count(self, branch: str) -> int:
+        """Commits on `branch` not yet in the base branch."""
+        ...
+
+    async def begin_merge(self, branch: str, message: str) -> MergeAttempt:
+        """Merge `branch` into the main checkout without committing. On conflict or error the
+        checkout is already restored."""
+        ...
+
+    async def abort_merge(self, restore_point: str) -> None:
+        """Put the main checkout back as it was before `begin_merge`."""
+        ...
+
+    async def commit_merge(self, restore_point: str) -> CommitResult:
+        """Commit the pending merge; on failure undo it."""
+        ...
+
+    def checkout_location(self) -> str:
+        """The main checkout, where `work accept` validates."""
+        ...
+
+    async def exclude_samba_dir(self) -> None:
+        """Keep the Samba directory out of `git status`, when it is inside the repository."""
+        ...
+
+
+class Validator(Protocol):
+    """Runs the validation command in a location (spec: workspaces, Validation)."""
+
+    async def run(self, location: str, log_name: str) -> ValidationResult:
+        """Run it, store the full output under `log_name` (relative to the runs directory) and
+        return the result. Never raises for a failing command."""
+        ...
+
+
+class Journal(Protocol):
+    """The event log (spec: observability). Fields with value None are left out."""
+
+    def debug(self, event: str, **fields: object) -> None: ...
+
+    def info(self, event: str, **fields: object) -> None: ...
+
+    def warning(self, event: str, **fields: object) -> None: ...
+
+    def exception(self, event: str, **fields: object) -> None:
+        """Error level, with the traceback of the exception being handled."""
         ...
 
 
