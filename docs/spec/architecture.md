@@ -32,7 +32,13 @@ by every entry point. `build(repo)` loads `WORKFLOW.md` and returns `Commands`, 
 use cases: the six named state-changing ones over `ChangeState` (`AcceptPlan`, `RejectPlan`,
 `RejectWork`, `RetryTask`, `StopTask`, `DiscardTask`, in `app/task_commands.py`), the four
 read-only queries (`ListTasks`, `ShowTask`, `ListQuestions`, `ShowQuestion`), `AnswerQuestion`,
-`AcceptWork` and `CreateTask`. It holds no config, no `Tasks` port and no orchestrator, so it is
+`AcceptWork` and `CreateTask`, and the completion queries `complete_tasks` (`CompleteTaskIds`) and
+`complete_questions` (`CompleteQuestions`); `AdrCommands` has `complete` (`CompleteAdrs`). The
+completion queries live in `app/completion.py`: read-only, no `typer` or `click`, they take plain
+strings (the command label and the typed prefix) and return `(value, help)` pairs of plain
+strings. The states a verb can act on come from the transition table (`find_row`), not from the
+CLI. The Typer completion callbacks in `cli.py` go through `bootstrap` and these queries only,
+print nothing and turn every error into no candidates. It holds no config, no `Tasks` port and no orchestrator, so it is
 the contract a web page or an MCP server could call too. `build_orchestrator(repo)` is a separate
 function, used only by `samba run` (the orchestrator is not a use case; it is the only builder
 of the `LogJournal`). `build_adr(repo)` returns `AdrCommands` for the ADR commands, which

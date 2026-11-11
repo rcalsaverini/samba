@@ -17,7 +17,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   `domain`, `app`, `adapters` and `entrypoints` (guarded by `tests/test_architecture.py`).
   - `entrypoints/cli.py`: a Typer app (ADR 0014; no argparse; `typer` is a runtime dependency, with
     shellingham, rich and pydantic; static shell completion via `--install-completion` and
-    `--show-completion`, dynamic id completion is a later task). One function per command, `--repo`
+    `--show-completion`, and dynamic completion of task ids, question ids and ADR numbers through
+    callbacks that use `bootstrap` only and swallow every error). One function per command, `--repo`
     declared on each leaf, `domain/` and `app/` never import `typer`. Parse, one call, render (no rule): `run` and `<noun> <verb>` commands, no aliases:
     `task new|list|show|retry|stop|discard`, `plan`/`work` review commands (including
     `work accept`), `question list|show|answer` (answers are recorded per question),
@@ -47,6 +48,10 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     use cases (`ListAdrs`, `ShowAdr`, `SetAdrStatus`, `SupersedeAdr`) and `app/queries.py` the
     read-only ones (`ListTasks`, `ShowTask`, `ListQuestions`, `ShowQuestion`), returning
     `Table`/`Text`/`Written` from `app/results.py`.
+  - `app/completion.py`: `CompleteTaskIds`, `CompleteQuestions`, `CompleteAdrs`: read-only queries
+    returning `(value, help)` strings for shell completion (legal states come from the transition
+    table via `find_row`); exposed as `Commands.complete_tasks`, `complete_questions` and
+    `AdrCommands.complete`.
   - `entrypoints/table.py`: the table printer of the CLI (the rows come from `app/queries.py`, which
     also holds the state-prefix matcher and the `task show` renderer).
   - `domain/settings.py`: the plain settings (`Policy`, `AgentSettings`, `Repository`, `Prompts`,

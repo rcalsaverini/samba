@@ -42,7 +42,7 @@ Every command is `samba run` or `samba <noun> <verb>`. There are no top-level sh
 
 ### Shell completion
 
-Samba can complete command names and options in bash, zsh and fish (and PowerShell). Install it
+Samba completes command names, options and ids in bash, zsh and fish (and PowerShell). Install it
 once for the shell you are using, then restart the terminal:
 
 ```
@@ -51,8 +51,11 @@ $ samba --show-completion      # print the script instead, to put it where you w
 ```
 
 `--install-completion` edits your shell configuration; use `--show-completion` if you would rather
-add the script yourself. Task ids, question ids and ADR numbers are not completed yet: that comes
-in a later step, so `samba plan accept <TAB>` does not offer ids for now. Spec chapter cli.
+add the script yourself. Ids are completed too: `samba plan accept <TAB>` offers the tasks waiting
+for plan review, `samba work accept <TAB>` those in work review, `samba question answer <TAB>`
+the open questions (`task/qid`) and `samba adr accept <TAB>` the proposed ADRs. The candidates
+depend on the repository (`--repo` if already typed, else the current directory); outside a
+repository nothing is offered. Spec chapter cli.
 
 ## 3. Setting up a repository
 
