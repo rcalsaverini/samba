@@ -14,10 +14,16 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   `tests/test_manual.py` fails when a CLI subcommand is not mentioned in it, so update it when
   you add, rename or remove a command.
 - `src/samba/`
-  - `cli.py`: `run` and `<noun> <verb>` commands, no aliases: `task new|list|show|retry|stop|discard`,
-    `plan`/`work` review commands (including `work accept`), `question list|show|answer`
-    (answers are recorded per question, `cmd_question_answer`), `adr list|show|accept|reject|supersede`
-    (`cmd_adr`, needs no WORKFLOW.md), `dev transitions`.
+  - `cli.py`: the thin argparse adapter (no rule): `run` and `<noun> <verb>` commands, no aliases:
+    `task new|list|show|retry|stop|discard`, `plan`/`work` review commands (including
+    `work accept`), `question list|show|answer` (answers are recorded per question,
+    `cmd_question_answer`), `adr list|show|accept|reject|supersede` (`cmd_adr`, needs no
+    WORKFLOW.md), `dev transitions`. It calls `compose.build`, one use case, prints the result and
+    maps its kind to the exit code.
+  - `compose.py`: the composition root, the only place that builds adapters. `build(repo)` reads
+    `WORKFLOW.md` and returns `Services` (use cases, `Tasks`, `Config`, `Orchestrator`);
+    `build_adr(repo)` is the config-free entry for the ADR commands. Constructors take their ports,
+    no defaults.
   - `adr.py`: ADR files under `docs/adr/`: front matter parsing, summary line, status edits.
     `adapters/adr_files.py` (`FileAdrs`) is the `Adrs` port over it; `app/adr.py` holds the ADR
     use cases (`ListAdrs`, `ShowAdr`, `SetAdrStatus`, `SupersedeAdr`) and `app/queries.py` the

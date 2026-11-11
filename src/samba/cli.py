@@ -11,25 +11,15 @@ import sys
 from pathlib import Path
 from typing import cast
 
-from samba.adapters.adr_files import FileAdrs
-from samba.adapters.git_merger import GitMerger
-from samba.adapters.markdown_tasks import MarkdownTasks
-from samba.adapters.repo_lock import FileRepoLock
-from samba.adapters.system import SystemClock
-from samba.adapters.terminal import StdTerminal
-from samba.app.accept_work import AcceptWork, DryRun
-from samba.app.adr import ListAdrs, SetAdrStatus, ShowAdr, SupersedeAdr
-from samba.app.answer_question import AnswerQuestion
-from samba.app.change_state import ChangeState, FeedbackMode
-from samba.app.create_task import CreateTask
-from samba.app.machine import Machine
-from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask, split_target
+from samba.app.accept_work import DryRun
+from samba.app.change_state import FeedbackMode
+from samba.app.queries import split_target
 from samba.app.resolve import ResolveError, resolve_task_id
 from samba.app.results import Refused, Table, Text, Written
-from samba.config import Config, ConfigError, load_config
+from samba.compose import Services, build, build_adr
+from samba.config import Config, ConfigError
 from samba.domain.transitions import render_markdown_table
-from samba.orchestrator import Orchestrator, StartupError
-from samba.ports import Tasks
+from samba.orchestrator import StartupError
 from samba.views import print_table
 
 
@@ -48,9 +38,9 @@ def _setup_logging(config: Config) -> None:
     root.addHandler(console)
 
 
-def cmd_run(config: Config, exit_when_idle: bool) -> int:
-    _setup_logging(config)
-    orch = Orchestrator(config)
+def cmd_run(svc: Services, exit_when_idle: bool) -> int:
+    _setup_logging(svc.config)
+    orch = svc.orchestrator
 
     async def main() -> None:
         loop = asyncio.get_running_loop()
@@ -70,12 +60,6 @@ def cmd_run(config: Config, exit_when_idle: bool) -> int:
     return 0
 
 
-def _store(config: Config) -> Tasks:
-    """The task store the commands use (the composition root arrives with a later task)."""
-    sym = config.layout.samba_dir
-    return MarkdownTasks(sym / "tasks", sym / "state", SystemClock())
-
-
 def _show(result: Table | Text | Refused) -> int:
     """Print a read-only result: a table on stdout, text as it is, or the refusal on stderr."""
     if isinstance(result, Refused):
@@ -93,21 +77,18 @@ def _report(result: Refused) -> int:
     return 2 if result.kind == "usage" else 1
 
 
-def cmd_transition(config: Config, text: str, event: str, label: str, *,
+def cmd_transition(svc: Services, text: str, event: str, label: str, *,
                    feedback: str | None = None, edit: bool = False,
                    feedback_mode: FeedbackMode = "none",
                    confirm_plan: str | None = None, yes: bool = False,
                    hints: bool = False) -> int:
     """Resolve the id, run the `ChangeState` use case, print its result (spec: cli)."""
-    tasks = _store(config)
     try:
-        task_id = resolve_task_id(tasks, text)
+        task_id = resolve_task_id(svc.tasks, text)
     except ResolveError as e:
         print(f"samba: {e.render()}", file=sys.stderr)
         return 2
-    use_case = ChangeState(tasks, Machine(tasks, SystemClock()), StdTerminal(),
-                           FileRepoLock(config.layout.samba_dir))
-    result = use_case.run(task_id, event, label, feedback=feedback, edit=edit,
+    result = svc.change_state.run(task_id, event, label, feedback=feedback, edit=edit,
                           feedback_mode=feedback_mode, confirm_plan=confirm_plan, yes=yes,
                           hints=hints)
     if isinstance(result, Refused):
@@ -123,19 +104,15 @@ def _err(msg: str) -> None:
     print(f"samba: {msg}", file=sys.stderr)
 
 
-def cmd_question_answer(config: Config, target: str, text: str | None, edit: bool) -> int:
+def cmd_question_answer(svc: Services, target: str, text: str | None, edit: bool) -> int:
     """`question answer` (spec: cli): resolve the id, run the `AnswerQuestion` use case."""
-    tasks = _store(config)
     name, qid = split_target(target)
     try:
-        task_id = resolve_task_id(tasks, name)
+        task_id = resolve_task_id(svc.tasks, name)
     except ResolveError as e:
         _err(e.render())
         return 2
-    clock = SystemClock()
-    use_case = AnswerQuestion(tasks, Machine(tasks, clock), StdTerminal(),
-                              FileRepoLock(config.layout.samba_dir), clock)
-    result = use_case.run(task_id, qid, text, edit)
+    result = svc.answer_question.run(task_id, qid, text, edit)
     if isinstance(result, Refused):
         return _report(result)
     if result.location is not None:
@@ -145,21 +122,15 @@ def cmd_question_answer(config: Config, target: str, text: str | None, edit: boo
     return 0
 
 
-def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: bool, yes: bool,
+def cmd_work_accept(svc: Services, text: str, *, no_merge: bool, no_validate: bool, yes: bool,
                     dry_run: bool) -> int:
     """`work accept` (spec: cli): the command pattern with a merge as the outside effect."""
-    tasks = _store(config)
     try:
-        task_id = resolve_task_id(tasks, text)
+        task_id = resolve_task_id(svc.tasks, text)
     except ResolveError as e:
         _err(e.render())
         return 2
-    clock = SystemClock()
-    use_case = AcceptWork(
-        tasks, Machine(tasks, clock), StdTerminal(), FileRepoLock(config.layout.samba_dir),
-        GitMerger(config.layout, config.validation), config.layout.base_branch,
-        config.validation.command)
-    result = use_case.run(task_id, no_merge=no_merge, no_validate=no_validate, yes=yes,
+    result = svc.accept_work.run(task_id, no_merge=no_merge, no_validate=no_validate, yes=yes,
                           dry_run=dry_run)
     if isinstance(result, Refused):
         return _report(result)
@@ -174,12 +145,10 @@ def cmd_work_accept(config: Config, text: str, *, no_merge: bool, no_validate: b
     return 0
 
 
-def cmd_task_new(config: Config, title: str | None, body: str | None, depends: str | None,
+def cmd_task_new(svc: Services, title: str | None, body: str | None, depends: str | None,
                  priority: int, skip_plan: bool) -> int:
     """`task new` (spec: cli): run the `CreateTask` use case, print its result."""
-    tasks = _store(config)
-    result = CreateTask(tasks, StdTerminal(), SystemClock()).run(
-        title, body, depends, priority, skip_plan)
+    result = svc.create_task.run(title, body, depends, priority, skip_plan)
     if isinstance(result, Refused):
         return _report(result)
     print(result.location)
@@ -189,17 +158,17 @@ def cmd_task_new(config: Config, title: str | None, body: str | None, depends: s
 def cmd_adr(args: argparse.Namespace) -> int:
     """`adr list|show|accept|reject|supersede` (spec: cli, ADR commands). Plain file edits: no
     config, no lock, no confirmation, never a commit."""
-    adrs = FileAdrs(cast(Path, args.repo))
+    adrs = build_adr(cast(Path, args.repo))
     verb = str(args.adr_command)
     result: Table | Text | Written | Refused
     if verb == "list":
-        result = ListAdrs(adrs).run(bool(args.all))
+        result = adrs.list.run(bool(args.all))
     elif verb == "show":
-        result = ShowAdr(adrs).run(str(args.number))
+        result = adrs.show.run(str(args.number))
     elif verb == "supersede":
-        result = SupersedeAdr(adrs).run(str(args.number), str(args.new))
+        result = adrs.supersede.run(str(args.number), str(args.new))
     else:
-        result = SetAdrStatus(adrs).run(verb, str(args.number))
+        result = adrs.set_status.run(verb, str(args.number))
     if isinstance(result, Written):
         for file in result.files:
             print(file)
@@ -323,49 +292,49 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_adr(args)
 
     try:
-        config = load_config(args.repo)
+        svc = build(cast(Path, args.repo))
     except ConfigError as e:
         print(f"samba: config error: {e}", file=sys.stderr)
         return 2
 
     if args.command == "run":
-        return cmd_run(config, args.exit_when_idle)
+        return cmd_run(svc, args.exit_when_idle)
     command = str(args.command)
     if command == "plan":
         verb = str(args.plan_command)
-        return cmd_transition(config, str(args.id), f"plan.{verb}", f"plan.{verb}",
+        return cmd_transition(svc, str(args.id), f"plan.{verb}", f"plan.{verb}",
                               feedback=cast(str | None, getattr(args, "feedback", None)),
                               edit=bool(getattr(args, "edit", False)),
                               feedback_mode="optional" if verb == "reject" else "none")
     if command == "work" and args.work_command == "accept":
-        return cmd_work_accept(config, str(args.id), no_merge=bool(args.no_merge),
+        return cmd_work_accept(svc, str(args.id), no_merge=bool(args.no_merge),
                                no_validate=bool(args.no_validate), yes=bool(args.yes),
                                dry_run=bool(args.dry_run))
     if command == "work":
         fresh = bool(args.fresh)
-        return cmd_transition(config, str(args.id), "work.reject_fresh" if fresh else "work.reject",
+        return cmd_transition(svc, str(args.id), "work.reject_fresh" if fresh else "work.reject",
                               "work.reject", feedback=cast(str | None, args.feedback),
                               edit=bool(args.edit), feedback_mode="optional")
     if command == "question":
         if args.question_command == "list":
-            return _show(ListQuestions(_store(config)).run())
+            return _show(svc.list_questions.run())
         if args.question_command == "show":
-            return _show(ShowQuestion(_store(config)).run(str(args.id)))
-        return cmd_question_answer(config, str(args.id), cast(str | None, args.text),
+            return _show(svc.show_question.run(str(args.id)))
+        return cmd_question_answer(svc, str(args.id), cast(str | None, args.text),
                                    bool(args.edit))
     if command == "task":
         command = str(args.task_command)
     if command == "retry":
-        return cmd_transition(config, str(args.id), "task.retry", "task.retry", hints=True)
+        return cmd_transition(svc, str(args.id), "task.retry", "task.retry", hints=True)
     if command == "stop":
-        return cmd_transition(config, str(args.id), "task.stop", "task.stop")
+        return cmd_transition(svc, str(args.id), "task.stop", "task.stop")
     if command == "discard":
-        return cmd_transition(config, str(args.id), "task.discard", "task.discard",
+        return cmd_transition(svc, str(args.id), "task.discard", "task.discard",
                               confirm_plan="Discard task {id}", yes=bool(args.yes))
     if command == "list":
-        return _show(ListTasks(_store(config), SystemClock()).run(cast(list[str], args.states)))
+        return _show(svc.list_tasks.run(cast(list[str], args.states)))
     if command == "show":
-        return _show(ShowTask(_store(config), SystemClock()).run(str(args.id)))
-    return cmd_task_new(config, cast(str | None, args.title), cast(str | None, args.body),
+        return _show(svc.show_task.run(str(args.id)))
+    return cmd_task_new(svc, cast(str | None, args.title), cast(str | None, args.body),
                         cast(str | None, args.depends_on), int(args.priority),
                         bool(args.skip_plan))

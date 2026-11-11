@@ -18,9 +18,14 @@ describes the target and says where each piece lives today.
 Dependencies point inward only: adapters depend on ports and the domain, use cases depend on the
 domain and ports, the domain depends on nothing outside itself. A domain module imports none of
 `os`, `time`, `datetime`, `uuid`, `subprocess`, `asyncio`, `logging`, `pathlib`, and no adapter.
-The composition root (the CLI) is the only place that builds adapters and hands them to use cases.
-Until it exists (a later task of the chain), constructors take optional ports and default to the
-system adapters.
+The composition root, `compose.py`, is the only place that builds adapters and hands them to use
+cases. `build(repo)` loads `WORKFLOW.md` and returns `Services`: the use cases (`ChangeState`,
+`AnswerQuestion`, `AcceptWork`, `CreateTask`, the read-only queries), the `Tasks` port for id
+resolution, the `Config` and the `Orchestrator`. `build_adr(repo)` serves the ADR commands, which
+need no config. Constructors take their ports as required parameters and have no defaults.
+`cli.py` is a thin argparse adapter: it parses, calls `build`, resolves the id, calls one use
+case, prints the result's messages and maps its kind to the exit code (`ok` 0, `refused` 1,
+`usage` 2). It holds no rule.
 
 ## Ports
 
@@ -77,16 +82,15 @@ same port.
 
 `AgentRequest`, `AgentReport`, `Failure`, `QuestionDraft` and `Readiness` are frozen dataclasses in
 `domain/agent.py` (running-claude, Adapter boundary and the report). The orchestrator takes an
-optional `agent` and defaults to `ClaudeCliRunner`, like the clock. The fake runner for tests is
+`agent`, passed in by the composition root, like the clock. The fake runner for tests is
 `tests/fake_agent.py`.
 
 The clock is threaded through `Machine`, the transition effects (`not_before`,
 `first_dispatched_at`, `queued_at`), the question helpers (`add_questions`, `answer_question`,
 `dismiss_open`), `log_line`, `MarkdownTasks` and the orchestrator. Timestamps written to task
 files and sidecars are formatted by the clock (`iso_seconds`, `log_stamp`), because the domain may
-not import `datetime`. In the domain the clock is always a required parameter. Only the
-adapter-side constructors (`MarkdownTasks` takes one, `Orchestrator`) default to `SystemClock`,
-until the composition root exists.
+not import `datetime`. The clock is always a required parameter, in the domain and in the
+constructors of `MarkdownTasks` and `Orchestrator`; only the composition root builds `SystemClock`.
 
 ## Where each concern lives today
 
@@ -99,7 +103,7 @@ tells whether the questions changed. `evaluate` takes a snapshot (`TaskRef` per 
 id is unknown); `deps_snapshot(task, get)` in `deps.py` builds it from the task and its
 `depends_on` closure. `Machine` (`fire`, `observe`) is the use case `app/machine.py`: it loads the
 task through the `Tasks` port, applies a row, adds the log line and saves once. The orchestrator
-holds a `Tasks` (default `MarkdownTasks`) and no sidecar store.
+holds a `Tasks` (a `MarkdownTasks` built by the root) and no sidecar store.
 
 Policy is in `domain/policy.py`: `Budget` (cap, spent, `left`, `exceeded`), `RetryPolicy` (`decide`
 gives `Retry` with the delay or `GiveUp`), `should_reflect` (the give-up turn) and
@@ -119,17 +123,25 @@ lines, shell) and `Hooks` (`after_create`, timeout). `Config` holds one of each 
 `load_config` builds it. `Workspaces` takes `Layout`, `Hooks` and the shell. `DEFAULT_ALLOW` and
 `DEFAULT_PLANNING_ALLOW` stay in `config.py`.
 
-Not yet behind a port, and not yet moved:
+The terminal, git (merge), the repo lock, the workspaces (the tick's part) and the ADR files are
+behind ports, wrapped by adapters over the modules `merge.py`, `lock.py`, `workspace.py` and
+`adr.py`, which stay where they are for now. Not yet behind a port:
 
 - Subprocess helpers: `proc.py` (the Claude runner moved to `adapters/claude_cli.py`).
-- Git: `workspace.py` and `merge.py`.
-- Repo lock: `lock.py` (monotonic deadline and sleep).
-- Terminal output: `cli.py` and `views.py` (`views.py` still reads `time.time`). Both use the
-  `Tasks` port; `cli.py` still builds `MarkdownTasks` itself until the composition root exists.
+- Worker execution: workspace creation, hooks, validation and the git calls of the workers in
+  `orchestrator.py` (startup, poll loop and workers stay there; the decisions are in `app/tick.py`).
+- The table printer `views.py`, the CLI adapter's output (it reads `time.time` for column widths).
 - The test-only `SAMBA_DEBUG_FIRE_DELAY` sleep is in `MarkdownTasks.save`, between the rename and
   the sidecar write.
 
-More ports and module moves arrive in later tasks of the chain.
+## The architecture test
+
+`tests/test_architecture.py` reads sources with `ast` and never imports `samba`. It checks that the
+domain modules (`DOMAIN_MODULES`) import no I/O module and no adapter; that every use case module
+(`APP_MODULES`) imports no adapter and none of `os`, `subprocess`, `pathlib`; that domain and use
+case code use no storage vocabulary and call no clock or uuid; that only `compose.py` constructs
+`MarkdownTasks` and neither `cli.py` nor `orchestrator.py` imports an adapter; and that `cli.py`
+holds no rule (`human_events`, `merge.`, `TaskId.slug`, `Machine`).
 
 ## Scenarios
 
