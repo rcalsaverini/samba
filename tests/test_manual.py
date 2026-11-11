@@ -27,26 +27,37 @@ def help_text(*words: str) -> str:
 
 
 def top_level_commands() -> list[str]:
-    """Names listed under `commands:`, plus those under the epilog's `development commands:`."""
+    """Names listed under `Commands:`, plus those under the epilog's `development commands:`."""
+    names = command_block(help_text())
+    names.extend(command_block(help_text(), "development commands:"))
+    return names
+
+
+def command_block(text: str, header: str = "Commands:") -> list[str]:
+    """Names in the block that follows the line `header` of a plain Click help text."""
     names: list[str] = []
     in_block = False
-    for line in help_text().splitlines():
-        if line.rstrip().endswith("commands:"):
+    for line in text.splitlines():
+        if line.strip() == header:
             in_block = True
-            continue
-        if in_block:
+        elif in_block:
             m = re.match(r"^\s+([a-z][a-z-]*)(\s{2,}|$)", line)
             if m:
                 names.append(m.group(1))
-            elif not line.strip():
-                in_block = False
+            elif line.strip():
+                break
     return names
 
 
 def verbs(noun: str) -> list[str]:
-    """Verbs of a noun, from the `{a,b,c}` list argparse prints; empty for a leaf command."""
-    m = re.search(r"\{([a-z][a-z,-]*)\}", help_text(noun))
-    return m.group(1).split(",") if m else []
+    """Verbs of a noun, from its `Commands:` block; empty for a leaf command."""
+    return command_block(help_text(noun))
+
+
+def test_manual_documents_shell_completion() -> None:
+    text = MANUAL.read_text()
+    for needle in ("--install-completion", "--show-completion"):
+        assert needle in text, needle
 
 
 def documented_commands() -> list[str]:

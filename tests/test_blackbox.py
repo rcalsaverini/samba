@@ -673,4 +673,4 @@ def test_removed_top_level_commands_are_usage_errors(sb: Sandbox) -> None:
     for args in (("new", "x"), ("list",), ("show", "x"), ("status",), ("transitions",)):
         res = sb.run(*args)
         assert res.returncode == 2, args
-        assert "invalid choice" in res.stderr, args
+        assert "No such command" in res.stderr, args

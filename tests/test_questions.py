@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import subprocess
 from typing import Any
 
-from conftest import Sandbox, prompt_of
+from conftest import Sandbox, prompt_of, samba_cmd
 
 TWO = [{"text": "Which database?", "context": "storage choice"},
        {"text": "Which port?", "context": "networking"}]
@@ -223,9 +224,13 @@ def test_old_task_without_questions_field(sb: Sandbox) -> None:
 
 
 def test_question_help_lists_verbs(sb: Sandbox) -> None:
-    out = sb.run("question", "--help").stdout
+    def help_of(*words: str) -> str:  # `sb.run` appends --repo, which a group's help does not take
+        return subprocess.run([*samba_cmd(), *words, "--help"], cwd=sb.repo, env=sb.env(),
+                              capture_output=True, text=True, timeout=60).stdout
+
+    out = help_of("question")
     assert all(v in out for v in ("list", "show", "answer"))
-    assert "question" in sb.run("--help").stdout
+    assert "question" in help_of()
 
 
 def test_task_show_counts_open_questions(sb: Sandbox) -> None:

@@ -38,14 +38,16 @@ function, used only by `samba run` (the orchestrator is not a use case; it is th
 of the `LogJournal`). `build_adr(repo)` returns `AdrCommands` for the ADR commands, which
 need no config. `build_explore(repo)` serves `samba explore`: it loads `WORKFLOW.md` but uses only
 `claude.command` and `claude.model`. Constructors take their ports as required parameters and have no defaults.
-`entrypoints/cli.py` is parse, one call, render: each leaf parser binds one call that passes plain
-values (the id or `TASK[/QID]` as typed, text, flags) to exactly one use case, and one shared
+`entrypoints/cli.py` is a Typer app (ADR 0014): parse, one call, render. Each command is a function
+whose signature declares its arguments and options, builds the use cases through `bootstrap` and
+passes plain values (the id or `TASK[/QID]` as typed, text, flags) to exactly one use case, and one shared
 `render(result)` maps `Done`, `Table`, `Text`, `Written` and `Refused` to output and the exit code
 (0, 1 for `refused`, 2 for `usage`). It holds no rule, does not resolve ids and has no `if`
 chain on command names. `run`, `explore` and `dev transitions` keep their own small paths and are
 outside the contract. No entry point calls another: `cli.py` imports neither `orchestrator.py` nor
 `workers.py`, and `tests/test_architecture.py` guards it, along with `cli.py` importing neither
-`app/resolve.py` nor `domain/task_id.py` and `app/` modules never importing `argparse`.
+`app/resolve.py` nor `domain/task_id.py`, `domain/` and `app/` modules never importing `typer` or
+`click`, and no module importing `argparse`.
 
 The use cases take plain values (strings, numbers, booleans) and resolve the task id or unique
 prefix themselves (`find_task` in `app/resolve.py`: an unknown or ambiguous id is a `usage`

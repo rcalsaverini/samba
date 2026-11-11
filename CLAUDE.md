@@ -15,14 +15,18 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   you add, rename or remove a command.
 - `src/samba/`: the root holds only `__init__.py`, `__main__.py`, `bootstrap.py` and the packages
   `domain`, `app`, `adapters` and `entrypoints` (guarded by `tests/test_architecture.py`).
-  - `entrypoints/cli.py`: parse, one call, render (no rule): `run` and `<noun> <verb>` commands, no aliases:
+  - `entrypoints/cli.py`: a Typer app (ADR 0014; no argparse; `typer` is a runtime dependency, with
+    shellingham, rich and pydantic; static shell completion via `--install-completion` and
+    `--show-completion`, dynamic id completion is a later task). One function per command, `--repo`
+    declared on each leaf, `domain/` and `app/` never import `typer`. Parse, one call, render (no rule): `run` and `<noun> <verb>` commands, no aliases:
     `task new|list|show|retry|stop|discard`, `plan`/`work` review commands (including
     `work accept`), `question list|show|answer` (answers are recorded per question),
     `adr list|show|accept|reject|supersede` (needs no WORKFLOW.md), `explore [topic]`
-    (`cmd_explore`, an interactive claude session), `dev transitions`. Each leaf parser binds one
-    call (`bind`) that passes plain values to one use case, and `render(result)` prints it and maps
-    the kind to the exit code. No `cmd_*` helper per command and no if/elif on command names;
-    `run` (`cmd_run`), `explore` and `dev transitions` keep their own small paths. It imports
+    (`explore_cmd`, an interactive claude session), `dev transitions`. Each command function makes
+    one call that passes plain values to one use case, and `render(result)` prints it and maps
+    the kind to the exit code (`finish` raises `typer.Exit`). No if/elif on command names;
+    `run` (`run_cmd`), `explore` and `dev transitions` keep their own small paths. `tests/test_cli_surface.py`
+    covers help shape, usage errors and completion. It imports
     neither `app/resolve.py` nor `domain/task_id.py` nor another entry point.
     The script entry is `samba.entrypoints.cli:main`.
   - `bootstrap.py`: the composition root, called by every entry point; the only module that may

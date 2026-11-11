@@ -43,6 +43,34 @@ aliases: they are usage errors (exit 2). `samba --help` lists `run`, `task`, `pl
 `dev` apart under "development commands" (its help says it is for working on Samba itself).
 `dev transitions` accepts `--repo` and ignores it; it loads no config.
 
+**Parser (ADR 0014).** The command line is a Typer app: one function per command, its signature
+declaring the arguments and options. The surface above, the exit codes and the stdout and stderr of
+every command are unchanged; only the shape of `--help` is Typer's (`Usage:`, `Options:`,
+`Commands:`). `-h` and `--help` both work. `--repo` is declared on every leaf command, so it goes
+after the arguments (`samba task list done --repo X`), not before the noun. Long options must be
+spelled in full (no prefix abbreviations). A usage error (unknown command, missing argument, bad
+value, `--feedback` with `--edit`, answer text with `--edit`) prints to stderr and exits 2; a config
+error prints `samba: config error: ...` and exits 2. Rich markup is off, so output has no color and
+no box characters when stdout is not a terminal.
+
+Runtime dependencies added for it, as resolved in `uv.lock` (typer 0.29.1; this release carries its
+own copy of Click, so there is no separate `click` package): `typer`, `shellingham` (shell
+detection for `--install-completion`), `rich`, `markdown-it-py`, `mdurl`, `pygments`, `pydantic`,
+`pydantic-core`, `annotated-types`, `typing-inspection`, `annotated-doc`, `typing-extensions`, and
+`colorama` on Windows only. `pyproject.toml` declares `typer>=0.12` (the full package, not
+`typer-slim`, because shell detection needs `shellingham`); the rest is transitive.
+
+## Shell completion
+
+Completion lands in two steps. **Now (static):** command names and options complete. Install it with
+`samba --install-completion` (writes to the shell's config; bash, zsh, fish, PowerShell) or print the
+script with `samba --show-completion` to place it by hand. A script is driven by the environment
+variable `_SAMBA_COMPLETE` (for example `_SAMBA_COMPLETE=complete_bash` with `COMP_WORDS` and
+`COMP_CWORD`), which the black-box tests use. `dev` is hidden from the completions. **Next
+(dynamic, a separate task):** task ids, question ids (`TASK[/QID]`) and ADR numbers, read through
+the use cases, so that `samba plan accept <TAB>` offers the tasks that can be accepted. Until then
+ids are not completed.
+
 **`task new`** creates the whole task, so the file need not be opened afterwards. It does not take
 the repo lock: it only writes one new file.
 
@@ -78,7 +106,7 @@ codes: they take plain values and return one of `Done`, `Table`, `Text`, `Writte
 (a `--dry-run` plan is a `Text`), and the CLI adapter prints the result and maps its kind to the
 exit code. An unknown or ambiguous id is a `usage` refusal from the use case, not a CLI check.
 The adapters are built only by the composition root (`bootstrap.py`). The CLI is parse, one call,
-render: each leaf parser binds one call to one use case, and one `render` function prints the
+render: each command function makes one call to one use case, and one `render` function prints the
 result (see the architecture chapter).
 
 - Exit codes: 0 done; 1 wrong state, lock timeout, editor failure, failed preflight, merge or
