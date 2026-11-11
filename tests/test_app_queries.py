@@ -8,7 +8,7 @@ from samba.app.results import Refused, Table, Text, Written
 from samba.domain.states import State
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-from samba.ports import AdrError, AdrInfo
+from samba.domain.ports import AdrError, AdrInfo
 
 from fake_tasks import FakeTasks
 from test_scenarios import FakeClock

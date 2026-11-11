@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from samba.domain.agent import AgentReport, AgentRequest, Failure, QuestionDraft
-from samba.ports import AgentRunner
+from samba.domain.ports import AgentRunner
 
 from fake_agent import FakeAgentRunner
 

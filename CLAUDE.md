@@ -73,7 +73,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `adapters/claude_cli.py`: `ClaudeCliRunner`, the only reader of Claude's stream-json: builds
     the argv, runs `claude`, maps the output into an `AgentReport`. `domain/agent.py`:
     `AgentRequest`, `AgentReport`, `Readiness`. `logfmt.py`: the `kv` log line format.
-  - `ports.py`: the ports (Protocols `Clock`, `IdGenerator`, `AgentRunner`, `Tasks`); `adapters/system.py`: the system
+  - `domain/ports.py`: the ports (Protocols `Clock`, `IdGenerator`, `AgentRunner`, `Tasks` and the
+    rest; at the domain level because `Task` uses the clock port); `adapters/system.py`: the system
     clock and uuid generator. The layers and the dependency rule are in the `architecture` chapter.
   - `proc.py`: subprocess helpers (process groups), used only inside adapters.
   - `prompts.py`: built-in prompts, the protocol prompt, the outcome schema.

@@ -13,7 +13,7 @@ from samba.domain.questions import merge_questions
 from samba.domain.states import STATES, State
 from samba.domain.task import FeedbackRound, ObservedMove, Task
 from samba.domain.task_id import TaskId
-from samba.ports import TaskExists
+from samba.domain.ports import TaskExists
 
 SCALARS = (
     "session_id", "last_stage", "blocked_cause", "plan_session_id", "plan_approved", "attempts",

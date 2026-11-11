@@ -1,6 +1,6 @@
 """The `Task` aggregate: everything the core knows about one task (spec: states, Task aggregate).
 
-A plain mutable record. The `Tasks` port (`samba.ports`) loads and saves it; where and how it is
+A plain mutable record. The `Tasks` port (`samba.domain.ports`) loads and saves it; where and how it is
 stored is the adapter's business. Pure: the clock is a parameter.
 """
 
@@ -12,7 +12,7 @@ from samba.domain import questions as qs
 from samba.domain.questions import Question
 from samba.domain.states import BlockedCause, LastOutcome, Stage, State
 from samba.domain.task_id import TaskId
-from samba.ports import Clock
+from samba.domain.ports import Clock
 
 TODO_STATES: tuple[State, ...] = ("plan-todo", "work-todo")
 

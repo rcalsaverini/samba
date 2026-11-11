@@ -22,7 +22,7 @@ from samba.domain.agent import (
     QuestionDraft,
     Readiness,
 )
-from samba.ports import Journal
+from samba.domain.ports import Journal
 from samba.proc import kill_group, run_cmd
 from samba.prompts import OUTCOME_SCHEMA_JSON, PLAN_OUTCOME_SCHEMA_JSON
 

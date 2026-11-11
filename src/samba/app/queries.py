@@ -12,7 +12,7 @@ from samba.domain.questions import open_questions, round_questions
 from samba.domain.states import STATES, State
 from samba.domain.task import Task
 from samba.domain.transitions import human_events
-from samba.ports import Clock, Tasks
+from samba.domain.ports import Clock, Tasks
 
 HEADER = ("ID", "STATE", "ATTEMPTS", "TURNS", "COST", "LAST", "ERROR")
 QUESTION_HEADER = ("TASK", "QID", "STAGE", "ASKED", "QUESTION")

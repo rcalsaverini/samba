@@ -13,8 +13,8 @@ SRC = Path(__file__).resolve().parent.parent / "src" / "samba"
 
 # Modules that belong to the pure domain, relative to src/samba. Later tasks of the refactor
 # chain append to this list as they move modules in.
-DOMAIN_MODULES = ["ports.py", "template.py", "prompts.py", "domain/__init__.py",
-                  "domain/states.py", "domain/questions.py",
+DOMAIN_MODULES = ["template.py", "prompts.py", "domain/__init__.py",
+                  "domain/ports.py", "domain/states.py", "domain/questions.py",
                   "domain/transitions.py", "domain/deps.py", "domain/agent.py",
                   "domain/policy.py", "domain/task.py", "domain/task_id.py",
                   "domain/validation.py", "domain/launch.py"]

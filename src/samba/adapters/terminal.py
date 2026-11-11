@@ -9,7 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from samba.ports import EditResult
+from samba.domain.ports import EditResult
 
 
 class StdTerminal:

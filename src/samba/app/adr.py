@@ -4,7 +4,7 @@ edits: no config, no lock, no confirmation, never a commit."""
 from __future__ import annotations
 
 from samba.app.results import Refused, Table, Text, Written, refused, usage
-from samba.ports import AdrError, Adrs
+from samba.domain.ports import AdrError, Adrs
 
 
 def _refusal(e: AdrError) -> Refused:

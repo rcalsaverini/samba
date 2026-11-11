@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager
 
-from samba.ports import EditResult
+from samba.domain.ports import EditResult
 
 
 class FakeTerminal:

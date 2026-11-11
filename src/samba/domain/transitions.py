@@ -25,7 +25,7 @@ from samba.domain.states import (
     State,
 )
 from samba.domain.task import TODO_STATES, Task
-from samba.ports import Clock
+from samba.domain.ports import Clock
 
 Actor = Literal["samba", "human"]
 

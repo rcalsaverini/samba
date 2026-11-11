@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from samba.domain.task_id import AmbiguousTask, TaskId, UnknownTask
-from samba.ports import Tasks
+from samba.domain.ports import Tasks
 
 
 class ResolveError(Exception):
