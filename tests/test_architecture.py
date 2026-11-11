@@ -139,7 +139,7 @@ def test_the_root_modules_moved_into_their_layers() -> None:
 
 ROOT_FILES = {"__init__.py", "__main__.py", "bootstrap.py"}
 ROOT_PACKAGES = {"domain", "app", "adapters", "entrypoints"}
-ENTRYPOINT_FILES = {"__init__.py", "cli.py", "table.py", "orchestrator.py"}
+ENTRYPOINT_FILES = {"__init__.py", "cli.py", "table.py", "orchestrator.py", "workers.py"}
 
 
 def root_problems(root: Path) -> list[str]:
@@ -276,6 +276,17 @@ def test_the_orchestrator_imports_no_io_adapter_or_old_module() -> None:
     assert orchestrator_violations(SRC / "entrypoints" / "orchestrator.py") == []
 
 
+def test_the_workers_import_no_io_adapter_or_old_module() -> None:
+    assert orchestrator_violations(SRC / "entrypoints" / "workers.py") == []
+
+
+def test_the_orchestrator_is_thin_and_holds_no_rule() -> None:
+    path = SRC / "entrypoints" / "orchestrator.py"
+    assert len(path.read_text().splitlines()) <= 110
+    rules = {"samba.domain.policy", "samba.domain.prompts", "samba.domain.template"}
+    assert rules & set(imported_modules(path)) == set()
+
+
 def test_the_new_checks_catch_logging_pathlib_and_old_modules(tmp_path: Path) -> None:
     bad = tmp_path / "bad.py"
     bad.write_text("import logging\nfrom pathlib import Path\nimport samba.merge\n"
@@ -309,6 +320,6 @@ def test_only_the_adapter_splits_task_front_matter() -> None:
 
 def test_no_direct_clock_or_uuid_calls() -> None:
     pattern = re.compile(r"\btime\.(time|monotonic)\(|\bdatetime\.now\(|\buuid\.")
-    for rel in ["entrypoints/orchestrator.py", *APP_MODULES, *DOMAIN_MODULES]:
+    for rel in ["entrypoints/orchestrator.py", "entrypoints/workers.py", *APP_MODULES, *DOMAIN_MODULES]:
         hits = pattern.findall(code_without_comments(SRC / rel))
         assert not hits, f"{rel} calls the clock or uuid directly"

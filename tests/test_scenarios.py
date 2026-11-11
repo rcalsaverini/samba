@@ -411,7 +411,7 @@ async def play(sc: Scenario) -> tuple[FakeTasks, FakeVcs, FakeValidator, FakeJou
         match step["do"]:
             case "tick":
                 await orch.tick()
-                await orch.wait_workers()
+                await orch.workers.wait_all()
             case "plan_accept":
                 assert isinstance(change.run(tid, "plan.accept", "plan.accept"), StateChanged)
             case "answer":

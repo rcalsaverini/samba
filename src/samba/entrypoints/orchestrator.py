@@ -1,14 +1,14 @@
-"""The poll loop and the asyncio workers; every rule is delegated to `app/` (spec: orchestrator).
+"""The orchestrator: wires the parts and runs the poll loop (spec: orchestrator, architecture).
 
-Step 1 of ADR 0015: the rules live in `Startup`, `RunTask` (with `PromptBuilder` and `Finisher`)
-and `Guard`. The next step moves the workers out and leaves a thin loop here.
+It holds no rule. `Startup` checks and recovers, `Tick` observes, reconciles, cleans up and
+dispatches, `RunTask` runs one task (with `PromptBuilder` and `Finisher`), `Workers` supervises
+the asyncio workers (cancel, shutdown). `Tick` and `Workers` share one `running` dict and one
+`Notes`.
 """
 
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import functools
 
 from samba.app.finish import Finisher
 from samba.app.guard import Guard
@@ -16,9 +16,8 @@ from samba.app.machine import Machine
 from samba.app.prompt_builder import PromptBuilder
 from samba.app.run_task import RunTask
 from samba.app.startup import Startup
-from samba.app.tick import Notes, Running, Tick, running_folder
+from samba.app.tick import Notes, Running, Tick
 from samba.app.turn import TurnFlow
-from samba.domain.settings import Config
 from samba.domain.ports import (
     AgentRunner,
     Clock,
@@ -28,11 +27,9 @@ from samba.domain.ports import (
     Tasks,
     Validator,
     Vcs,
-    WorkspaceError,
 )
-from samba.domain.states import State
-from samba.domain.task import Task
-from samba.domain.task_id import TaskId
+from samba.domain.settings import Config
+from samba.entrypoints.workers import Workers
 
 
 class Orchestrator:
@@ -41,30 +38,29 @@ class Orchestrator:
                  journal: Journal) -> None:
         """Every port is passed in; the bootstrap (`samba.bootstrap`) builds them."""
         self.journal = journal
-        self.policy = config.policy
-        self.clock: Clock = clock
-        self.tasks: Tasks = tasks
         self.vcs = vcs
-        self.running: dict[str, Running] = {}
-        self._workers: dict[str, asyncio.Task[None]] = {}
+        self.policy = config.policy
+        running: dict[str, Running] = {}
+        notes = Notes(tasks, running)  # `## Log` lines held while an agent runs
         turns = TurnFlow(agent, ids, tasks, clock, validator, journal)
-        self.machine = Machine(tasks, clock, journal, Guard(config.policy.require_plan, tasks))
-        self.notes = Notes(tasks, self.running)  # `## Log` lines held while an agent runs
+        machine = Machine(tasks, clock, journal, Guard(config.policy.require_plan, tasks))
         builder = PromptBuilder(config, tasks, vcs)
-        finisher = Finisher(config.policy, self.machine, turns, builder, tasks, vcs, journal)
-        self.run_task = RunTask(tasks, vcs, turns, builder, finisher, journal)
-        self.startup_check = Startup(config.warnings, tasks, vcs, agent, self.machine, journal)
-        self.ticker = Tick(tasks, clock, lock, vcs, self.machine, self.policy.max_concurrent,
-                           self.running, self.notes, self._spawn, journal)
-
-    def _status(self, task_id: str) -> State | None:
-        task = self.tasks.get(TaskId(task_id))
-        return task.status if task is not None else None
+        finisher = Finisher(config.policy, machine, turns, builder, tasks, vcs, journal)
+        run_task = RunTask(tasks, vcs, turns, builder, finisher, journal)
+        self.running = running
+        self.workers = Workers(run_task, machine, tasks, vcs, clock, journal, running, notes)
+        self.startup_check = Startup(config.warnings, tasks, vcs, agent, machine, journal)
+        self.ticker = Tick(tasks, clock, lock, vcs, machine, self.policy.max_concurrent,
+                           running, notes, self.workers.spawn, journal)
 
     async def startup(self) -> None:
         await self.startup_check.run()
 
-    # ---- loop ---------------------------------------------------------------------------
+    async def tick(self) -> None:
+        await self.ticker.run()
+
+    async def cleanup_workspaces(self) -> None:
+        await self.ticker.cleanup_workspaces()
 
     async def run(self, exit_when_idle: bool = False) -> None:
         await self.startup()
@@ -79,58 +75,4 @@ class Orchestrator:
                     return
                 await asyncio.sleep(self.policy.poll_interval_s)
         finally:
-            await self.shutdown()
-
-    async def tick(self) -> None:
-        await self.ticker.run()
-
-    async def cleanup_workspaces(self) -> None:
-        await self.ticker.cleanup_workspaces()
-
-    # ---- workers ------------------------------------------------------------------------
-
-    def _spawn(self, task: Task) -> None:
-        """Start the worker of a task the tick just claimed."""
-        worker = asyncio.create_task(self.work(task.id))
-        self._workers[task.id] = worker
-        self.running[task.id] = Running(task=worker, started_at=self.clock.monotonic(),
-                                        folder=running_folder(task))
-        worker.add_done_callback(functools.partial(self._on_worker_done, task.id))
-
-    def _on_worker_done(self, task_id: str, _worker: asyncio.Task[None]) -> None:
-        self.running.pop(task_id, None)
-        self._workers.pop(task_id, None)
-        self.notes.release(task_id)
-
-    async def wait_workers(self) -> None:
-        """Wait for the workers running now to end."""
-        await asyncio.gather(*list(self._workers.values()))
-
-    async def shutdown(self) -> None:
-        if not self.running:
-            return
-        for entry in self.running.values():
-            if entry.stop_reason is None:
-                entry.stop_reason = "shutdown"
-            entry.task.cancel()
-        await asyncio.gather(*list(self._workers.values()), return_exceptions=True)
-
-    async def work(self, task_id: str) -> None:
-        def on_turn(n: int) -> None:
-            entry = self.running.get(task_id)
-            if entry:
-                entry.turn = n
-
-        try:
-            await self.run_task.run(task_id, on_turn)
-        except asyncio.CancelledError:
-            entry = self.running.get(task_id)
-            reason = entry.stop_reason if entry else "shutdown"
-            self.journal.info("stopped", task=task_id, reason=reason)
-            if reason == "shutdown":
-                self.machine.fire(TaskId(task_id), "recover", message="stopped by shutdown")
-            elif reason == "moved" and self._status(task_id) in (None, "done", "discarded"):
-                with contextlib.suppress(WorkspaceError):
-                    await self.vcs.remove_workspace(task_id)
-        except Exception as e:  # a bug in Samba itself: do not lose the task
-            await self.run_task.crashed(task_id, e)
+            await self.workers.shutdown()
