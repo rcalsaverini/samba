@@ -1,4 +1,4 @@
-"""Scripted `Terminal` and a fake `RepoLock` for in-process tests."""
+"""Scripted `Terminal` and a fake `Lock` for in-process tests."""
 
 from __future__ import annotations
 

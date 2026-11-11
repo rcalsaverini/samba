@@ -6,7 +6,6 @@ A use case: it talks to the `AgentRunner` and `Tasks` ports and to what the orch
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -26,10 +25,7 @@ from samba.domain.policy import (
 from samba.domain.states import Stage
 from samba.domain.task import Task
 from samba.domain.transitions import log_line
-from samba.logfmt import kv
-from samba.ports import AgentRunner, Clock, IdGenerator, Tasks
-
-log = logging.getLogger("samba")
+from samba.ports import AgentRunner, Clock, IdGenerator, Journal, Tasks
 
 
 @dataclass(frozen=True)
@@ -49,7 +45,8 @@ class TurnSetup:
 
 class TurnFlow:
     def __init__(self, agent: AgentRunner, ids: IdGenerator, tasks: Tasks,
-                 clock: Clock) -> None:
+                 clock: Clock, journal: Journal) -> None:
+        self.journal = journal
         self.agent = agent
         self.ids = ids
         self.tasks = tasks
@@ -74,8 +71,8 @@ class TurnFlow:
             prompt=prompt, session_id=session, resume=resume, system_prompt=system_prompt,
             max_budget_usd=Budget(max_cost_usd, task.cost_usd_total).left, kind=stage,
             location=location, log_name=f"{task.id}/{task.turns_total:03d}")
-        log.info(kv("turn_start", task=task.id, n=task.turns_total, resume=resume,
-                    session=session, phase="plan" if planning else None))
+        self.journal.info("turn_start", task=task.id, n=task.turns_total, resume=resume,
+                          session=session, phase="plan" if planning else None)
         res = await self.agent.run(request)
         task.cost_usd_total += res.cost_usd
         task.input_tokens_total += res.input_tokens
@@ -99,7 +96,7 @@ class TurnFlow:
                                     system_prompt=setup.system_prompt, location=setup.location,
                                     max_cost_usd=setup.max_cost_usd)
             if session_reset_needed(res):
-                log.info(kv("session_missing", task=task.id))
+                self.journal.info("session_missing", task=task.id)
                 if stage == "plan":
                     task.plan_session_id = None
                 else:
@@ -117,9 +114,9 @@ class TurnFlow:
             if res.failure is None and not (isinstance(action, Finish)
                                             and action.event == "budget"):
                 if stage == "work" and res.outcome == "missing":
-                    log.warning(kv("no_structured_output", task=task.id))
-                log.info(kv("turn_end", task=task.id, turn=turn, outcome=res.outcome,
-                            cost=f"{res.cost_usd:.4f}"))
+                    self.journal.warning("no_structured_output", task=task.id)
+                self.journal.info("turn_end", task=task.id, turn=turn, outcome=res.outcome,
+                                  cost=f"{res.cost_usd:.4f}")
             match action:
                 case Fail():
                     return action

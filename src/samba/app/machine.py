@@ -7,7 +7,6 @@ status is stored, and how a lost race is detected, is the port's business.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 
 from samba.domain.task import ObservedMove, Task
@@ -20,10 +19,7 @@ from samba.domain.transitions import (
     find_row,
     stage_guard_ok,
 )
-from samba.logfmt import kv
-from samba.ports import Clock, Tasks
-
-log = logging.getLogger("samba")
+from samba.ports import Clock, Journal, Tasks
 
 GuardFn = Callable[[str, Task], bool]  # (guard name, task) -> holds?
 
@@ -31,8 +27,10 @@ GuardFn = Callable[[str, Task], bool]  # (guard name, task) -> holds?
 class Machine:
     """Applies table rows. `fire` is the only way Samba moves a task."""
 
-    def __init__(self, tasks: Tasks, clock: Clock, guard: GuardFn | None = None) -> None:
+    def __init__(self, tasks: Tasks, clock: Clock, journal: Journal,
+                 guard: GuardFn | None = None) -> None:
         self.tasks = tasks
+        self.journal = journal
         self.guard = guard
         self.clock = clock
 
@@ -61,8 +59,8 @@ class Machine:
         target.add_log(entry_line(row, message, self.clock))
         if not self.tasks.save(target):
             return False
-        log.info(kv("transition", task=task_id, transition=row.event, src=row.src, dst=row.dst,
-                    actor=row.actor))
+        self.journal.info("transition", task=task_id, transition=row.event, src=row.src,
+                          dst=row.dst, actor=row.actor)
         return True
 
     def observe(self, move: ObservedMove, row: Transition, task: Task) -> str:
@@ -72,6 +70,6 @@ class Machine:
         apply_row(row, task, {}, self.clock)
         self.tasks.save(task)
         self.tasks.accept_move(move)
-        log.info(kv("transition", task=move.task_id, transition=row.event, src=row.src,
-                    dst=row.dst, actor=row.actor, observed=True))
+        self.journal.info("transition", task=move.task_id, transition=row.event, src=row.src,
+                          dst=row.dst, actor=row.actor, observed=True)
         return entry_line(row, "observed hand move", self.clock)

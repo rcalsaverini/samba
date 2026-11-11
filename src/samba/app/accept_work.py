@@ -9,7 +9,7 @@ from samba.app.confirm import confirm
 from samba.app.machine import Machine
 from samba.app.results import LOCK_BUSY, Refused, refused
 from samba.domain.task_id import TaskId
-from samba.ports import Merger, RepoLock, Tasks, Terminal
+from samba.ports import Lock, Merger, Tasks, Terminal
 
 EVENT = "work.accept"
 
@@ -30,7 +30,7 @@ class DryRun:
 
 
 class AcceptWork:
-    def __init__(self, tasks: Tasks, machine: Machine, terminal: Terminal, lock: RepoLock,
+    def __init__(self, tasks: Tasks, machine: Machine, terminal: Terminal, lock: Lock,
                  merger: Merger, base_branch: str, validate_command: str | None) -> None:
         self.tasks = tasks
         self.machine = machine

@@ -16,7 +16,7 @@ from samba.app.results import LOCK_BUSY, Refused, refused, usage
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
 from samba.domain.transitions import human_events
-from samba.ports import RepoLock, Tasks, Terminal
+from samba.ports import Lock, Tasks, Terminal
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ FeedbackMode = Literal["none", "optional", "required"]
 
 class ChangeState:
     def __init__(self, tasks: Tasks, machine: Machine, terminal: Terminal,
-                 lock: RepoLock) -> None:
+                 lock: Lock) -> None:
         self.tasks = tasks
         self.machine = machine
         self.terminal = terminal
