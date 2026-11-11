@@ -68,16 +68,18 @@ for the event, do the **outside effect** (here: write the feedback into the task
 **fire** the event through `Machine.fire` (states, States). Table rows only change Samba's state, and no
 command moves a task or writes the sidecar except through `fire`. Later commands reuse the pattern.
 
-The pattern lives in the use cases of `app/`, not in `entrypoints/cli.py`: `ChangeState` (plan accept and
-reject, work reject, task retry, stop, discard), `AnswerQuestion`, `AcceptWork` (async, over the `Vcs`
+The pattern lives in the use cases of `app/`, not in `entrypoints/cli.py`: `ChangeState`, wrapped by
+one thin use case per command named for what the person does (`AcceptPlan`, `RejectPlan`,
+`RejectWork` with its `fresh` flag, `RetryTask`, `StopTask`, `DiscardTask`, in `app/task_commands.py`;
+they own the event strings and labels), `AnswerQuestion`, `AcceptWork` (async, over the `Vcs`
 and `Validator` ports) and `CreateTask` (`task new`). The confirmation policy (`--yes`, no TTY, `[y/N]`) is
 `app/confirm.py`, over the `Terminal` port. The use cases never print, read stdin or return exit
 codes: they take plain values and return one of `Done`, `Table`, `Text`, `Written` or `Refused`
 (a `--dry-run` plan is a `Text`), and the CLI adapter prints the result and maps its kind to the
 exit code. An unknown or ambiguous id is a `usage` refusal from the use case, not a CLI check.
-The adapters are built only by the composition root (`bootstrap.py`). ADR 0013 lands in two
-steps: this is the first (results and id resolution); named use cases, `Commands` and the
-parse, call, render CLI follow in the second.
+The adapters are built only by the composition root (`bootstrap.py`). The CLI is parse, one call,
+render: each leaf parser binds one call to one use case, and one `render` function prints the
+result (see the architecture chapter).
 
 - Exit codes: 0 done; 1 wrong state, lock timeout, editor failure, failed preflight, merge or
   validation failure, declined prompt, or a `fire` that did not apply; 2 usage error, unknown or

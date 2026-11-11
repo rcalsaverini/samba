@@ -8,6 +8,8 @@ from samba.app.change_state import ChangeState, check_legal, NotAllowed, Legal
 from samba.app.confirm import confirm
 from samba.app.machine import Machine
 from samba.app.results import Done, Refused
+from samba.app.task_commands import (AcceptPlan, DiscardTask, RejectPlan, RejectWork, RetryTask,
+                                     StopTask)
 from samba.domain.states import State
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
@@ -135,6 +137,54 @@ def test_discard_asks_after_legality_and_before_the_lock() -> None:
     term = FakeTerminal()
     change_state(tasks, term).run(tid, "task.discard", "task.discard", confirm_plan="x")
     assert term.prompts == []
+
+
+# --- the named use cases over ChangeState -----------------------------------------------------
+
+def test_accept_plan_moves_a_plan_review_task() -> None:
+    tasks, tid = make("plan-review")
+    assert AcceptPlan(change_state(tasks)).run("t1") == Done("fake://t1")
+    assert tasks.records[tid].status == "work-todo"
+
+
+def test_reject_plan_records_feedback() -> None:
+    tasks, tid = make("plan-review")
+    assert isinstance(RejectPlan(change_state(tasks)).run("t1", "more"), Done)
+    assert tasks.records[tid].status == "plan-todo"
+    assert [f.text for f in tasks.records[tid].feedback] == ["more"]
+
+
+def test_reject_work_fires_reject_or_reject_fresh() -> None:
+    tasks, tid = make("work-review")
+    assert isinstance(RejectWork(change_state(tasks)).run("t1", "x"), Done)
+    assert tasks.records[tid].status == "work-todo"
+    assert any("work.reject:" in line and "work.reject_fresh" not in line
+               for line in tasks.records[tid].log)
+    tasks, tid = make("work-review")
+    assert isinstance(RejectWork(change_state(tasks)).run("t1", "x", fresh=True), Done)
+    assert any("work.reject_fresh" in line for line in tasks.records[tid].log)
+
+
+def test_retry_task_returns_the_budget_hint() -> None:
+    tasks, tid = make("stuck")
+    tasks.records[tid].blocked_cause = "budget"
+    res = RetryTask(change_state(tasks)).run("t1")
+    assert isinstance(res, Done) and res.notes[0].startswith("hint: raise the budget cap")
+
+
+def test_stop_task_is_refused_when_not_running() -> None:
+    tasks, _ = make("work-todo")
+    res = StopTask(change_state(tasks)).run("t1")
+    assert isinstance(res, Refused) and "task.stop not allowed" in messages(res)
+
+
+def test_discard_task_declines_without_yes_or_tty_and_passes_with_yes() -> None:
+    tasks, tid = make("work-todo")
+    res = DiscardTask(change_state(tasks, FakeTerminal(interactive=False))).run("t1")
+    assert isinstance(res, Refused) and res.kind == "usage"
+    assert tasks.records[tid].status == "work-todo"
+    ok = DiscardTask(change_state(tasks, FakeTerminal(interactive=False))).run("t1", yes=True)
+    assert isinstance(ok, Done) and tasks.records[tid].status == "discarded"
 
 
 # --- the confirmation policy ------------------------------------------------------------------

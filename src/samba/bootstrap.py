@@ -1,8 +1,10 @@
 """The bootstrap: the only place that builds adapters and wires use cases (spec: architecture).
 
-`build(repo)` reads `WORKFLOW.md` and returns the use cases of the commands that need it;
-`build_adr(repo)` serves the ADR commands, which need no config; `build_explore(repo)` serves
-`samba explore`, which needs only the `claude` command and model. Every entry point calls it.
+`build(repo)` reads `WORKFLOW.md` and returns `Commands`: only use cases, the contract any front
+end (the CLI, a web page, an MCP server) can call. `build_adr(repo)` serves the ADR commands,
+which need no config. `build_orchestrator(repo)` serves `samba run` alone: the orchestrator is not
+a use case. `build_explore(repo)` serves `samba explore`, which needs only the `claude` command
+and model. Every entry point calls it.
 """
 
 from __future__ import annotations
@@ -28,14 +30,16 @@ from samba.app.create_task import CreateTask
 from samba.app.explore import StartExplore
 from samba.app.machine import Machine
 from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask
+from samba.app.task_commands import (AcceptPlan, DiscardTask, RejectPlan, RejectWork, RetryTask,
+                                     StopTask)
 from samba.adapters.workflow_file import load_config
+from samba.domain.ports import Journal
 from samba.domain.settings import Config
 from samba.entrypoints.orchestrator import Orchestrator
-from samba.domain.ports import Journal, Tasks
 
 
 @dataclass(frozen=True)
-class AdrServices:
+class AdrCommands:
     list: ListAdrs
     show: ShowAdr
     set_status: SetAdrStatus
@@ -43,50 +47,84 @@ class AdrServices:
 
 
 @dataclass(frozen=True)
-class Services:
-    config: Config
-    tasks: Tasks
-    change_state: ChangeState
-    answer_question: AnswerQuestion
-    accept_work: AcceptWork
-    create_task: CreateTask
+class Commands:
+    """Use cases only: each takes plain values and returns a result of the closed set."""
+
+    accept_plan: AcceptPlan
+    reject_plan: RejectPlan
+    reject_work: RejectWork
+    retry_task: RetryTask
+    stop_task: StopTask
+    discard_task: DiscardTask
     list_tasks: ListTasks
     show_task: ShowTask
     list_questions: ListQuestions
     show_question: ShowQuestion
-    orchestrator: Orchestrator
+    answer_question: AnswerQuestion
+    accept_work: AcceptWork
+    create_task: CreateTask
 
 
-def build(repo: Path, *, for_run: bool = False) -> Services:
-    """Load the config of `repo` (raises `ConfigError`) and build every use case. Only `samba run`
-    (`for_run`) writes `samba.log` and logs to stderr; other commands journal nothing."""
+@dataclass(frozen=True)
+class _Parts:
+    """The adapters and settings the builders share."""
+
+    config: Config
+    sym: Path
+    repo: Path
+    clock: SystemClock
+    tasks: MarkdownTasks
+    terminal: StdTerminal
+    lock: FileLock
+    vcs: GitVcs
+    validator: ShellValidator
+
+
+def _parts(repo: Path) -> _Parts:
     config, locations = load_config(repo)
     sym = locations.samba_dir
-    journal: Journal = LogJournal(sym) if for_run else NullJournal()
     clock = SystemClock()
-    tasks = MarkdownTasks(sym / "tasks", sym / "state", clock)
-    terminal = StdTerminal()
-    lock = FileLock(sym)
-    machine = Machine(tasks, clock, journal)
-    agent = ClaudeCliRunner(config.agent, (sym / "tasks").resolve(), sym / "runs", locations.repo,
-                            journal)
-    vcs = GitVcs(locations, config.repository.base_branch, config.hooks, config.validation.shell)
-    validator = ShellValidator(config.validation, sym / "runs")
-    return Services(
-        config=config,
-        tasks=tasks,
-        change_state=ChangeState(tasks, machine, terminal, lock),
-        answer_question=AnswerQuestion(tasks, machine, terminal, lock, clock),
-        accept_work=AcceptWork(tasks, machine, terminal, lock, vcs, validator,
-                               config.repository.base_branch, config.validation.command),
-        create_task=CreateTask(tasks, terminal, clock),
-        list_tasks=ListTasks(tasks, clock),
-        show_task=ShowTask(tasks, clock),
-        list_questions=ListQuestions(tasks),
-        show_question=ShowQuestion(tasks),
-        orchestrator=Orchestrator(config, clock, UuidGenerator(), agent, tasks, vcs, validator,
-                                  lock, journal),
+    return _Parts(
+        config=config, sym=sym, repo=locations.repo, clock=clock,
+        tasks=MarkdownTasks(sym / "tasks", sym / "state", clock),
+        terminal=StdTerminal(), lock=FileLock(sym),
+        vcs=GitVcs(locations, config.repository.base_branch, config.hooks, config.validation.shell),
+        validator=ShellValidator(config.validation, sym / "runs"))
+
+
+def build(repo: Path) -> Commands:
+    """Load the config of `repo` (raises `ConfigError`) and build every use case. Nothing here
+    journals: only `samba run` (`build_orchestrator`) writes `samba.log`."""
+    p = _parts(repo)
+    machine = Machine(p.tasks, p.clock, NullJournal())
+    change_state = ChangeState(p.tasks, machine, p.terminal, p.lock)
+    return Commands(
+        accept_plan=AcceptPlan(change_state),
+        reject_plan=RejectPlan(change_state),
+        reject_work=RejectWork(change_state),
+        retry_task=RetryTask(change_state),
+        stop_task=StopTask(change_state),
+        discard_task=DiscardTask(change_state),
+        list_tasks=ListTasks(p.tasks, p.clock),
+        show_task=ShowTask(p.tasks, p.clock),
+        list_questions=ListQuestions(p.tasks),
+        show_question=ShowQuestion(p.tasks),
+        answer_question=AnswerQuestion(p.tasks, machine, p.terminal, p.lock, p.clock),
+        accept_work=AcceptWork(p.tasks, machine, p.terminal, p.lock, p.vcs, p.validator,
+                               p.config.repository.base_branch, p.config.validation.command),
+        create_task=CreateTask(p.tasks, p.terminal, p.clock),
     )
+
+
+def build_orchestrator(repo: Path) -> Orchestrator:
+    """The orchestrator for `samba run` (raises `ConfigError`); it writes `samba.log` and logs to
+    stderr. It is not a use case and is not part of `Commands`."""
+    p = _parts(repo)
+    journal: Journal = LogJournal(p.sym)
+    agent = ClaudeCliRunner(p.config.agent, (p.sym / "tasks").resolve(), p.sym / "runs", p.repo,
+                            journal)
+    return Orchestrator(p.config, p.clock, UuidGenerator(), agent, p.tasks, p.vcs, p.validator,
+                        p.lock, journal)
 
 
 def build_explore(repo: Path) -> StartExplore:
@@ -97,7 +135,7 @@ def build_explore(repo: Path) -> StartExplore:
                         TerminalSession())
 
 
-def build_adr(repo: Path) -> AdrServices:
+def build_adr(repo: Path) -> AdrCommands:
     """The ADR commands are plain file edits: no WORKFLOW.md, no lock."""
     adrs = FileAdrs(repo)
-    return AdrServices(ListAdrs(adrs), ShowAdr(adrs), SetAdrStatus(adrs), SupersedeAdr(adrs))
+    return AdrCommands(ListAdrs(adrs), ShowAdr(adrs), SetAdrStatus(adrs), SupersedeAdr(adrs))

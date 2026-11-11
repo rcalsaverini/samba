@@ -12,7 +12,7 @@ lives.
 | Use cases | `src/samba/app/` | The operations of the orchestrator and the commands, written against ports. |
 | Ports | `src/samba/domain/ports.py` | Protocols for everything the core needs from the outside world. They sit at the domain level: the domain's `Task` depends on the clock port. |
 | Adapters | `src/samba/adapters/` | Implementations of the ports: system clock, files, git, the `claude` runner, the terminal. |
-| Entry points | `src/samba/entrypoints/` | What starts Samba: `cli.py` (the thin argparse adapter), `table.py` (the table printer of the CLI) and `workers.py` (the asyncio workers) and `orchestrator.py` (the wiring and the poll loop; see Orchestrator parts). They call `bootstrap`, the use cases and the ports, never an adapter. |
+| Entry points | `src/samba/entrypoints/` | What starts Samba: `cli.py` (parse, one call, render), `table.py` (the table printer of the CLI) and `workers.py` (the asyncio workers) and `orchestrator.py` (the wiring and the poll loop; see Orchestrator parts). They call `bootstrap`, the use cases and the ports, never an adapter. |
 
 The root of `src/samba/` holds only `__init__.py`, `__main__.py`, `bootstrap.py` and the four
 packages `domain`, `app`, `adapters` and `entrypoints`. `bootstrap.py` is the one module allowed to
@@ -28,14 +28,24 @@ in the domain package (`domain/ports.py`), so this holds for them too. A domain 
 `os`, `time`, `datetime`, `uuid`, `subprocess`, `asyncio`, `logging`, `pathlib`, and no adapter.
 The composition root, `bootstrap.py`, is the only place that builds adapters and hands them to use
 cases. This refines the last sentence of ADR 0011: the composition root is `bootstrap.py`, called
-by every entry point. `build(repo)` loads `WORKFLOW.md` and returns `Services`: the use cases (`ChangeState`,
-`AnswerQuestion`, `AcceptWork`, `CreateTask`, the read-only queries), the `Tasks` port for id
-resolution, the `Config` and the `Orchestrator`. `build_adr(repo)` serves the ADR commands, which
+by every entry point. `build(repo)` loads `WORKFLOW.md` and returns `Commands`, which exposes only
+use cases: the six named state-changing ones over `ChangeState` (`AcceptPlan`, `RejectPlan`,
+`RejectWork`, `RetryTask`, `StopTask`, `DiscardTask`, in `app/task_commands.py`), the four
+read-only queries (`ListTasks`, `ShowTask`, `ListQuestions`, `ShowQuestion`), `AnswerQuestion`,
+`AcceptWork` and `CreateTask`. It holds no config, no `Tasks` port and no orchestrator, so it is
+the contract a web page or an MCP server could call too. `build_orchestrator(repo)` is a separate
+function, used only by `samba run` (the orchestrator is not a use case; it is the only builder
+of the `LogJournal`). `build_adr(repo)` returns `AdrCommands` for the ADR commands, which
 need no config. `build_explore(repo)` serves `samba explore`: it loads `WORKFLOW.md` but uses only
 `claude.command` and `claude.model`. Constructors take their ports as required parameters and have no defaults.
-`entrypoints/cli.py` is a thin argparse adapter: it parses, calls `build`, calls one use
-case with the id (or `TASK[/QID]`) as typed, prints the result and maps its kind to the exit code
-(`ok` 0, `refused` 1, `usage` 2). It holds no rule and does not resolve ids.
+`entrypoints/cli.py` is parse, one call, render: each leaf parser binds one call that passes plain
+values (the id or `TASK[/QID]` as typed, text, flags) to exactly one use case, and one shared
+`render(result)` maps `Done`, `Table`, `Text`, `Written` and `Refused` to output and the exit code
+(0, 1 for `refused`, 2 for `usage`). It holds no rule, does not resolve ids and has no `if`
+chain on command names. `run`, `explore` and `dev transitions` keep their own small paths and are
+outside the contract. No entry point calls another: `cli.py` imports neither `orchestrator.py` nor
+`workers.py`, and `tests/test_architecture.py` guards it, along with `cli.py` importing neither
+`app/resolve.py` nor `domain/task_id.py` and `app/` modules never importing `argparse`.
 
 The use cases take plain values (strings, numbers, booleans) and resolve the task id or unique
 prefix themselves (`find_task` in `app/resolve.py`: an unknown or ambiguous id is a `usage`
@@ -43,9 +53,10 @@ refusal). Each returns one of a closed set (`Result` in `app/results.py`): `Done
 stdout, notes on stderr), `Table`, `Text` (a `work accept --dry-run` plan is a `Text`), `Written`
 (ADR files) or `Refused` (`refused` or `usage`). `Explored` stays apart, for `explore`.
 
-ADR 0013 lands in two steps. This one is the result set and the id resolution inside the use cases.
-Named use cases for the state-changing commands, a `Commands` object from `bootstrap` (replacing
-`Services`), and the CLI as parse, one call, render with one shared render function follow in the next step.
+The `Terminal` port stays how a use case asks for a confirmation or for text (`$EDITOR`); a
+non-interactive caller (a web page, an MCP server) passes `yes` or the text up front and the use
+case never touches the terminal. ADR 0013 is complete: named use cases, `Commands`, and the CLI
+as parse, call, render.
 
 ## Ports
 
@@ -58,7 +69,7 @@ Named use cases for the state-changing commands, a `Commands` object from `boots
 | `Lock` | `acquire(blocking) -> context manager yielding held` | `FileLock` in `adapters/file_lock.py` (the `.samba/lock` flock; replaces `lock.py` and `RepoLock`) |
 | `Vcs` | All async, locations opaque text: `branch_name(task_id)`, `workspace_location(task_id)`, `ensure_workspace(task_id) -> Workspace(location, created)` (runs the `after_create` hook, removes the worktree if it fails, raises `WorkspaceError`), `remove_workspace(task_id)`, `existing_workspaces()`, `repository_problem() -> str \| None`, `preflight(branch)`, `commit_count(branch)`, `begin_merge(branch, message) -> MergeAttempt(status, detail, restore_point)` (`pending`, `already`, `conflict`, `error`; conflict and error are already undone), `abort_merge(restore_point)`, `commit_merge(restore_point) -> CommitResult(ok, detail)`, `checkout_location()`, `exclude_samba_dir()`. The restore point is returned, so the adapter keeps no merge state | `GitVcs` in `adapters/git_vcs.py` (replaces `workspace.py`, `merge.py`, `GitMerger` and `GitWorkspaces`). `AcceptWork` (async, one `asyncio.run` in `entrypoints/cli.py`) runs the merge sequence over it: `begin_merge`, the validator in `checkout_location()`, then `abort_merge` or `commit_merge` |
 | `Validator` | `run(location, log_name) -> ValidationResult` (async; stores the full output under the runs directory; `domain/validation.py` holds the result and the two tail formats `agent_tail` and `accept_tail`) | `ShellValidator` in `adapters/shell_validator.py`; `TurnFlow` and `AcceptWork` call it, and it creates the directories of the logs it writes |
-| `Journal` | `debug`, `info`, `warning`, `exception(event, **fields)`; `exception` adds the traceback | `LogJournal` in `adapters/log_journal.py` (`samba.log` at DEBUG, stderr at INFO, the `kv` format), `NullJournal` for commands that write no log. Injected into `Machine`, `Tick`, `TurnFlow`, `Startup`, `RunTask`, `Finisher`, `Workers`, `Orchestrator` and `ClaudeCliRunner`; `bootstrap.build(repo, for_run=True)` builds the `LogJournal` for `samba run` only |
+| `Journal` | `debug`, `info`, `warning`, `exception(event, **fields)`; `exception` adds the traceback | `LogJournal` in `adapters/log_journal.py` (`samba.log` at DEBUG, stderr at INFO, the `kv` format), `NullJournal` for commands that write no log. Injected into `Machine`, `Tick`, `TurnFlow`, `Startup`, `RunTask`, `Finisher`, `Workers`, `Orchestrator` and `ClaudeCliRunner`; `bootstrap.build_orchestrator(repo)` builds the `LogJournal` for `samba run` only |
 | `Adrs` | `parse_number(text)`, `load_all() -> list[AdrInfo]`, `find(number)`, `set_status(number, verb, allowed_from, status) -> files`, `supersede(old, new) -> files`; every method may raise `AdrError(message, code)` (`code` 1 refused, 2 usage); `AdrInfo` carries `file` as text | `FileAdrs` in `adapters/adr_files.py` (wraps `adapters/adr_format.py`) |
 | `InteractiveSession` | `run(LaunchSpec(argv, cwd)) -> exit code`, not async; runs the program attached to the person's terminal. Raises `LaunchError(message)` when it cannot start (for example `claude` not found). `LaunchSpec` is in `domain/launch.py` | `TerminalSession` in `adapters/interactive_session.py`: `subprocess.run` with the terminal inherited, SIGINT ignored in Samba while the child runs. It reads no stream-json and is not an `AgentRunner`. Used by `StartExplore` (`app/explore.py`) |
 | `Tasks` | `get(id)`, `list(status)`, `ids(status?)`, `create(task)`, `save(task) -> bool`, `observe_moves()`, `accept_move(move)`, `revert_move(move)`, `rejected_names(status)`, `location(id)`, `prepare()` | `MarkdownTasks` in `adapters/markdown_tasks.py`; the in-memory `FakeTasks` for tests is `tests/fake_tasks.py` |
