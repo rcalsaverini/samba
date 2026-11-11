@@ -25,7 +25,7 @@ from samba.domain.states import Stage
 from samba.domain.task import Task
 from samba.domain.transitions import log_line
 from samba.domain.validation import agent_tail
-from samba.ports import AgentRunner, Clock, IdGenerator, Journal, Tasks, Validator
+from samba.domain.ports import AgentRunner, Clock, IdGenerator, Journal, Tasks, Validator
 
 
 @dataclass(frozen=True)

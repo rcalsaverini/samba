@@ -13,7 +13,7 @@ from typing import cast
 
 import yaml
 
-from samba.ports import AdrError  # a refusal; `code` is the exit code (1 or 2)
+from samba.domain.ports import AdrError  # a refusal; `code` is the exit code (1 or 2)
 
 ADR_DIR = Path("docs") / "adr"
 FILE_RE = re.compile(r"^(\d+)-.*\.md$")

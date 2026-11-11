@@ -17,7 +17,7 @@ from samba.domain.states import Stage, State, running_of
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
 from samba.domain.transitions import human_row, log_line
-from samba.ports import Clock, Journal, Lock, Tasks, Vcs, WorkspaceError
+from samba.domain.ports import Clock, Journal, Lock, Tasks, Vcs, WorkspaceError
 
 StopReason = Literal["moved", "shutdown"]
 

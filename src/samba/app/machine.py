@@ -19,7 +19,7 @@ from samba.domain.transitions import (
     find_row,
     stage_guard_ok,
 )
-from samba.ports import Clock, Journal, Tasks
+from samba.domain.ports import Clock, Journal, Tasks
 
 GuardFn = Callable[[str, Task], bool]  # (guard name, task) -> holds?
 

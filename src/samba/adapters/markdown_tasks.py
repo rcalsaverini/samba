@@ -41,7 +41,7 @@ from samba.domain.states import (
 )
 from samba.domain.task import FeedbackRound, ObservedMove, Task
 from samba.domain.task_id import TaskId
-from samba.ports import Clock, StoreError, TaskExists
+from samba.domain.ports import Clock, StoreError, TaskExists
 
 # Folders of the pre-stage layout (spec: orchestrator, Startup, refuses to start while they hold task files).
 LEGACY_STATES: tuple[str, ...] = ("plan", "todo", "running", "review", "blocked")

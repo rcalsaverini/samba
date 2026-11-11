@@ -30,7 +30,7 @@ from samba.app.machine import Machine
 from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask
 from samba.config import Config, load_config
 from samba.orchestrator import Orchestrator
-from samba.ports import Journal, Tasks
+from samba.domain.ports import Journal, Tasks
 
 
 @dataclass(frozen=True)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from samba.app.results import Refused, refused, usage
-from samba.ports import Terminal
+from samba.domain.ports import Terminal
 
 
 def confirm(terminal: Terminal, prompt: str, command: str, yes: bool) -> Refused | None:

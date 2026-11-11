@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from samba.domain.launch import LaunchSpec
-from samba.ports import LaunchError
+from samba.domain.ports import LaunchError
 
 
 class FakeSession:

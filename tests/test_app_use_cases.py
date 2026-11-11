@@ -11,7 +11,7 @@ from samba.app.results import Refused
 from samba.domain.states import State
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-from samba.ports import EditResult
+from samba.domain.ports import EditResult
 
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from samba import adr
-from samba.ports import AdrInfo
+from samba.domain.ports import AdrInfo
 
 
 class FileAdrs:

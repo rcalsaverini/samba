@@ -10,7 +10,7 @@ from samba.app.machine import Machine
 from samba.app.results import LOCK_BUSY, Refused, refused
 from samba.domain.task_id import TaskId
 from samba.domain.validation import accept_tail
-from samba.ports import Lock, Tasks, Terminal, Validator, Vcs
+from samba.domain.ports import Lock, Tasks, Terminal, Validator, Vcs
 
 EVENT = "work.accept"
 

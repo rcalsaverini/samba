@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from typing import Literal
 
 from samba.domain.states import Stage
-from samba.ports import Clock
+from samba.domain.ports import Clock
 
 QuestionStatus = Literal["open", "answered", "dismissed"]
 

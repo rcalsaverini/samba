@@ -39,7 +39,7 @@ from samba.config import (
     Validation,
 )
 from samba.orchestrator import Orchestrator
-from samba.ports import MergeAttempt
+from samba.domain.ports import MergeAttempt
 from samba.domain.agent import AgentReport, Failure, QuestionDraft
 from samba.domain.deps import TaskRef, evaluate
 from samba.domain.policy import (

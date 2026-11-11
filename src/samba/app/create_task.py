@@ -9,7 +9,7 @@ from samba.app.resolve import ResolveError, resolve_deps
 from samba.app.results import Refused, refused, usage
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-from samba.ports import Clock, Tasks, Terminal
+from samba.domain.ports import Clock, Tasks, Terminal
 
 DEPENDS_PROMPT = "Depends on (ids or prefixes, comma separated, empty for none): "
 

@@ -12,7 +12,7 @@ from samba.app.tick import Notes, Running, Tick, running_folder, stage_of
 from samba.app.turn import TurnFlow, TurnSetup
 from samba.config import Config
 from samba.domain.policy import Fail, Retry, RetryPolicy, should_reflect
-from samba.ports import (
+from samba.domain.ports import (
     AgentRunner,
     Clock,
     IdGenerator,

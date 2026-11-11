@@ -2,7 +2,7 @@
 
 ## Adapter boundary and the report
 
-The core talks to the agent only through the port `AgentRunner` (`ports.py`), with the types in
+The core talks to the agent only through the port `AgentRunner` (`domain/ports.py`), with the types in
 `domain/agent.py`. Everything else in this chapter happens inside the adapter
 `adapters/claude_cli.py`, the only module that reads Claude's stream-json (`init`, `result`,
 `structured_output`, `permission_denials`, `total_cost_usd`, `usage`). `tests/test_architecture.py`

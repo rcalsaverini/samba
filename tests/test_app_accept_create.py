@@ -10,7 +10,7 @@ from samba.app.create_task import Created, CreateTask
 from samba.app.machine import Machine
 from samba.app.results import Refused
 from samba.domain.task_id import TaskId
-from samba.ports import CommitResult, MergeAttempt
+from samba.domain.ports import CommitResult, MergeAttempt
 
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks

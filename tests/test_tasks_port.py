@@ -15,7 +15,7 @@ from samba.adapters.markdown_tasks import MarkdownTasks
 from samba.domain.states import STATES, State
 from samba.domain.task import ObservedMove, Task
 from samba.domain.task_id import TaskId
-from samba.ports import StoreError, TaskExists, Tasks
+from samba.domain.ports import StoreError, TaskExists, Tasks
 
 
 class Clk:

@@ -10,13 +10,14 @@ lives.
 |---|---|---|
 | Domain | `src/samba/domain/` | Pure rules and data: states, question records, the transition table, dependency evaluation. No I/O. (`template.py` and `prompts.py` are pure and follow later.) |
 | Use cases | `src/samba/app/` | The operations of the orchestrator and the commands, written against ports. |
-| Ports | `src/samba/ports.py` | Protocols for everything the core needs from the outside world. |
+| Ports | `src/samba/domain/ports.py` | Protocols for everything the core needs from the outside world. They sit at the domain level: the domain's `Task` depends on the clock port. |
 | Adapters | `src/samba/adapters/` | Implementations of the ports: system clock, files, git, the `claude` runner, the terminal. |
 
 ## Dependency rule
 
 Dependencies point inward only: adapters depend on ports and the domain, use cases depend on the
-domain and ports, the domain depends on nothing outside itself. A domain module imports none of
+domain and ports, the domain depends on nothing outside itself. The ports are Protocols that live
+in the domain package (`domain/ports.py`), so this holds for them too. A domain module imports none of
 `os`, `time`, `datetime`, `uuid`, `subprocess`, `asyncio`, `logging`, `pathlib`, and no adapter.
 The composition root, `compose.py`, is the only place that builds adapters and hands them to use
 cases. `build(repo)` loads `WORKFLOW.md` and returns `Services`: the use cases (`ChangeState`,
@@ -139,7 +140,7 @@ behind ports. `orchestrator.py` (startup, poll loop, workers) imports no adapter
 
 `tests/test_architecture.py` reads sources with `ast` and never imports `samba`. It checks that:
 
-- the domain modules (`DOMAIN_MODULES`, which also holds `ports.py`, `template.py` and
+- the domain modules (`DOMAIN_MODULES`, which also holds `domain/ports.py`, `template.py` and
   `prompts.py`) import no I/O module and no adapter;
 - every use case module (`APP_MODULES`) imports no adapter and none of `os`, `subprocess`,
   `pathlib`, `logging` (`asyncio` is allowed: use cases await ports);

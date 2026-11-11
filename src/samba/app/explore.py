@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from samba.app.results import Explored, Refused, refused
 from samba.domain.launch import explore_launch
-from samba.ports import InteractiveSession, LaunchError
+from samba.domain.ports import InteractiveSession, LaunchError
 
 
 class StartExplore:
