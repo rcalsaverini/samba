@@ -13,17 +13,11 @@ from typing import cast
 
 import yaml
 
+from samba.ports import AdrError  # a refusal; `code` is the exit code (1 or 2)
+
 ADR_DIR = Path("docs") / "adr"
 FILE_RE = re.compile(r"^(\d+)-.*\.md$")
 SENTENCE_END = re.compile(r"\.(?:\s+(?=[A-Z`])|$)")
-
-
-class AdrError(Exception):
-    """A refusal; `code` is the exit code (1 wrong state or bad file, 2 usage or unknown number)."""
-
-    def __init__(self, message: str, code: int = 1) -> None:
-        super().__init__(message)
-        self.code = code
 
 
 @dataclass(frozen=True)

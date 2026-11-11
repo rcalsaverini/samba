@@ -173,6 +173,50 @@ class RepoLock(Protocol):
         ...
 
 
+class AdrError(Exception):
+    """An ADR command refusal; `code` is the exit code (1 wrong state or bad file, 2 usage or
+    unknown number)."""
+
+    def __init__(self, message: str, code: int = 1) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+@dataclass(frozen=True)
+class AdrInfo:
+    """One ADR as the use cases see it: `file` is where it is stored, as opaque text."""
+
+    number: int
+    file: str
+    status: str
+    title: str
+    summary: str
+    text: str
+
+
+class Adrs(Protocol):
+    """The ADR records of the repository (spec: cli, ADR commands). Every method may raise
+    `AdrError`."""
+
+    def parse_number(self, text: str) -> int:
+        """`3`, `03` and `0003` are the same ADR; anything but digits is a usage error."""
+        ...
+
+    def load_all(self) -> list[AdrInfo]:
+        """Every ADR, ordered by number."""
+        ...
+
+    def find(self, number: int) -> AdrInfo: ...
+
+    def set_status(self, number: int, verb: str, allowed_from: str, status: str) -> list[str]:
+        """Change the status, only from `allowed_from`. Returns the files written."""
+        ...
+
+    def supersede(self, old: int, new: int) -> list[str]:
+        """Mark `old` superseded by `new`. Returns the files written."""
+        ...
+
+
 class AgentRunner(Protocol):
     async def run(self, request: AgentRequest) -> AgentReport:
         """One agent turn. Never raises for an agent failure: it is in `report.failure`.

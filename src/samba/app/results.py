@@ -23,4 +23,26 @@ def usage(message: str) -> Refused:
     return Refused("usage", (f"samba: {message}",))
 
 
+@dataclass(frozen=True)
+class Table:
+    """Rows to print as columns; `flex` is the column that takes the room left on the line."""
+
+    rows: tuple[tuple[str, ...], ...]
+    flex: int
+
+
+@dataclass(frozen=True)
+class Text:
+    """Text for stdout, exactly as it is to be written (newlines included)."""
+
+    text: str
+
+
+@dataclass(frozen=True)
+class Written:
+    """Files an ADR command changed, one per line on stdout."""
+
+    files: tuple[str, ...]
+
+
 LOCK_BUSY = "another command or the orchestrator holds .samba/lock; try again"

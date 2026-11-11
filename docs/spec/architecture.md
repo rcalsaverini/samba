@@ -32,6 +32,7 @@ system adapters.
 | `Terminal` | `is_interactive()`, `ask(prompt)` (raises `EOFError` at end of input), `read_block(prompt)`, `warn(line)` (one line to stderr mid-dialogue), `edit(initial) -> EditResult` (the text, or an error message) | `StdTerminal` in `adapters/terminal.py` |
 | `RepoLock` | `acquire(blocking) -> context manager yielding held` | `FileRepoLock` in `adapters/repo_lock.py` (wraps `lock.repo_lock`) |
 | `Merger` | `branch_name(task_id)`, `preflight(branch) -> str \| None`, `commit_count(branch)`, `merge(task_id, branch, message, validate) -> MergeResult` (`status`: merged, already, conflict, validation_failed, error; `detail`, `validated`, `log_path` as text) | `GitMerger` in `adapters/git_merger.py` (wraps `merge.py`) |
+| `Adrs` | `parse_number(text)`, `load_all() -> list[AdrInfo]`, `find(number)`, `set_status(number, verb, allowed_from, status) -> files`, `supersede(old, new) -> files`; every method may raise `AdrError(message, code)` (`code` 1 refused, 2 usage); `AdrInfo` carries `file` as text | `FileAdrs` in `adapters/adr_files.py` (wraps `adr.py`) |
 | `Tasks` | `get(id)`, `list(status)`, `ids(status?)`, `create(task)`, `save(task) -> bool`, `observe_moves()`, `accept_move(move)`, `revert_move(move)`, `rejected_names(status)`, `location(id)`, `prepare()` | `MarkdownTasks` in `adapters/markdown_tasks.py`; the in-memory `FakeTasks` for tests is `tests/fake_tasks.py` |
 
 ### The Tasks port and stale saves

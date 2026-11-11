@@ -19,9 +19,13 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     (answers are recorded per question, `cmd_question_answer`), `adr list|show|accept|reject|supersede`
     (`cmd_adr`, needs no WORKFLOW.md), `dev transitions`.
   - `adr.py`: ADR files under `docs/adr/`: front matter parsing, summary line, status edits.
+    `adapters/adr_files.py` (`FileAdrs`) is the `Adrs` port over it; `app/adr.py` holds the ADR
+    use cases (`ListAdrs`, `ShowAdr`, `SetAdrStatus`, `SupersedeAdr`) and `app/queries.py` the
+    read-only ones (`ListTasks`, `ShowTask`, `ListQuestions`, `ShowQuestion`), returning
+    `Table`/`Text`/`Written` from `app/results.py`.
   - `merge.py`: git steps of `work accept`: preflight, `--no-commit` merge, validate, commit/abort.
-  - `views.py`: read-only shared helpers: table printer, state-prefix matcher, task id resolver
-    (`resolve_task_id`, reused by every command taking an id), `task show` renderer.
+  - `views.py`: the table printer of the CLI adapter (the rows come from `app/queries.py`, which
+    also holds the state-prefix matcher and the `task show` renderer).
   - `config.py`: loads and validates `WORKFLOW.md` (front matter + prompt body).
   - `domain/`: the pure core, no I/O (`architecture` chapter). `states.py` (`State`, causes),
     `questions.py` (question records and helpers), `task.py` (the `Task` aggregate),
