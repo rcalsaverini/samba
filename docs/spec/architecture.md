@@ -101,7 +101,7 @@ constructors of `MarkdownTasks` and `Orchestrator`; only the composition root bu
 Moved into `domain/`: states and causes (`states.py`), question records (`questions.py`), the
 `Task` aggregate and `TaskId`, the transition table, effects, `find_row`, `human_row`,
 `human_events` and the markdown renderer (`transitions.py`), and dependency evaluation
-(`deps.py`). The effects, `apply_row` and the row helpers work on a `Task`; `apply_row` sets
+(`deps.py`), and the settings types (`settings.py`). The effects, `apply_row` and the row helpers work on a `Task`; `apply_row` sets
 `status`, stamps `queued_at` when the destination is a todo status (the dispatch order key) and
 tells whether the questions changed. `evaluate` takes a snapshot (`TaskRef` per task id, an absent
 id is unknown); `deps_snapshot(task, get)` in `deps.py` builds it from the task and its
@@ -118,14 +118,19 @@ it drives the `AgentRunner` port, executes the action and returns `Finish` or `F
 orchestrator, which fires the transition. It mutates the `Task` it is given (plan, assumptions,
 questions, denial log lines, counters) and calls `Tasks.save` after each step.
 
-Configuration (`config.py`) is a composite of frozen parts, so each consumer takes only the part it
-needs: `Policy` (turns, retries, cost cap, `reflect_on_give_up`, `require_plan`, concurrency,
-polling), `AgentSettings` (the `claude` command, permissions, timeouts and the planning model and
-allow list; taken by `adapters/claude_cli.py`), `Layout` (repo, Samba directory, workspaces root,
-base branch), `Prompts` (the body template and the overrides), `Validation` (command, timeout, tail
-lines, shell) and `Hooks` (`after_create`, timeout). `Config` holds one of each plus `warnings`;
-`load_config` builds it. `GitVcs` takes `Layout`, `Hooks` and the shell. `DEFAULT_ALLOW` and
-`DEFAULT_PLANNING_ALLOW` stay in `config.py`.
+Configuration is plain data in `domain/settings.py`, a composite of frozen parts, so each consumer
+takes only the part it needs: `Policy` (turns, retries, cost cap, `reflect_on_give_up`,
+`require_plan`, concurrency, polling), `AgentSettings` (the `claude` command, permissions, timeouts
+and the planning model and allow list; taken by `adapters/claude_cli.py`), `Repository` (the base
+branch), `Prompts` (the body template and the overrides), `Validation` (command, timeout, tail
+lines, shell) and `Hooks` (`after_create`, timeout). `Config` holds one of each plus `warnings`.
+`ConfigError` and the `DEFAULT_ALLOW` and `DEFAULT_PLANNING_ALLOW` lists live there too. The core
+carries no location (ADR 0011): `Layout` is gone, and the orchestrator and the use cases get the
+repo as opaque text through the `Vcs` port (`checkout_location`). `adapters/workflow_file.py` reads
+and validates `WORKFLOW.md`; `load_config` returns the `Config` plus a `Locations` of real paths
+(repo, Samba directory, workspaces root), including the check that the workspaces root is outside
+the repo. Bootstrap hands `Locations` only to `GitVcs` (which also takes the base branch, `Hooks`
+and the shell), `FileLock`, `MarkdownTasks`, `LogJournal` and `ClaudeCliRunner`.
 
 The terminal, git (workspaces and merge), validation, the lock, the journal and the ADR files are
 behind ports. `orchestrator.py` (startup, poll loop, workers) imports no adapter, `logging`,
@@ -144,6 +149,9 @@ behind ports. `orchestrator.py` (startup, poll loop, workers) imports no adapter
   `domain/prompts.py`) import no I/O module and no adapter;
 - every use case module (`APP_MODULES`) imports no adapter and none of `os`, `subprocess`,
   `pathlib`, `logging` (`asyncio` is allowed: use cases await ports);
+- no domain or app module imports `pathlib` or `yaml`, `domain/settings.py` has no `Layout` and no
+  `repo`, `samba_dir` or `workspaces_root` field, and `config.py` no longer exists at the root
+  (`adapters/workflow_file.py` and `domain/settings.py` do);
 - every `.py` under `domain/` and `app/` is listed in one of the two lists, so a new module cannot
   escape the checks;
 - `orchestrator.py` imports no adapter, `workspace`, `merge`, `lock`, `logging`,

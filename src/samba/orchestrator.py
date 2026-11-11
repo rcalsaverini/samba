@@ -10,7 +10,7 @@ import re
 from samba.app.machine import Machine
 from samba.app.tick import Notes, Running, Tick, running_folder, stage_of
 from samba.app.turn import TurnFlow, TurnSetup
-from samba.config import Config
+from samba.domain.settings import Config
 from samba.domain.policy import Fail, Retry, RetryPolicy, should_reflect
 from samba.domain.ports import (
     AgentRunner,
@@ -52,7 +52,6 @@ class Orchestrator:
         self.journal = journal
         self.config = config
         self.policy = config.policy
-        self.layout = config.layout
         self.prompts = config.prompts
         self.validation = config.validation
         self.clock: Clock = clock
@@ -107,7 +106,7 @@ class Orchestrator:
 
     async def run(self, exit_when_idle: bool = False) -> None:
         await self.startup()
-        self.journal.info("started", repo=self.layout.repo,
+        self.journal.info("started", repo=self.vcs.checkout_location(),
                           max_concurrent=self.policy.max_concurrent)
         try:
             while True:
@@ -282,7 +281,7 @@ class Orchestrator:
             "task.path": self.tasks.location(task.id),
             "workspace": ws,
             "branch": self.vcs.branch_name(task.id),
-            "base_branch": self.layout.base_branch,
+            "base_branch": self.config.repository.base_branch,
             "attempt": str(task.attempts),
             "validate_command": self.validation.command or "",
             # The answered round, for the first run after a question (spec: prompts, Which prompt is sent).

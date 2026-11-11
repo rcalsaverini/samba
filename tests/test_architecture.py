@@ -17,7 +17,7 @@ DOMAIN_MODULES = ["domain/template.py", "domain/prompts.py", "domain/__init__.py
                   "domain/ports.py", "domain/states.py", "domain/questions.py",
                   "domain/transitions.py", "domain/deps.py", "domain/agent.py",
                   "domain/policy.py", "domain/task.py", "domain/task_id.py",
-                  "domain/validation.py", "domain/launch.py"]
+                  "domain/validation.py", "domain/launch.py", "domain/settings.py"]
 
 # Use cases: may log and await, but import no adapter and call no clock or uuid directly.
 APP_MODULES = ["app/__init__.py", "app/turn.py", "app/machine.py", "app/results.py",
@@ -131,6 +131,34 @@ def test_the_root_modules_moved_into_their_layers() -> None:
         assert not (SRC / old).exists(), f"{old} moved into domain/ or adapters/"
     assert (SRC / "adapters" / "process.py").is_file()
     assert (SRC / "adapters" / "adr_format.py").is_file()
+    assert not (SRC / "config.py").exists(), "config.py split into domain/settings.py and the reader"
+    assert (SRC / "adapters" / "workflow_file.py").is_file()
+    assert (SRC / "domain" / "settings.py").is_file()
+
+
+NO_PATH_NO_YAML = {"pathlib", "yaml"}
+
+
+def path_or_yaml_imports(path: Path) -> list[str]:
+    return [n for n in imported_modules(path) if n.split(".")[0] in NO_PATH_NO_YAML]
+
+
+def test_domain_and_app_import_no_pathlib_or_yaml() -> None:
+    for rel in [*DOMAIN_MODULES, *APP_MODULES]:
+        assert path_or_yaml_imports(SRC / rel) == [], f"{rel} imports pathlib or yaml"
+
+
+def test_the_pathlib_and_yaml_check_catches_both(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("import yaml\nfrom pathlib import Path\n")
+    assert path_or_yaml_imports(bad) == ["yaml", "pathlib"]
+
+
+def test_the_core_settings_carry_no_location() -> None:
+    code = code_without_comments(SRC / "domain" / "settings.py")
+    assert "Layout" not in code
+    for word in ("repo", "samba_dir", "workspaces_root"):
+        assert not re.search(rf"\b{word}\b", code), f"domain/settings.py has a {word} field"
 
 
 def is_adapter(name: str) -> bool:
@@ -210,8 +238,9 @@ def test_the_check_catches_import_os(tmp_path: Path) -> None:
 def test_only_the_adapter_splits_task_front_matter() -> None:
     for path in sorted(SRC.rglob("*.py")):
         rel = path.relative_to(SRC).as_posix()
-        if rel in ("adapters/markdown_tasks.py", "config.py", "adapters/adr_format.py"):
-            continue  # config reads WORKFLOW.md, adr reads ADR files: their own front matter
+        if rel in ("adapters/markdown_tasks.py", "adapters/workflow_file.py",
+                   "adapters/adr_format.py"):
+            continue  # the workflow file reader reads WORKFLOW.md, adr reads ADR files: their own front matter
         assert "split_front_matter" not in code_without_comments(path), rel
 
 

@@ -36,7 +36,10 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `Table`/`Text`/`Written` from `app/results.py`.
   - `views.py`: the table printer of the CLI adapter (the rows come from `app/queries.py`, which
     also holds the state-prefix matcher and the `task show` renderer).
-  - `config.py`: loads and validates `WORKFLOW.md` (front matter + prompt body).
+  - `domain/settings.py`: the plain settings (`Policy`, `AgentSettings`, `Repository`, `Prompts`,
+    `Validation`, `Hooks`, `Config`), `ConfigError` and the `DEFAULT_*` lists; no location, no
+    pathlib or yaml. `adapters/workflow_file.py`: loads and validates `WORKFLOW.md` (front matter +
+    prompt body), `load_config` returns the `Config` and a `Locations` (real paths, for adapters only).
   - `domain/`: the pure core, no I/O (`architecture` chapter). `states.py` (`State`, causes),
     `questions.py` (question records and helpers), `task.py` (the `Task` aggregate),
     `task_id.py` (`TaskId`, slug, prefix resolution),

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
-from samba.config import AgentSettings
+from samba.domain.settings import AgentSettings
 from samba.domain.agent import (
     AgentReport,
     AgentRequest,

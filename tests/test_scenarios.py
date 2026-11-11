@@ -29,13 +29,13 @@ from samba.app.change_state import ChangeState, StateChanged
 from samba.app.machine import Machine
 from samba.app.results import Refused
 from samba.app.turn import TurnFlow, TurnSetup
-from samba.config import (
+from samba.domain.settings import (
     AgentSettings,
     Config,
     Hooks,
-    Layout,
     Policy,
     Prompts,
+    Repository,
     Validation,
 )
 from samba.orchestrator import Orchestrator
@@ -378,8 +378,7 @@ def lifecycle_config(sc: Scenario) -> Config:
         agent=AgentSettings(command=["claude"], model=None, permission_mode="dontAsk", allow=[],
                             args=[], isolate_user_config=True, turn_timeout_s=60.0,
                             stall_timeout_s=60.0),
-        layout=Layout(repo=Path("/repo"), samba_dir=Path("/repo/.samba"),
-                      workspaces_root=Path("/ws"), base_branch="main"),
+        repository=Repository(base_branch="main"),
         prompts=Prompts(template="Do {{ task.title }}"),
         validation=Validation(command=c["validate"], timeout_s=60.0, tail_lines=20,
                               shell=["bash", "-c"]),

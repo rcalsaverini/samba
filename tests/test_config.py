@@ -1,6 +1,7 @@
 """Unit tests of `load_config`: the composite of frozen parts (spec: workflow-config).
 
-This file may import `samba.config`; the black-box files must not.
+This file may import `samba.adapters.workflow_file` and `samba.domain.settings`; the black-box
+files must not.
 """
 
 from __future__ import annotations
@@ -10,8 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from samba.config import (DEFAULT_ALLOW, DEFAULT_PLANNING_ALLOW, ConfigError, Hooks, Layout,
-                          Policy, Prompts, Validation, load_config)
+from samba.adapters.workflow_file import Locations, load_config
+from samba.domain.settings import (DEFAULT_ALLOW, DEFAULT_PLANNING_ALLOW, ConfigError, Hooks,
+                                   Policy, Prompts, Repository, Validation)
 
 
 def write(repo: Path, front: str, body: str = "Do {{ task.title }}\n") -> None:
@@ -20,16 +22,16 @@ def write(repo: Path, front: str, body: str = "Do {{ task.title }}\n") -> None:
 
 def test_defaults(tmp_path: Path) -> None:
     write(tmp_path, "")
-    cfg = load_config(tmp_path)
+    cfg, loc = load_config(tmp_path)
     repo = tmp_path.resolve()
     assert cfg.policy == Policy(
         max_turns=10, max_attempts=3, retry_base_s=10, max_retry_backoff_s=300,
         max_cost_usd_per_task=None, reflect_on_give_up=True, require_plan=False,
         max_concurrent=2, poll_interval_s=10)
-    assert cfg.layout == Layout(
+    assert loc == Locations(
         repo=repo, samba_dir=repo / ".samba",
-        workspaces_root=(Path("~/.samba/workspaces").expanduser()).resolve(),
-        base_branch="main")
+        workspaces_root=(Path("~/.samba/workspaces").expanduser()).resolve())
+    assert cfg.repository == Repository(base_branch="main")
     assert cfg.prompts == Prompts(template="Do {{ task.title }}", overrides={})
     assert cfg.validation == Validation(command=None, timeout_s=900, tail_lines=200,
                                         shell=["bash", "-c"])
@@ -84,10 +86,10 @@ planning:
   model: m2
   allow: [Grep]
 """)
-    cfg = load_config(tmp_path)
+    cfg, loc = load_config(tmp_path)
     repo = tmp_path.resolve()
-    assert cfg.layout == Layout(repo=repo, samba_dir=repo / "state", workspaces_root=ws.resolve(),
-                                base_branch="trunk")
+    assert loc == Locations(repo=repo, samba_dir=repo / "state", workspaces_root=ws.resolve())
+    assert cfg.repository == Repository(base_branch="trunk")
     assert cfg.policy == Policy(
         max_turns=7, max_attempts=2, retry_base_s=1, max_retry_backoff_s=9,
         max_cost_usd_per_task=1.5, reflect_on_give_up=False, require_plan=True,
@@ -106,14 +108,14 @@ planning:
 
 def test_parts_are_frozen(tmp_path: Path) -> None:
     write(tmp_path, "")
-    cfg = load_config(tmp_path)
+    cfg, _ = load_config(tmp_path)
     with pytest.raises(dataclasses.FrozenInstanceError):
         cfg.policy.max_turns = 1  # type: ignore[misc]
 
 
 def test_unknown_keys_warn_and_empty_body_fails(tmp_path: Path) -> None:
     write(tmp_path, "bogus: 1\nhooks:\n  nope: 2\n")
-    assert load_config(tmp_path).warnings == [
+    assert load_config(tmp_path)[0].warnings == [
         "unknown config key ignored: bogus", "unknown config key ignored: hooks.nope"]
     write(tmp_path, "", body="\n")
     with pytest.raises(ConfigError):
