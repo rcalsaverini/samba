@@ -21,7 +21,8 @@ DOMAIN_MODULES = ["ports.py", "template.py", "prompts.py", "domain/__init__.py",
 # Use cases: may log and await, but import no adapter and call no clock or uuid directly.
 APP_MODULES = ["app/__init__.py", "app/turn.py", "app/machine.py", "app/results.py",
                "app/confirm.py", "app/change_state.py", "app/answer_question.py",
-               "app/resolve.py", "app/accept_work.py", "app/create_task.py"]
+               "app/resolve.py", "app/accept_work.py", "app/create_task.py",
+               "app/adr.py", "app/queries.py"]
 
 FORBIDDEN = {"os", "time", "datetime", "uuid", "subprocess", "asyncio", "logging", "pathlib"}
 

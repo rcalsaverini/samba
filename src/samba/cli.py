@@ -11,26 +11,26 @@ import sys
 from pathlib import Path
 from typing import cast
 
-from samba import adr as adr_mod
+from samba.adapters.adr_files import FileAdrs
 from samba.adapters.git_merger import GitMerger
 from samba.adapters.markdown_tasks import MarkdownTasks
 from samba.adapters.repo_lock import FileRepoLock
 from samba.adapters.system import SystemClock
 from samba.adapters.terminal import StdTerminal
 from samba.app.accept_work import AcceptWork, DryRun
+from samba.app.adr import ListAdrs, SetAdrStatus, ShowAdr, SupersedeAdr
 from samba.app.answer_question import AnswerQuestion
 from samba.app.change_state import ChangeState, FeedbackMode
 from samba.app.create_task import CreateTask
 from samba.app.machine import Machine
+from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask, split_target
 from samba.app.resolve import ResolveError, resolve_task_id
-from samba.app.results import Refused
+from samba.app.results import Refused, Table, Text, Written
 from samba.config import Config, ConfigError, load_config
-from samba.domain.questions import round_questions
-from samba.domain.states import STATES
 from samba.domain.transitions import render_markdown_table
 from samba.orchestrator import Orchestrator, StartupError
 from samba.ports import Tasks
-from samba.views import print_table, question_rows, render_show, resolve_states, task_rows
+from samba.views import print_table
 
 
 def _setup_logging(config: Config) -> None:
@@ -70,35 +70,20 @@ def cmd_run(config: Config, exit_when_idle: bool) -> int:
     return 0
 
 
-def cmd_task_list(config: Config, states: list[str]) -> int:
-    """`task list [STATE...]`."""
-    try:
-        chosen = resolve_states(states) if states else STATES
-    except ResolveError as e:
-        print(f"samba: {e.render()}", file=sys.stderr)
-        return 2
-    tasks = _store(config)
-    print_table(task_rows(tasks, chosen), shutil.get_terminal_size().columns, flex=6)
-    return 0
-
-
 def _store(config: Config) -> Tasks:
     """The task store the commands use (the composition root arrives with a later task)."""
     sym = config.layout.samba_dir
     return MarkdownTasks(sym / "tasks", sym / "state", SystemClock())
 
 
-def cmd_task_show(config: Config, text: str) -> int:
-    tasks = _store(config)
-    try:
-        task = tasks.get(resolve_task_id(tasks, text))
-    except ResolveError as e:
-        print(f"samba: {e.render()}", file=sys.stderr)
-        return 2
-    if task is None:
-        print(f"samba: unknown task {text!r}", file=sys.stderr)
-        return 2
-    print("\n".join(render_show(tasks, task)))
+def _show(result: Table | Text | Refused) -> int:
+    """Print a read-only result: a table on stdout, text as it is, or the refusal on stderr."""
+    if isinstance(result, Refused):
+        return _report(result)
+    if isinstance(result, Table):
+        print_table(result.rows, shutil.get_terminal_size().columns, flex=result.flex)
+    else:
+        sys.stdout.write(result.text)
     return 0
 
 
@@ -138,48 +123,10 @@ def _err(msg: str) -> None:
     print(f"samba: {msg}", file=sys.stderr)
 
 
-def _split_target(target: str) -> tuple[str, str | None]:
-    """`TASK` or `TASK/QID`. Task ids never contain a slash."""
-    task, sep, qid = target.rpartition("/")
-    return (task, qid) if sep else (target, None)
-
-
-def cmd_question_list(config: Config) -> int:
-    print_table(question_rows(_store(config)), shutil.get_terminal_size().columns, flex=4)
-    return 0
-
-
-def cmd_question_show(config: Config, target: str) -> int:
-    tasks = _store(config)
-    name, qid = _split_target(target)
-    try:
-        task_id = resolve_task_id(tasks, name)
-    except ResolveError as e:
-        _err(e.render())
-        return 2
-    task = tasks.get(task_id)
-    questions = task.questions if task is not None else ()
-    shown = [q for q in questions if q.id == qid] if qid else round_questions(questions)
-    if not shown:
-        _err(f"unknown question {task_id}/{qid}" if qid else f"{task_id} has no questions")
-        return 2
-    blocks: list[str] = []
-    for q in shown:
-        lines = [f"{task_id}/{q.id}  stage: {q.stage}  round: {q.round}"
-                 f"  status: {q.status}  asked: {q.asked_at}", "", q.text]
-        if q.context:
-            lines += ["", "Context: " + q.context]
-        if q.status == "answered":
-            lines += ["", "Answer: " + (q.answer or "")]
-        blocks.append("\n".join(lines))
-    print("\n\n".join(blocks))
-    return 0
-
-
 def cmd_question_answer(config: Config, target: str, text: str | None, edit: bool) -> int:
     """`question answer` (spec: cli): resolve the id, run the `AnswerQuestion` use case."""
     tasks = _store(config)
-    name, qid = _split_target(target)
+    name, qid = split_target(target)
     try:
         task_id = resolve_task_id(tasks, name)
     except ResolveError as e:
@@ -242,37 +189,22 @@ def cmd_task_new(config: Config, title: str | None, body: str | None, depends: s
 def cmd_adr(args: argparse.Namespace) -> int:
     """`adr list|show|accept|reject|supersede` (spec: cli, ADR commands). Plain file edits: no
     config, no lock, no confirmation, never a commit."""
-    repo = cast(Path, args.repo)
+    adrs = FileAdrs(cast(Path, args.repo))
     verb = str(args.adr_command)
-    try:
-        if verb == "list":
-            adrs = adr_mod.load_all(repo)
-            if not args.all:
-                adrs = [a for a in adrs if a.status == "accepted"]
-            if args.all:
-                rows = [["NUMBER", "STATUS", "TITLE", "SUMMARY"]] + [
-                    [f"{a.number:04d}", a.status, a.title, a.summary] for a in adrs]
-            else:
-                rows = [["NUMBER", "TITLE", "SUMMARY"]] + [
-                    [f"{a.number:04d}", a.title, a.summary] for a in adrs]
-            print_table(rows, shutil.get_terminal_size().columns, flex=len(rows[0]) - 1)
-            return 0
-        if verb == "show":
-            sys.stdout.write(adr_mod.find(repo, adr_mod.parse_number(str(args.number))).text)
-            return 0
-        number = adr_mod.parse_number(str(args.number))
-        if verb == "supersede":
-            written = adr_mod.supersede(repo, number, adr_mod.parse_number(str(args.new)))
-        elif verb == "accept":
-            written = adr_mod.set_status(repo, number, "accept", "proposed", "accepted")
-        else:
-            written = adr_mod.set_status(repo, number, "reject", "proposed", "rejected")
-    except adr_mod.AdrError as e:
-        _err(str(e))
-        return e.code
-    for path in written:
-        print(path)
-    return 0
+    result: Table | Text | Written | Refused
+    if verb == "list":
+        result = ListAdrs(adrs).run(bool(args.all))
+    elif verb == "show":
+        result = ShowAdr(adrs).run(str(args.number))
+    elif verb == "supersede":
+        result = SupersedeAdr(adrs).run(str(args.number), str(args.new))
+    else:
+        result = SetAdrStatus(adrs).run(verb, str(args.number))
+    if isinstance(result, Written):
+        for file in result.files:
+            print(file)
+        return 0
+    return _show(result)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -416,9 +348,9 @@ def main(argv: list[str] | None = None) -> int:
                               edit=bool(args.edit), feedback_mode="optional")
     if command == "question":
         if args.question_command == "list":
-            return cmd_question_list(config)
+            return _show(ListQuestions(_store(config)).run())
         if args.question_command == "show":
-            return cmd_question_show(config, str(args.id))
+            return _show(ShowQuestion(_store(config)).run(str(args.id)))
         return cmd_question_answer(config, str(args.id), cast(str | None, args.text),
                                    bool(args.edit))
     if command == "task":
@@ -431,9 +363,9 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_transition(config, str(args.id), "task.discard", "task.discard",
                               confirm_plan="Discard task {id}", yes=bool(args.yes))
     if command == "list":
-        return cmd_task_list(config, cast(list[str], args.states))
+        return _show(ListTasks(_store(config), SystemClock()).run(cast(list[str], args.states)))
     if command == "show":
-        return cmd_task_show(config, str(args.id))
+        return _show(ShowTask(_store(config), SystemClock()).run(str(args.id)))
     return cmd_task_new(config, cast(str | None, args.title), cast(str | None, args.body),
                         cast(str | None, args.depends_on), int(args.priority),
                         bool(args.skip_plan))
