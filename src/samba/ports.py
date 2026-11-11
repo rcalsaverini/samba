@@ -130,41 +130,6 @@ class Terminal(Protocol):
         ...
 
 
-MergeStatus = Literal["merged", "already", "conflict", "validation_failed", "error"]
-
-
-@dataclass(frozen=True)
-class MergeResult:
-    """What `Merger.merge` returns. `detail` is the short sha (merged), the files (conflict), the
-    log tail (validation_failed) or the git error; `log_path` names the full validation output."""
-
-    status: MergeStatus
-    detail: str = ""
-    validated: bool = False
-    log_path: str | None = None
-
-
-class Merger(Protocol):
-    """The git steps of `work accept` over the main checkout (spec: cli, work accept)."""
-
-    def branch_name(self, task_id: str) -> str:
-        """The branch the task's work lives on."""
-        ...
-
-    def preflight(self, branch: str) -> str | None:
-        """A message for the first failed check, or None when the merge may proceed."""
-        ...
-
-    def commit_count(self, branch: str) -> int:
-        """Commits on `branch` not yet in the base branch."""
-        ...
-
-    def merge(self, task_id: str, branch: str, message: str, validate: bool) -> MergeResult:
-        """Merge without committing, validate the result when asked, commit only on a pass. On any
-        failure the checkout is left as it was."""
-        ...
-
-
 class Lock(Protocol):
     """The advisory lock that serialises state-changing commands and the orchestrator."""
 
@@ -176,18 +141,6 @@ class Lock(Protocol):
 
 class WorkspaceError(Exception):
     """A workspace could not be created or removed."""
-
-
-class Workspaces(Protocol):
-    """The per-task workspaces, the part the tick needs (spec: workspaces)."""
-
-    def existing_ids(self) -> list[str]:
-        """Ids of the tasks that have a workspace."""
-        ...
-
-    async def remove(self, task_id: str) -> None:
-        """Raises `WorkspaceError(message)` when it cannot be removed."""
-        ...
 
 
 @dataclass(frozen=True)

@@ -7,6 +7,7 @@ import asyncio
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
 from fake_terminal import FakeLock
+from fake_vcs import FakeVcs
 from test_scenarios import FakeClock
 
 from samba.app.machine import Machine
@@ -15,36 +16,30 @@ from samba.domain.deps import deps_snapshot, evaluate
 from samba.domain.states import State
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-from samba.ports import WorkspaceError
 
 
-class FakeWorkspaces:
-    def __init__(self, ids: list[str] | None = None, fail: bool = False) -> None:
-        self.ids = list(ids or [])
-        self.fail = fail
-        self.removed: list[str] = []
+def vcs_with(ids: list[str], fail: bool = False) -> FakeVcs:
+    vcs = FakeVcs(remove_error="boom" if fail else None)
+    vcs.workspaces.update(ids)
+    return vcs
 
-    def existing_ids(self) -> list[str]:
-        return list(self.ids)
 
-    async def remove(self, task_id: str) -> None:
-        if self.fail:
-            raise WorkspaceError("boom")
-        self.removed.append(task_id)
+def removed(vcs: FakeVcs) -> list[str]:
+    return [c[1] for c in vcs.calls if c[0] == "remove_workspace" and not vcs.remove_error]
 
 
 class Rig:
     def __init__(self, max_concurrent: int = 5, lock: FakeLock | None = None,
-                 workspaces: FakeWorkspaces | None = None) -> None:
+                 vcs: FakeVcs | None = None) -> None:
         self.tasks = FakeTasks()
         self.clock = FakeClock(100.0)
         self.running: dict[str, Running] = {}
         self.spawned: list[str] = []
-        self.workspaces = workspaces or FakeWorkspaces()
+        self.vcs = vcs or FakeVcs()
         self.journal = FakeJournal()
         machine = Machine(self.tasks, self.clock, self.journal, self.guard)
         self.notes = Notes(self.tasks, self.running)
-        self.tick = Tick(self.tasks, self.clock, lock or FakeLock(), self.workspaces, machine,
+        self.tick = Tick(self.tasks, self.clock, lock or FakeLock(), self.vcs, machine,
                          max_concurrent, self.running, self.notes, self.spawn, self.journal)
 
     def guard(self, name: str, task: Task) -> bool:
@@ -125,8 +120,8 @@ def test_the_tick_is_skipped_while_the_lock_is_held_by_someone_else() -> None:
 
 
 def test_cleanup_removes_done_discarded_and_missing_but_not_running_or_open() -> None:
-    ws = FakeWorkspaces(["done1", "disc", "ghost", "open", "busy"])
-    rig = Rig(workspaces=ws)
+    ws = vcs_with(["done1", "disc", "ghost", "open", "busy"])
+    rig = Rig(vcs=ws)
     rig.add("done1", status="done")
     rig.add("disc", status="discarded")
     rig.add("open", status="work-review")
@@ -138,14 +133,14 @@ def test_cleanup_removes_done_discarded_and_missing_but_not_running_or_open() ->
         rig.running["busy"].task.cancel()
 
     asyncio.run(go())
-    assert ws.removed == ["done1", "disc", "ghost"]
+    assert removed(ws) == ["disc", "done1", "ghost"]
 
 
 def test_cleanup_survives_a_removal_failure() -> None:
-    ws = FakeWorkspaces(["ghost"], fail=True)
-    rig = Rig(workspaces=ws)
+    ws = vcs_with(["ghost"], fail=True)
+    rig = Rig(vcs=ws)
     asyncio.run(rig.tick.run())
-    assert ws.removed == []
+    assert removed(ws) == [] and ws.calls == [("remove_workspace", "ghost")]
 
 
 def test_observe_notes_a_hand_move_and_reverts_an_illegal_one() -> None:

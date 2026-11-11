@@ -1,12 +1,11 @@
 """The turn flow shared by planning and work (spec: running-claude, Planning run and Work run).
 
-A use case: it talks to the `AgentRunner` and `Tasks` ports and to what the orchestrator injects
-(the validation call), never to an adapter. The decisions live in `samba.domain.policy`.
+A use case: it talks to the `AgentRunner`, `Validator` and `Tasks` ports, never to an adapter. The decisions live in `samba.domain.policy`.
 """
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from samba.domain.agent import AgentReport, AgentRequest
@@ -25,7 +24,8 @@ from samba.domain.policy import (
 from samba.domain.states import Stage
 from samba.domain.task import Task
 from samba.domain.transitions import log_line
-from samba.ports import AgentRunner, Clock, IdGenerator, Journal, Tasks
+from samba.domain.validation import agent_tail
+from samba.ports import AgentRunner, Clock, IdGenerator, Journal, Tasks, Validator
 
 
 @dataclass(frozen=True)
@@ -45,8 +45,9 @@ class TurnSetup:
 
 class TurnFlow:
     def __init__(self, agent: AgentRunner, ids: IdGenerator, tasks: Tasks,
-                 clock: Clock, journal: Journal) -> None:
+                 clock: Clock, validator: Validator, journal: Journal) -> None:
         self.journal = journal
+        self.validator = validator
         self.agent = agent
         self.ids = ids
         self.tasks = tasks
@@ -81,7 +82,6 @@ class TurnFlow:
         return res
 
     async def run(self, task: Task, setup: TurnSetup,
-                  validate: Callable[[], Awaitable[tuple[bool, str]]],
                   on_turn: Callable[[int], None]) -> Finish | Fail:
         """Run up to `setup.max_turns` turns; return how the run ends."""
         stage = setup.stage
@@ -130,10 +130,12 @@ class TurnFlow:
                     self._ask(task, stage, res)
                     return done
                 case RunValidation(summary=summary):
-                    ok, tail = await validate()
-                    if ok:
+                    check = await self.validator.run(
+                        setup.location, f"{task.id}/validate-{task.turns_total:03d}.log")
+                    self.journal.info("validate", task=task.id, ok=check.ok, code=check.code)
+                    if check.ok:
                         return Finish("done", "validation passed", summary)
-                    prompt = setup.validate_failed(tail)
+                    prompt = setup.validate_failed(agent_tail(check))
                 case Continue():
                     prompt = setup.continue_prompt
             resume = True

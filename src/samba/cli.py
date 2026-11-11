@@ -113,8 +113,8 @@ def cmd_work_accept(svc: Services, text: str, *, no_merge: bool, no_validate: bo
     except ResolveError as e:
         _err(e.render())
         return 2
-    result = svc.accept_work.run(task_id, no_merge=no_merge, no_validate=no_validate, yes=yes,
-                          dry_run=dry_run)
+    result = asyncio.run(svc.accept_work.run(
+        task_id, no_merge=no_merge, no_validate=no_validate, yes=yes, dry_run=dry_run))
     if isinstance(result, Refused):
         return _report(result)
     if isinstance(result, DryRun):

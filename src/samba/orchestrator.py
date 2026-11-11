@@ -6,9 +6,6 @@ import asyncio
 import contextlib
 import functools
 import re
-from pathlib import Path
-
-from typing import Protocol
 
 from samba.app.machine import Machine
 from samba.app.tick import Notes, Running, Tick, running_folder, stage_of
@@ -23,10 +20,10 @@ from samba.ports import (
     Lock,
     StoreError,
     Tasks,
+    Validator,
+    Vcs,
     WorkspaceError,
-    Workspaces,
 )
-from samba.proc import git, run_shell
 from samba.prompts import (
     APPROVED_PLAN_RULE,
     DEFAULT_PROMPTS,
@@ -41,24 +38,15 @@ from samba.domain.states import Stage, State, running_of, todo_of
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
 from samba.template import TemplateError, render
-from samba.workspace import branch_name
 
 
 class StartupError(Exception):
     pass
 
 
-class WorkerWorkspaces(Workspaces, Protocol):
-    """The workspaces as the workers use them: the tick's port plus path and creation."""
-
-    def path(self, task_id: str) -> Path: ...
-
-    async def ensure(self, task_id: str) -> tuple[Path, bool]: ...
-
-
 class Orchestrator:
     def __init__(self, config: Config, clock: Clock, ids: IdGenerator, agent: AgentRunner,
-                 tasks: Tasks, workspaces: WorkerWorkspaces, lock: Lock,
+                 tasks: Tasks, vcs: Vcs, validator: Validator, lock: Lock,
                  journal: Journal) -> None:
         """Every port is passed in; the composition root (`samba.compose`) builds them."""
         self.journal = journal
@@ -69,16 +57,14 @@ class Orchestrator:
         self.validation = config.validation
         self.clock: Clock = clock
         self.ids: IdGenerator = ids
-        self.sym = config.layout.samba_dir
         self.tasks: Tasks = tasks
-        self.runs_dir = self.sym / "runs"
         self.agent: AgentRunner = agent
-        self.workspaces = workspaces
-        self.turns = TurnFlow(self.agent, self.ids, self.tasks, self.clock, journal)
+        self.vcs = vcs
+        self.turns = TurnFlow(self.agent, self.ids, self.tasks, self.clock, validator, journal)
         self.running: dict[str, Running] = {}
         self.machine = Machine(self.tasks, self.clock, journal, self._guard)
         self.notes = Notes(self.tasks, self.running)  # `## Log` lines held while an agent runs
-        self.ticker = Tick(self.tasks, self.clock, lock, self.workspaces,
+        self.ticker = Tick(self.tasks, self.clock, lock, self.vcs,
                            self.machine, self.policy.max_concurrent, self.running, self.notes,
                            self._spawn, journal)
 
@@ -96,18 +82,13 @@ class Orchestrator:
     # ---- startup ------------------------------------------------------------------------
 
     async def startup(self) -> None:
-        layout = self.layout
         try:
             self.tasks.prepare()
         except StoreError as e:
             raise StartupError(str(e)) from e
-        top = await git(layout.repo, "rev-parse", "--show-toplevel")
-        if not top.ok or Path(top.output.strip()).resolve() != layout.repo:
-            raise StartupError(f"{layout.repo} is not the root of a git repository")
-        base = await git(layout.repo, "rev-parse", "--verify", "--quiet",
-                         f"refs/heads/{layout.base_branch}")
-        if not base.ok:
-            raise StartupError(f"base_branch '{layout.base_branch}' does not exist")
+        problem = await self.vcs.repository_problem()
+        if problem:
+            raise StartupError(problem)
         readiness = await self.agent.ready()
         if not readiness.ok:
             raise StartupError(
@@ -115,31 +96,12 @@ class Orchestrator:
         for w in self.config.warnings:
             self.journal.warning("config_warning", message=w)
 
-        self.runs_dir.mkdir(parents=True, exist_ok=True)
-        await self._exclude_samba_dir()
+        await self.vcs.exclude_samba_dir()
 
         for stage in ("plan", "work"):
             for task in self.tasks.list(running_of(stage)):
                 if self.machine.fire(task.id, "recover", message="recovered at startup"):
                     self.journal.info("recovered", task=task.id, to=todo_of(stage))
-
-    async def _exclude_samba_dir(self) -> None:
-        try:
-            rel = self.sym.relative_to(self.layout.repo)
-        except ValueError:
-            return  # samba_dir outside the repo: nothing to exclude
-        res = await git(self.layout.repo, "rev-parse", "--git-path", "info/exclude")
-        if not res.ok:
-            return
-        exclude = Path(res.output.strip())
-        if not exclude.is_absolute():
-            exclude = self.layout.repo / exclude
-        entry = f"/{rel.as_posix()}/"
-        existing = exclude.read_text() if exclude.exists() else ""
-        if entry not in existing.splitlines() and f"{rel.as_posix()}/" not in existing.splitlines():
-            exclude.parent.mkdir(parents=True, exist_ok=True)
-            sep = "" if not existing or existing.endswith("\n") else "\n"
-            exclude.write_text(existing + sep + entry + "\n")
 
     # ---- loop ---------------------------------------------------------------------------
 
@@ -198,7 +160,7 @@ class Orchestrator:
                 self.machine.fire(TaskId(task_id), "recover", message="stopped by shutdown")
             elif reason == "moved" and self._status(task_id) in (None, "done", "discarded"):
                 with contextlib.suppress(WorkspaceError):
-                    await self.workspaces.remove(task_id)
+                    await self.vcs.remove_workspace(task_id)
         except Exception as e:  # a bug in Samba itself: do not lose the task
             self.journal.exception("worker_crashed", task=task_id, error=e)
             task = self.tasks.get(TaskId(task_id))
@@ -210,14 +172,15 @@ class Orchestrator:
         if task is None:
             return
         try:
-            ws, created = await self.workspaces.ensure(task_id)
+            workspace = await self.vcs.ensure_workspace(task_id)
         except WorkspaceError as e:
             await self._fail(task, str(e))
             return
-        if created:
+        ws = workspace.location
+        if workspace.created:
             self.journal.info("workspace_created", task=task_id, path=ws)
-        task.workspace = str(ws)
-        task.branch = branch_name(task_id)
+        task.workspace = ws
+        task.branch = self.vcs.branch_name(task_id)
         self.tasks.save(task)
 
         stage = stage_of(task)
@@ -232,16 +195,13 @@ class Orchestrator:
             if entry:
                 entry.turn = n
 
-        async def validate() -> tuple[bool, str]:
-            return await self._validate(task, ws)
-
-        result = await self.turns.run(task, setup, validate, on_turn)
+        result = await self.turns.run(task, setup, on_turn)
         if isinstance(result, Fail):
             await self._fail(task, result.error)
         else:
             await self._finish(task, result.event, result.what, result.summary)
 
-    def _setup(self, task: Task, ws: Path, stage: Stage) -> TurnSetup:
+    def _setup(self, task: Task, ws: str, stage: Stage) -> TurnSetup:
         """The prompts and limits of a run (spec: prompts, Which prompt is sent)."""
         variables = self._variables(task, ws)
         cap = self.policy.max_cost_usd_per_task
@@ -253,7 +213,7 @@ class Orchestrator:
             first = self._first_plan_prompt(variables)
             resume = bool(task.plan_session_id)
             return TurnSetup(
-                stage="plan", system_prompt=system_prompt, location=str(ws),
+                stage="plan", system_prompt=system_prompt, location=ws,
                 prompt=self._prompt("plan_revise", variables) if resume else first,
                 resume=resume, first_prompt=first, continue_prompt="",
                 validate_failed=lambda tail: "", max_turns=1, validate_enabled=False,
@@ -262,7 +222,7 @@ class Orchestrator:
         resume = bool(task.session_id)
         failed = self._prompt("validate_failed", variables)
         return TurnSetup(
-            stage="work", system_prompt=self._system_prompt(variables, task), location=str(ws),
+            stage="work", system_prompt=self._system_prompt(variables, task), location=ws,
             prompt=self._prompt("resume", variables) if resume else first, resume=resume,
             first_prompt=first, continue_prompt=self._prompt("continue", variables),
             validate_failed=lambda tail: failed + "\n\n```\n" + tail + "\n```",
@@ -274,21 +234,6 @@ class Orchestrator:
         if override:
             return render(override, variables)
         return render(self.prompts.template, variables) + "\n\n" + DEFAULT_PROMPTS["plan"]
-
-    async def _validate(self, task: Task, ws: Path) -> tuple[bool, str]:
-        val = self.validation
-        assert val.command
-        task_id = task.id
-        res = await run_shell(val.shell, val.command, ws, val.timeout_s)
-        out_path = self.runs_dir / task_id / f"validate-{task.turns_total:03d}.log"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(res.output)
-        lines = res.output.rstrip().splitlines()
-        tail = "\n".join(lines[-val.tail_lines:])
-        if res.timed_out:
-            tail = (tail + "\n" if tail else "") + f"(timed out after {val.timeout_s}s)"
-        self.journal.info("validate", task=task_id, ok=res.ok, code=res.code)
-        return res.ok, tail
 
     # ---- transitions --------------------------------------------------------------------
 
@@ -318,25 +263,25 @@ class Orchestrator:
         in_running = self._status(task_id) == running_of(stage)
         if should_reflect(policy.reflect_on_give_up, task.session_id, stage, in_running):
             with contextlib.suppress(TemplateError):
-                ws = Path(task.workspace or self.workspaces.path(task_id))
+                ws = task.workspace or self.vcs.workspace_location(task_id)
                 variables = self._variables(task, ws)
                 await self.turns.invoke(
                     task, stage="work", prompt=self._prompt("give_up", variables),
                     resume=True, system_prompt=self._system_prompt(variables, task),
-                    location=str(ws), max_cost_usd=policy.max_cost_usd_per_task)
+                    location=ws, max_cost_usd=policy.max_cost_usd_per_task)
         self.machine.fire(task_id, "give_up", task=task, error=error,
                           message=f"gave up after {attempts} failed attempts: {error}")
 
     # ---- helpers ------------------------------------------------------------------------
 
-    def _variables(self, task: Task, ws: Path) -> dict[str, str]:
+    def _variables(self, task: Task, ws: str) -> dict[str, str]:
         return {
             "task.id": task.id,
             "task.title": task.title,
             "task.body": task.body,
             "task.path": self.tasks.location(task.id),
-            "workspace": str(ws),
-            "branch": branch_name(task.id),
+            "workspace": ws,
+            "branch": self.vcs.branch_name(task.id),
             "base_branch": self.layout.base_branch,
             "attempt": str(task.attempts),
             "validate_command": self.validation.command or "",

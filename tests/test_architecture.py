@@ -158,6 +158,14 @@ def test_app_modules_import_no_io() -> None:
             assert name.split(".")[0] not in {"os", "subprocess", "pathlib"}, f"{rel} imports {name}"
 
 
+def test_the_orchestrator_imports_no_io_or_old_module() -> None:
+    forbidden = {"os", "subprocess", "pathlib", "logging", "samba.proc", "samba.workspace",
+                 "samba.merge", "samba.lock"}
+    for name in imported_modules(SRC / "orchestrator.py"):
+        assert name not in forbidden and name.split(".")[0] not in {"subprocess", "pathlib",
+                                                                    "logging", "os"}, name
+
+
 def test_the_check_catches_import_os(tmp_path: Path) -> None:
     bad = tmp_path / "bad.py"
     bad.write_text("import os\n")

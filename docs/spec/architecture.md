@@ -36,10 +36,8 @@ case, prints the result's messages and maps its kind to the exit code (`ok` 0, `
 | `AgentRunner` | `run(AgentRequest) -> AgentReport`, `ready() -> Readiness` | `ClaudeCliRunner` in `adapters/claude_cli.py` |
 | `Terminal` | `is_interactive()`, `ask(prompt)` (raises `EOFError` at end of input), `read_block(prompt)`, `warn(line)` (one line to stderr mid-dialogue), `edit(initial) -> EditResult` (the text, or an error message) | `StdTerminal` in `adapters/terminal.py` |
 | `Lock` | `acquire(blocking) -> context manager yielding held` | `FileLock` in `adapters/file_lock.py` (the `.samba/lock` flock; replaces `lock.py` and `RepoLock`) |
-| `Merger` | `branch_name(task_id)`, `preflight(branch) -> str \| None`, `commit_count(branch)`, `merge(task_id, branch, message, validate) -> MergeResult` (`status`: merged, already, conflict, validation_failed, error; `detail`, `validated`, `log_path` as text) | `GitMerger` in `adapters/git_merger.py` (wraps `merge.py`) |
-| `Workspaces` | `existing_ids() -> list[str]`, `remove(task_id)` (async; raises `WorkspaceError(message)`); the tick's subset. Creating a workspace stays with the worker | `GitWorkspaces` in `adapters/git_workspaces.py` (wraps `workspace.py`) |
-| `Vcs` | All async, locations opaque text: `branch_name(task_id)`, `workspace_location(task_id)`, `ensure_workspace(task_id) -> Workspace(location, created)` (runs the `after_create` hook, removes the worktree if it fails, raises `WorkspaceError`), `remove_workspace(task_id)`, `existing_workspaces()`, `repository_problem() -> str \| None`, `preflight(branch)`, `commit_count(branch)`, `begin_merge(branch, message) -> MergeAttempt(status, detail, restore_point)` (`pending`, `already`, `conflict`, `error`; conflict and error are already undone), `abort_merge(restore_point)`, `commit_merge(restore_point) -> CommitResult(ok, detail)`, `checkout_location()`, `exclude_samba_dir()`. The restore point is returned, so the adapter keeps no merge state | `GitVcs` in `adapters/git_vcs.py` (not wired yet: the use cases still use `Merger` and `Workspaces`) |
-| `Validator` | `run(location, log_name) -> ValidationResult` (async; stores the full output under the runs directory; `domain/validation.py` holds the result and the two tail formats `agent_tail` and `accept_tail`) | `ShellValidator` in `adapters/shell_validator.py` (not wired yet) |
+| `Vcs` | All async, locations opaque text: `branch_name(task_id)`, `workspace_location(task_id)`, `ensure_workspace(task_id) -> Workspace(location, created)` (runs the `after_create` hook, removes the worktree if it fails, raises `WorkspaceError`), `remove_workspace(task_id)`, `existing_workspaces()`, `repository_problem() -> str \| None`, `preflight(branch)`, `commit_count(branch)`, `begin_merge(branch, message) -> MergeAttempt(status, detail, restore_point)` (`pending`, `already`, `conflict`, `error`; conflict and error are already undone), `abort_merge(restore_point)`, `commit_merge(restore_point) -> CommitResult(ok, detail)`, `checkout_location()`, `exclude_samba_dir()`. The restore point is returned, so the adapter keeps no merge state | `GitVcs` in `adapters/git_vcs.py` (replaces `workspace.py`, `merge.py`, `GitMerger` and `GitWorkspaces`). `AcceptWork` (async, one `asyncio.run` in `cli.py`) runs the merge sequence over it: `begin_merge`, the validator in `checkout_location()`, then `abort_merge` or `commit_merge` |
+| `Validator` | `run(location, log_name) -> ValidationResult` (async; stores the full output under the runs directory; `domain/validation.py` holds the result and the two tail formats `agent_tail` and `accept_tail`) | `ShellValidator` in `adapters/shell_validator.py`; `TurnFlow` and `AcceptWork` call it, and it creates the directories of the logs it writes |
 | `Journal` | `debug`, `info`, `warning`, `exception(event, **fields)`; `exception` adds the traceback | `LogJournal` in `adapters/log_journal.py` (`samba.log` at DEBUG, stderr at INFO, the `kv` format), `NullJournal` for commands that write no log. Injected into `Machine`, `Tick`, `TurnFlow`, `Orchestrator` and `ClaudeCliRunner`; `compose.build(repo, for_run=True)` builds the `LogJournal` for `samba run` only |
 | `Adrs` | `parse_number(text)`, `load_all() -> list[AdrInfo]`, `find(number)`, `set_status(number, verb, allowed_from, status) -> files`, `supersede(old, new) -> files`; every method may raise `AdrError(message, code)` (`code` 1 refused, 2 usage); `AdrInfo` carries `file` as text | `FileAdrs` in `adapters/adr_files.py` (wraps `adr.py`) |
 | `Tasks` | `get(id)`, `list(status)`, `ids(status?)`, `create(task)`, `save(task) -> bool`, `observe_moves()`, `accept_move(move)`, `revert_move(move)`, `rejected_names(status)`, `location(id)`, `prepare()` | `MarkdownTasks` in `adapters/markdown_tasks.py`; the in-memory `FakeTasks` for tests is `tests/fake_tasks.py` |
@@ -123,16 +121,14 @@ polling), `AgentSettings` (the `claude` command, permissions, timeouts and the p
 allow list; taken by `adapters/claude_cli.py`), `Layout` (repo, Samba directory, workspaces root,
 base branch), `Prompts` (the body template and the overrides), `Validation` (command, timeout, tail
 lines, shell) and `Hooks` (`after_create`, timeout). `Config` holds one of each plus `warnings`;
-`load_config` builds it. `Workspaces` takes `Layout`, `Hooks` and the shell. `DEFAULT_ALLOW` and
+`load_config` builds it. `GitVcs` takes `Layout`, `Hooks` and the shell. `DEFAULT_ALLOW` and
 `DEFAULT_PLANNING_ALLOW` stay in `config.py`.
 
-The terminal, git (merge), the repo lock, the workspaces (the tick's part) and the ADR files are
-behind ports, wrapped by adapters over the modules `merge.py`, `lock.py`, `workspace.py` and
-`adr.py`, which stay where they are for now. Not yet behind a port:
+The terminal, git (workspaces and merge), validation, the lock, the journal and the ADR files are
+behind ports. `orchestrator.py` (startup, poll loop, workers) imports no adapter, `proc`, `logging`,
+`subprocess` or `pathlib`; the decisions are in `app/`. What is not behind a port:
 
-- Subprocess helpers: `proc.py` (the Claude runner moved to `adapters/claude_cli.py`).
-- Worker execution: workspace creation, hooks, validation and the git calls of the workers in
-  `orchestrator.py` (startup, poll loop and workers stay there; the decisions are in `app/tick.py`).
+- Subprocess helpers: `proc.py`, used only inside adapters.
 - The table printer `views.py`, the CLI adapter's output (it reads `time.time` for column widths).
 - The test-only `SAMBA_DEBUG_FIRE_DELAY` sleep is in `MarkdownTasks.save`, between the rename and
   the sidecar write.
@@ -178,7 +174,8 @@ dst)`, is picked by no `transition` scenario that fires. Adding a row therefore 
 
 `tests/test_architecture.py` reads source files with `ast` and never imports `samba`. It asserts
 that the modules in its `DOMAIN_MODULES` list import none of the forbidden modules and no adapter,
-that the `app/` modules (`turn.py`, `machine.py`) import no adapter, that `orchestrator.py`, the `app/`
+that the `app/` modules import no adapter, that `orchestrator.py` imports no adapter, `proc`,
+`workspace`, `merge`, `lock`, `logging`, `subprocess` or `pathlib`, that `orchestrator.py`, the `app/`
 modules and the domain modules make no direct `time.time`,
 `time.monotonic`, `datetime.now` or `uuid` call, and that the scanner does flag an `adapters` or
 `datetime` import in a temporary module. It also asserts that `tests/test_scenarios.py` imports no

@@ -2,40 +2,52 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from samba.app.accept_work import Accepted, AcceptWork, DryRun
 from samba.app.create_task import Created, CreateTask
 from samba.app.machine import Machine
 from samba.app.results import Refused
 from samba.domain.task_id import TaskId
-from samba.ports import MergeResult
+from samba.ports import CommitResult, MergeAttempt
 
 from fake_journal import FakeJournal
-from fake_merger import FakeMerger
 from fake_tasks import FakeTasks
 from fake_terminal import FakeLock, FakeTerminal
+from fake_validator import FakeValidator, failing, passing
+from fake_vcs import FakeVcs
 from test_app_use_cases import make, messages
 from test_scenarios import FakeClock
 
 
 # --- AcceptWork -------------------------------------------------------------------------------
 
-def accept_uc(tasks: FakeTasks, merger: FakeMerger, terminal: FakeTerminal | None = None,
-              lock: FakeLock | None = None, command: str | None = "make check") -> AcceptWork:
+def accept_uc(tasks: FakeTasks, vcs: FakeVcs, terminal: FakeTerminal | None = None,
+              lock: FakeLock | None = None, command: str | None = "make check",
+              validator: FakeValidator | None = None) -> AcceptWork:
     return AcceptWork(tasks, Machine(tasks, FakeClock(), FakeJournal()), terminal or FakeTerminal(),
-                      lock or FakeLock(), merger, "main", command)
+                      lock or FakeLock(), vcs, validator or FakeValidator(), "main", command)
+
+
+def accept(uc: AcceptWork, tid: TaskId, **flags: bool) -> Accepted | DryRun | Refused:
+    return asyncio.run(uc.run(tid, **flags))
+
+
+def names(vcs: FakeVcs) -> list[str]:
+    return [c[0] for c in vcs.calls]
 
 
 def test_dry_run_prints_the_plan_and_changes_nothing() -> None:
     tasks, tid = make("work-review")
-    merger = FakeMerger(commits=1)
-    res = accept_uc(tasks, merger).run(tid, dry_run=True)
+    vcs = FakeVcs(commits=1)
+    res = accept(accept_uc(tasks, vcs), tid, dry_run=True)
     assert res == DryRun((
         "Merge samba/t1 into main (1 commit), then validate with `make check`",
         "branch: samba/t1\nbase: main\ncommits: 1", "merge: yes (--no-ff)",
         "validate: make check", "final state: done"))
-    assert merger.calls == [] and tasks.records[tid].status == "work-review"
-    skipped = accept_uc(tasks, merger).run(tid, dry_run=True, no_merge=True)
+    assert "begin_merge" not in names(vcs) and tasks.records[tid].status == "work-review"
+    skipped = accept(accept_uc(tasks, vcs), tid, dry_run=True, no_merge=True)
     assert isinstance(skipped, DryRun)
     assert skipped.lines[0] == "Mark t1 done without merging (--no-merge)"
     assert skipped.lines[2:4] == ("merge: no", "validate: skipped")
@@ -43,87 +55,121 @@ def test_dry_run_prints_the_plan_and_changes_nothing() -> None:
 
 def test_accept_merges_validates_and_fires() -> None:
     tasks, tid = make("work-review")
-    merger = FakeMerger()
-    res = accept_uc(tasks, merger).run(tid, yes=True)
+    vcs, validator = FakeVcs(), FakeValidator()
+    res = accept(accept_uc(tasks, vcs, validator=validator), tid, yes=True)
     assert res == Accepted("fake://t1")
-    assert merger.calls == [("t1", "samba/t1", "Merge samba/t1: T", True)]
+    assert vcs.calls[-2:] == [("begin_merge", "samba/t1", "Merge samba/t1: T"),
+                              ("commit_merge", "pre0001")]
+    assert validator.calls == [("/repo", "t1/accept-validate.log")]
     rec = tasks.records[tid]
     assert rec.status == "done" and any("merged abc1234, validated" in ln for ln in rec.log)
 
 
 def test_accept_without_a_validate_command_says_so() -> None:
     tasks, tid = make("work-review")
-    merger = FakeMerger(MergeResult("merged", "abc1234"))
-    res = accept_uc(tasks, merger, command=None).run(tid, yes=True)
+    validator = FakeValidator()
+    res = accept(accept_uc(tasks, FakeVcs(), command=None, validator=validator), tid, yes=True)
     assert isinstance(res, Accepted)
     assert res.notes == ("samba: no validate.command; merged without validation",)
-    assert merger.calls[0][3] is False
+    assert validator.calls == []
+
+
+def test_accept_no_validate_skips_the_validator() -> None:
+    tasks, tid = make("work-review")
+    validator = FakeValidator()
+    res = accept(accept_uc(tasks, FakeVcs(), validator=validator), tid, yes=True, no_validate=True)
+    assert isinstance(res, Accepted) and validator.calls == []
+    assert any("merged abc1234, validation skipped" in ln for ln in tasks.records[tid].log)
 
 
 def test_accept_no_merge_and_already_merged() -> None:
     tasks, tid = make("work-review")
-    merger = FakeMerger()
-    assert isinstance(accept_uc(tasks, merger).run(tid, yes=True, no_merge=True), Accepted)
-    assert merger.calls == [] and merger.preflights == 0
+    vcs = FakeVcs()
+    assert isinstance(accept(accept_uc(tasks, vcs), tid, yes=True, no_merge=True), Accepted)
+    assert names(vcs) == []
     assert any("no merge" in ln for ln in tasks.records[tid].log)
     tasks, tid = make("work-review")
-    res = accept_uc(tasks, FakeMerger(MergeResult("already"))).run(tid, yes=True)
+    vcs = FakeVcs(merge=MergeAttempt("already", "", "pre0001"))
+    res = accept(accept_uc(tasks, vcs), tid, yes=True)
     assert isinstance(res, Accepted)
     assert res.notes == ("samba: samba/t1 is already merged into main; nothing to merge",)
     assert any("already merged" in ln for ln in tasks.records[tid].log)
+    assert "commit_merge" not in names(vcs)
 
 
 def test_accept_refusals_before_any_change() -> None:
     tasks, tid = make("work-todo")
-    res = accept_uc(tasks, FakeMerger()).run(tid, yes=True)
+    res = accept(accept_uc(tasks, FakeVcs()), tid, yes=True)
     assert isinstance(res, Refused) and "work.accept not allowed" in messages(res)
     tasks, tid = make("work-review")
-    pre = accept_uc(tasks, FakeMerger(problem="the main checkout has uncommitted changes")
-                    ).run(tid, yes=True)
+    pre = accept(accept_uc(tasks, FakeVcs(problem="the main checkout has uncommitted changes")),
+                 tid, yes=True)
     assert isinstance(pre, Refused) and pre.kind == "refused"
     assert messages(pre) == "samba: the main checkout has uncommitted changes; nothing changed"
-    gone = accept_uc(tasks, FakeMerger()).run(TaskId("nope"), yes=True)
+    gone = accept(accept_uc(tasks, FakeVcs()), TaskId("nope"), yes=True)
     assert isinstance(gone, Refused) and messages(gone) == "samba: task 'nope' has no file"
-    busy = accept_uc(tasks, FakeMerger(), lock=FakeLock(held=False)).run(tid, yes=True)
+    busy = accept(accept_uc(tasks, FakeVcs(), lock=FakeLock(held=False)), tid, yes=True)
     assert isinstance(busy, Refused) and "holds .samba/lock" in messages(busy)
-    no_tty = accept_uc(tasks, FakeMerger(), FakeTerminal(interactive=False)).run(tid)
+    no_tty = accept(accept_uc(tasks, FakeVcs(), FakeTerminal(interactive=False)), tid)
     assert isinstance(no_tty, Refused) and no_tty.kind == "usage"
-    declined = accept_uc(tasks, FakeMerger(), FakeTerminal(lines=["n"])).run(tid)
+    declined = accept(accept_uc(tasks, FakeVcs(), FakeTerminal(lines=["n"])), tid)
     assert isinstance(declined, Refused) and declined.kind == "refused"
     assert tasks.records[tid].status == "work-review"
 
 
-@pytest.mark.parametrize("result,message,log", [
-    (MergeResult("conflict", "a.py, b.py"),
+@pytest.mark.parametrize("vcs,message,log", [
+    (FakeVcs(merge=MergeAttempt("conflict", "a.py, b.py", "pre0001")),
      "samba: merge conflict in: a.py, b.py; merge aborted, task stays in work-review",
      "work.accept: merge failed (conflicts: a.py, b.py)"),
-    (MergeResult("error", "boom"),
+    (FakeVcs(merge=MergeAttempt("error", "boom", "pre0001")),
      "samba: merge failed: boom; merge aborted, task stays in work-review",
      "work.accept: merge failed (boom)"),
-    (MergeResult("validation_failed", "2 failed", log_path="/x/v.log"),
-     "samba: validation failed after merge; merge aborted, task stays in work-review: 2 failed"
-     "\nsamba: full output: /x/v.log",
-     "work.accept: validation failed after merge: 2 failed"),
+    (FakeVcs(commit=CommitResult(False, "hook said no")),
+     "samba: merge failed: hook said no; merge aborted, task stays in work-review",
+     "work.accept: merge failed (hook said no)"),
 ])
-def test_merge_failures_log_and_stay_in_work_review(result: MergeResult, message: str,
+def test_merge_failures_log_and_stay_in_work_review(vcs: FakeVcs, message: str,
                                                     log: str) -> None:
     tasks, tid = make("work-review")
-    res = accept_uc(tasks, FakeMerger(result)).run(tid, yes=True)
+    res = accept(accept_uc(tasks, vcs), tid, yes=True)
     assert isinstance(res, Refused) and res.kind == "refused"
     assert messages(res) == message
     rec = tasks.records[tid]
     assert rec.status == "work-review" and log in rec.log
 
 
+def test_validation_failure_aborts_the_merge_and_shows_the_tail() -> None:
+    tasks, tid = make("work-review")
+    vcs = FakeVcs()
+    validator = FakeValidator(failing("noise\n\n  2 failed  \n"))
+    res = accept(accept_uc(tasks, vcs, validator=validator), tid, yes=True)
+    assert isinstance(res, Refused) and res.kind == "refused"
+    assert messages(res) == (
+        "samba: validation failed after merge; merge aborted, task stays in work-review: "
+        "noise | 2 failed\nsamba: full output: runs/t1/accept-validate.log")
+    assert vcs.calls[-1] == ("abort_merge", "pre0001") and "commit_merge" not in names(vcs)
+    rec = tasks.records[tid]
+    assert rec.status == "work-review"
+    assert "work.accept: validation failed after merge: noise | 2 failed" in rec.log
+
+
+def test_a_timed_out_validation_says_so() -> None:
+    tasks, tid = make("work-review")
+    validator = FakeValidator(failing("", code=None, timed_out=True))
+    res = accept(accept_uc(tasks, FakeVcs(), validator=validator), tid, yes=True)
+    assert isinstance(res, Refused)
+    assert "work-review: (timed out after 60s)\n" in messages(res)
+
+
 def test_fire_failure_after_the_merge() -> None:
     tasks, tid = make("work-review")
 
-    class Racing(FakeMerger):
-        def merge(self, task_id: str, branch: str, message: str, validate: bool) -> MergeResult:
+    class Racing(FakeVcs):
+        async def begin_merge(self, branch: str, message: str) -> MergeAttempt:
             tasks.records[tid].status = "stuck"  # a hand move after the checks
-            return super().merge(task_id, branch, message, validate)
+            return await super().begin_merge(branch, message)
 
-    res = accept_uc(tasks, Racing()).run(tid, yes=True)
+    res = accept(accept_uc(tasks, Racing(), validator=FakeValidator(passing())), tid, yes=True)
     assert isinstance(res, Refused)
     assert messages(res) == ("samba: work.accept did not apply to t1 after the merge (merged "
                              "abc1234, validated); the merge is in main")

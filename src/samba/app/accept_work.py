@@ -9,7 +9,8 @@ from samba.app.confirm import confirm
 from samba.app.machine import Machine
 from samba.app.results import LOCK_BUSY, Refused, refused
 from samba.domain.task_id import TaskId
-from samba.ports import Lock, Merger, Tasks, Terminal
+from samba.domain.validation import accept_tail
+from samba.ports import Lock, Tasks, Terminal, Validator, Vcs
 
 EVENT = "work.accept"
 
@@ -31,23 +32,25 @@ class DryRun:
 
 class AcceptWork:
     def __init__(self, tasks: Tasks, machine: Machine, terminal: Terminal, lock: Lock,
-                 merger: Merger, base_branch: str, validate_command: str | None) -> None:
+                 vcs: Vcs, validator: Validator, base_branch: str,
+                 validate_command: str | None) -> None:
         self.tasks = tasks
         self.machine = machine
         self.terminal = terminal
         self.lock = lock
-        self.merger = merger
+        self.vcs = vcs
+        self.validator = validator
         self.base = base_branch
         self.validate_command = validate_command
 
-    def _check(self, task_id: TaskId, branch: str, no_merge: bool) -> Refused | None:
+    async def _check(self, task_id: TaskId, branch: str, no_merge: bool) -> Refused | None:
         """State and preflight checks."""
         legal = check_legal(self.tasks, task_id, EVENT, EVENT)
         if isinstance(legal, NotAllowed):
             return refused(legal.message)
         assert isinstance(legal, Legal)
         if not no_merge:
-            problem = self.merger.preflight(branch)
+            problem = await self.vcs.preflight(branch)
             if problem:
                 return refused(f"{problem}; nothing changed")
         return None
@@ -58,17 +61,18 @@ class AcceptWork:
             task.add_log(line)
             self.tasks.save(task)
 
-    def run(self, task_id: TaskId, *, no_merge: bool = False, no_validate: bool = False,
-            yes: bool = False, dry_run: bool = False) -> Accepted | DryRun | Refused:
+    async def run(self, task_id: TaskId, *, no_merge: bool = False, no_validate: bool = False,
+                  yes: bool = False, dry_run: bool = False) -> Accepted | DryRun | Refused:
         tasks = self.tasks
-        branch = self.merger.branch_name(task_id)
+        vcs = self.vcs
+        branch = vcs.branch_name(task_id)
         base = self.base
         command = self.validate_command
-        failed = self._check(task_id, branch, no_merge)
+        failed = await self._check(task_id, branch, no_merge)
         if failed is not None:
             return failed
         do_validate = not no_merge and not no_validate and command is not None
-        count = 0 if no_merge else self.merger.commit_count(branch)
+        count = 0 if no_merge else await vcs.commit_count(branch)
         plural = "" if count == 1 else "s"
         if no_merge:
             plan = f"Mark {task_id} done without merging (--no-merge)"
@@ -91,7 +95,7 @@ class AcceptWork:
         with self.lock.acquire() as held:
             if not held:
                 return refused(LOCK_BUSY)
-            failed = self._check(task_id, branch, no_merge)
+            failed = await self._check(task_id, branch, no_merge)
             if failed is not None:
                 return failed
             message = "validation skipped" if no_validate else ""
@@ -100,29 +104,39 @@ class AcceptWork:
             else:
                 found = tasks.get(task_id)
                 title = found.title if found else task_id
-                res = self.merger.merge(task_id, branch, f"Merge {branch}: {title}", do_validate)
-                if res.status == "conflict":
-                    self._log(task_id, f"work.accept: merge failed (conflicts: {res.detail})")
-                    return refused(f"merge conflict in: {res.detail}; merge aborted, task stays "
+                attempt = await vcs.begin_merge(branch, f"Merge {branch}: {title}")
+                if attempt.status == "conflict":
+                    self._log(task_id, f"work.accept: merge failed (conflicts: {attempt.detail})")
+                    return refused(f"merge conflict in: {attempt.detail}; merge aborted, task "
+                                   "stays in work-review")
+                if attempt.status == "error":
+                    self._log(task_id, f"work.accept: merge failed ({attempt.detail})")
+                    return refused(f"merge failed: {attempt.detail}; merge aborted, task stays "
                                    "in work-review")
-                if res.status == "error":
-                    self._log(task_id, f"work.accept: merge failed ({res.detail})")
-                    return refused(f"merge failed: {res.detail}; merge aborted, task stays in "
-                                   "work-review")
-                if res.status == "validation_failed":
-                    self._log(task_id,
-                              f"work.accept: validation failed after merge: {res.detail}")
-                    return Refused("refused", (
-                        "samba: validation failed after merge; merge aborted, task stays in "
-                        f"work-review: {res.detail}",
-                        f"samba: full output: {res.log_path}"))
-                if res.status == "already":
+                if attempt.status == "already":
                     notes.append(f"samba: {branch} is already merged into {base}; "
                                  "nothing to merge")
                     message = "already merged"
                 else:
-                    message = f"merged {res.detail}" + (
-                        ", validated" if res.validated else ", validation skipped" if no_validate
+                    if do_validate:
+                        check = await self.validator.run(
+                            vcs.checkout_location(), f"{task_id}/accept-validate.log")
+                        if not check.ok:
+                            await vcs.abort_merge(attempt.restore_point)
+                            tail = accept_tail(check)
+                            self._log(task_id,
+                                      f"work.accept: validation failed after merge: {tail}")
+                            return Refused("refused", (
+                                "samba: validation failed after merge; merge aborted, task stays "
+                                f"in work-review: {tail}",
+                                f"samba: full output: {check.log_location}"))
+                    commit = await vcs.commit_merge(attempt.restore_point)
+                    if not commit.ok:
+                        self._log(task_id, f"work.accept: merge failed ({commit.detail})")
+                        return refused(f"merge failed: {commit.detail}; merge aborted, task "
+                                       "stays in work-review")
+                    message = f"merged {commit.detail}" + (
+                        ", validated" if do_validate else ", validation skipped" if no_validate
                         else "")
                     if command is None:
                         notes.append("samba: no validate.command; merged without validation")

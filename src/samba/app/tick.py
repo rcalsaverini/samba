@@ -17,7 +17,7 @@ from samba.domain.states import Stage, State, running_of
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
 from samba.domain.transitions import human_row, log_line
-from samba.ports import Clock, Journal, Lock, Tasks, WorkspaceError, Workspaces
+from samba.ports import Clock, Journal, Lock, Tasks, Vcs, WorkspaceError
 
 StopReason = Literal["moved", "shutdown"]
 
@@ -65,14 +65,14 @@ class Notes:
 
 
 class Tick:
-    def __init__(self, tasks: Tasks, clock: Clock, lock: Lock, workspaces: Workspaces,
+    def __init__(self, tasks: Tasks, clock: Clock, lock: Lock, vcs: Vcs,
                  machine: Machine, max_concurrent: int, running: dict[str, Running],
                  notes: Notes, spawn: Callable[[Task], None], journal: Journal) -> None:
         self.journal = journal
         self.tasks = tasks
         self.clock = clock
         self.lock = lock
-        self.workspaces = workspaces
+        self.vcs = vcs
         self.machine = machine
         self.max_concurrent = max_concurrent
         self.running = running
@@ -132,13 +132,13 @@ class Tick:
                                   now=status or "deleted")
 
     async def cleanup_workspaces(self) -> None:
-        for task_id in self.workspaces.existing_ids():
+        for task_id in await self.vcs.existing_workspaces():
             if task_id in self.running:
                 continue
             state = self._status(task_id)
             if state in (None, "done", "discarded"):
                 try:
-                    await self.workspaces.remove(task_id)
+                    await self.vcs.remove_workspace(task_id)
                     self.journal.info("workspace_removed", task=task_id)
                 except WorkspaceError as e:
                     self.journal.warning("workspace_remove_failed", task=task_id, error=e)
