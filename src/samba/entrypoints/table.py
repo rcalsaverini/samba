@@ -1,4 +1,4 @@
-"""Terminal output helpers for the CLI adapter (spec: cli, observability): the table printer."""
+"""Terminal output helpers for the CLI entry point (spec: cli, observability): the table printer."""
 
 from __future__ import annotations
 

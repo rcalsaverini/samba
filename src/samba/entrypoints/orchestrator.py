@@ -48,7 +48,7 @@ class Orchestrator:
     def __init__(self, config: Config, clock: Clock, ids: IdGenerator, agent: AgentRunner,
                  tasks: Tasks, vcs: Vcs, validator: Validator, lock: Lock,
                  journal: Journal) -> None:
-        """Every port is passed in; the composition root (`samba.compose`) builds them."""
+        """Every port is passed in; the bootstrap (`samba.bootstrap`) builds them."""
         self.journal = journal
         self.config = config
         self.policy = config.policy

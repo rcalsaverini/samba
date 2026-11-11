@@ -15,11 +15,11 @@ from samba.app.change_state import FeedbackMode
 from samba.app.queries import split_target
 from samba.app.resolve import ResolveError, resolve_task_id
 from samba.app.results import Refused, Table, Text, Written
-from samba.compose import Services, build, build_adr, build_explore
+from samba.bootstrap import Services, build, build_adr, build_explore
 from samba.domain.settings import ConfigError
 from samba.domain.transitions import render_markdown_table
-from samba.orchestrator import StartupError
-from samba.views import print_table
+from samba.entrypoints.orchestrator import StartupError
+from samba.entrypoints.table import print_table
 
 
 def cmd_run(svc: Services, exit_when_idle: bool) -> int:

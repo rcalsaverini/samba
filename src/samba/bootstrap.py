@@ -1,8 +1,8 @@
-"""The composition root: the only place that builds adapters and wires use cases (spec: architecture).
+"""The bootstrap: the only place that builds adapters and wires use cases (spec: architecture).
 
 `build(repo)` reads `WORKFLOW.md` and returns the use cases of the commands that need it;
 `build_adr(repo)` serves the ADR commands, which need no config; `build_explore(repo)` serves
-`samba explore`, which needs only the `claude` command and model.
+`samba explore`, which needs only the `claude` command and model. Every entry point calls it.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from samba.app.machine import Machine
 from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask
 from samba.adapters.workflow_file import load_config
 from samba.domain.settings import Config
-from samba.orchestrator import Orchestrator
+from samba.entrypoints.orchestrator import Orchestrator
 from samba.domain.ports import Journal, Tasks
 
 

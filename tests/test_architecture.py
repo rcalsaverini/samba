@@ -121,7 +121,7 @@ def test_the_old_task_store_is_gone_and_the_adapter_is_used() -> None:
     assert not (SRC / "tasks.py").exists(), "tasks.py moved to adapters/markdown_tasks.py"
     assert not (SRC / "transitions.py").exists(), "transitions.py moved to app/machine.py"
     assert not (SRC / "domain" / "sidecar.py").exists()
-    assert "samba.adapters.markdown_tasks" in imported_modules(SRC / "compose.py")
+    assert "samba.adapters.markdown_tasks" in imported_modules(SRC / "bootstrap.py")
     for path in sorted(SRC.rglob("*.py")):
         assert "samba.tasks" not in imported_modules(path), f"{path} imports the old folder helpers"
 
@@ -134,6 +134,59 @@ def test_the_root_modules_moved_into_their_layers() -> None:
     assert not (SRC / "config.py").exists(), "config.py split into domain/settings.py and the reader"
     assert (SRC / "adapters" / "workflow_file.py").is_file()
     assert (SRC / "domain" / "settings.py").is_file()
+
+
+ROOT_FILES = {"__init__.py", "__main__.py", "bootstrap.py"}
+ROOT_PACKAGES = {"domain", "app", "adapters", "entrypoints"}
+ENTRYPOINT_FILES = {"__init__.py", "cli.py", "table.py", "orchestrator.py"}
+
+
+def root_problems(root: Path) -> list[str]:
+    """What at the top of `root` is not one of the allowed files or packages."""
+    entries = [p for p in root.iterdir() if p.name != "__pycache__"]
+    files = {p.name for p in entries if p.is_file() and p.suffix == ".py"}
+    dirs = {p.name for p in entries if p.is_dir()}
+    other = {p.name for p in entries if p.is_file() and p.suffix != ".py"}
+    return sorted([f"file {n}" for n in files ^ ROOT_FILES] + [f"dir {n}" for n in dirs ^ ROOT_PACKAGES]
+                  + [f"other {n}" for n in other])
+
+
+def test_the_root_holds_only_bootstrap_main_and_the_four_layers() -> None:
+    assert root_problems(SRC) == []
+
+
+def test_the_root_check_catches_a_stray_module_and_package(tmp_path: Path) -> None:
+    for name in ROOT_FILES:
+        (tmp_path / name).write_text("")
+    for name in ROOT_PACKAGES:
+        (tmp_path / name).mkdir()
+    (tmp_path / "__pycache__").mkdir()
+    assert root_problems(tmp_path) == []
+    (tmp_path / "foo.py").write_text("")
+    (tmp_path / "extra").mkdir()
+    (tmp_path / "bootstrap.py").unlink()
+    assert root_problems(tmp_path) == ["dir extra", "file bootstrap.py", "file foo.py"]
+
+
+def test_the_old_root_modules_are_gone() -> None:
+    for old in ("cli.py", "views.py", "orchestrator.py", "compose.py"):
+        assert not (SRC / old).exists(), f"{old} moved into entrypoints/ or bootstrap.py"
+
+
+def test_every_entrypoint_module_is_accounted_for() -> None:
+    found = {p.name for p in (SRC / "entrypoints").rglob("*.py")}
+    assert found == ENTRYPOINT_FILES
+
+
+def is_outer(name: str) -> bool:
+    return name in ("samba.bootstrap", "samba.entrypoints") or name.startswith("samba.entrypoints.")
+
+
+def test_inner_layers_import_neither_bootstrap_nor_entrypoints() -> None:
+    for sub in ("domain", "app", "adapters"):
+        for path in sorted((SRC / sub).rglob("*.py")):
+            bad = [n for n in imported_modules(path) if is_outer(n)]
+            assert bad == [], f"{path.relative_to(SRC)} imports {bad}"
 
 
 NO_PATH_NO_YAML = {"pathlib", "yaml"}
@@ -170,21 +223,22 @@ def adapter_imports(path: Path) -> list[str]:
 
 
 def test_only_the_composition_root_builds_adapters() -> None:
-    for rel in ["cli.py", "orchestrator.py"]:
-        assert adapter_imports(SRC / rel) == [], f"{rel} reaches an adapter outside the root"
-    root = code_without_comments(SRC / "compose.py")
+    for path in sorted((SRC / "entrypoints").rglob("*.py")):
+        rel = path.relative_to(SRC).as_posix()
+        assert adapter_imports(path) == [], f"{rel} reaches an adapter outside the root"
+    root = code_without_comments(SRC / "bootstrap.py")
     assert "MarkdownTasks(" in root
     for path in sorted(SRC.rglob("*.py")):
         rel = path.relative_to(SRC).as_posix()
-        if rel in ("compose.py", "adapters/markdown_tasks.py"):
+        if rel in ("bootstrap.py", "adapters/markdown_tasks.py"):
             continue
         assert "MarkdownTasks(" not in code_without_comments(path), rel
 
 
 def test_the_cli_adapter_holds_no_rule() -> None:
-    code = code_without_comments(SRC / "cli.py")
+    code = code_without_comments(SRC / "entrypoints" / "cli.py")
     for word in ("human_events", "merge.", "TaskId.slug", "Machine", "subprocess"):
-        assert word not in code, f"cli.py mentions {word}"
+        assert word not in code, f"entrypoints/cli.py mentions {word}"
 
 
 APP_FORBIDDEN = {"os", "subprocess", "pathlib", "logging"}  # asyncio is fine: use cases await ports
@@ -218,7 +272,7 @@ def orchestrator_violations(path: Path) -> list[str]:
 
 
 def test_the_orchestrator_imports_no_io_adapter_or_old_module() -> None:
-    assert orchestrator_violations(SRC / "orchestrator.py") == []
+    assert orchestrator_violations(SRC / "entrypoints" / "orchestrator.py") == []
 
 
 def test_the_new_checks_catch_logging_pathlib_and_old_modules(tmp_path: Path) -> None:
@@ -246,6 +300,6 @@ def test_only_the_adapter_splits_task_front_matter() -> None:
 
 def test_no_direct_clock_or_uuid_calls() -> None:
     pattern = re.compile(r"\btime\.(time|monotonic)\(|\bdatetime\.now\(|\buuid\.")
-    for rel in ["orchestrator.py", *APP_MODULES, *DOMAIN_MODULES]:
+    for rel in ["entrypoints/orchestrator.py", *APP_MODULES, *DOMAIN_MODULES]:
         hits = pattern.findall(code_without_comments(SRC / rel))
         assert not hits, f"{rel} calls the clock or uuid directly"
