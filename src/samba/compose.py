@@ -28,7 +28,8 @@ from samba.app.create_task import CreateTask
 from samba.app.explore import StartExplore
 from samba.app.machine import Machine
 from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask
-from samba.config import Config, load_config
+from samba.adapters.workflow_file import load_config
+from samba.domain.settings import Config
 from samba.orchestrator import Orchestrator
 from samba.domain.ports import Journal, Tasks
 
@@ -59,18 +60,17 @@ class Services:
 def build(repo: Path, *, for_run: bool = False) -> Services:
     """Load the config of `repo` (raises `ConfigError`) and build every use case. Only `samba run`
     (`for_run`) writes `samba.log` and logs to stderr; other commands journal nothing."""
-    config = load_config(repo)
-    journal: Journal = LogJournal(config.layout.samba_dir) if for_run else NullJournal()
-    layout = config.layout
-    sym = layout.samba_dir
+    config, locations = load_config(repo)
+    sym = locations.samba_dir
+    journal: Journal = LogJournal(sym) if for_run else NullJournal()
     clock = SystemClock()
     tasks = MarkdownTasks(sym / "tasks", sym / "state", clock)
     terminal = StdTerminal()
     lock = FileLock(sym)
     machine = Machine(tasks, clock, journal)
-    agent = ClaudeCliRunner(config.agent, (sym / "tasks").resolve(), sym / "runs", layout.repo,
+    agent = ClaudeCliRunner(config.agent, (sym / "tasks").resolve(), sym / "runs", locations.repo,
                             journal)
-    vcs = GitVcs(layout, config.hooks, config.validation.shell)
+    vcs = GitVcs(locations, config.repository.base_branch, config.hooks, config.validation.shell)
     validator = ShellValidator(config.validation, sym / "runs")
     return Services(
         config=config,
@@ -78,7 +78,7 @@ def build(repo: Path, *, for_run: bool = False) -> Services:
         change_state=ChangeState(tasks, machine, terminal, lock),
         answer_question=AnswerQuestion(tasks, machine, terminal, lock, clock),
         accept_work=AcceptWork(tasks, machine, terminal, lock, vcs, validator,
-                               layout.base_branch, config.validation.command),
+                               config.repository.base_branch, config.validation.command),
         create_task=CreateTask(tasks, terminal, clock),
         list_tasks=ListTasks(tasks, clock),
         show_task=ShowTask(tasks, clock),
@@ -92,8 +92,8 @@ def build(repo: Path, *, for_run: bool = False) -> Services:
 def build_explore(repo: Path) -> StartExplore:
     """`samba explore` needs only `claude.command` and `claude.model` from `WORKFLOW.md` (raises
     `ConfigError`): no lock, no journal, nothing under `.samba/`."""
-    config = load_config(repo)
-    return StartExplore(config.agent.command, config.agent.model, str(config.layout.repo),
+    config, locations = load_config(repo)
+    return StartExplore(config.agent.command, config.agent.model, str(locations.repo),
                         TerminalSession())
 
 

@@ -17,8 +17,9 @@ import pytest
 from samba.adapters.git_vcs import GitVcs
 from samba.adapters.log_journal import LogJournal, NullJournal
 from samba.adapters.shell_validator import ShellValidator
-from samba.config import Hooks, Layout, Validation
+from samba.adapters.workflow_file import Locations
 from samba.domain.ports import WorkspaceError
+from samba.domain.settings import Hooks, Validation
 
 SH = ["sh", "-c"]
 
@@ -46,9 +47,8 @@ def repo(tmp_path: Path) -> Path:
 
 
 def make_vcs(repo: Path, tmp_path: Path, hook: str | None = None) -> GitVcs:
-    layout = Layout(repo=repo, samba_dir=repo / ".samba", workspaces_root=tmp_path / "ws",
-                    base_branch="main")
-    return GitVcs(layout, Hooks(after_create=hook, timeout_s=30), SH)
+    loc = Locations(repo=repo, samba_dir=repo / ".samba", workspaces_root=tmp_path / "ws")
+    return GitVcs(loc, "main", Hooks(after_create=hook, timeout_s=30), SH)
 
 
 T = TypeVar("T")
@@ -101,15 +101,13 @@ def test_a_workspace_id_cannot_escape_the_root(repo: Path, tmp_path: Path) -> No
 
 def test_repository_problem(repo: Path, tmp_path: Path) -> None:
     assert run(make_vcs(repo, tmp_path).repository_problem()) is None
-    layout = Layout(repo=repo, samba_dir=repo / ".samba", workspaces_root=tmp_path / "ws",
-                    base_branch="nope")
-    assert run(GitVcs(layout, Hooks(None, 1), SH).repository_problem()) == (
+    loc = Locations(repo=repo, samba_dir=repo / ".samba", workspaces_root=tmp_path / "ws")
+    assert run(GitVcs(loc, "nope", Hooks(None, 1), SH).repository_problem()) == (
         "base_branch 'nope' does not exist")
     sub = repo / "sub"
     sub.mkdir()
-    layout = Layout(repo=sub, samba_dir=sub / ".samba", workspaces_root=tmp_path / "ws",
-                    base_branch="main")
-    assert run(GitVcs(layout, Hooks(None, 1), SH).repository_problem()) == (
+    loc = Locations(repo=sub, samba_dir=sub / ".samba", workspaces_root=tmp_path / "ws")
+    assert run(GitVcs(loc, "main", Hooks(None, 1), SH).repository_problem()) == (
         f"{sub} is not the root of a git repository")
 
 

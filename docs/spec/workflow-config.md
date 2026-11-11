@@ -4,9 +4,10 @@ Markdown with YAML front matter. The body is the first-turn prompt template.
 
 ## Config (all optional, defaults shown)
 
-The file format is unchanged by how the code groups it: `load_config` splits these keys into the
-parts `Policy`, `AgentSettings`, `Layout`, `Prompts`, `Validation` and `Hooks` (see the
-`architecture` chapter).
+The file format is unchanged by how the code groups it: `adapters/workflow_file.load_config` splits
+these keys into the parts defined in `domain/settings.py` (`Policy`, `AgentSettings`, `Repository`
+for `base_branch`, `Prompts`, `Validation` and `Hooks`) and a separate `Locations` (repo, Samba
+directory, workspaces root) for the adapters (see the `architecture` chapter).
 
 ```yaml
 ---

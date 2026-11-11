@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from samba.config import Validation
+from samba.domain.settings import Validation
 from samba.domain.validation import ValidationResult
 from samba.adapters.process import run_shell
 
