@@ -26,6 +26,8 @@ claude:
     - "Bash(sed -n:*)"
     # Deleting tracked files. Safe here: agents work in worktrees on a branch you review.
     - "Bash(git rm:*)"
+    # Moving tracked files (the target directory must exist: create it by writing a file in it).
+    - "Bash(git mv:*)"
     # Trying the CLI in a scratch repo. Not `samba run` (an orchestrator inside a worktree) and
     # not `work accept` (it merges into a real base branch); their --help is allowed.
     - "Bash(uv run samba --help)"
