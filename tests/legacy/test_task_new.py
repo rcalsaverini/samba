@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from conftest import Sandbox, samba_cmd
+from legacy_support import Sandbox, samba_cmd
 
 STATE_DIRS = ("plan-todo", "work-todo")
 

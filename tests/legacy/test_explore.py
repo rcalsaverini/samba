@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from conftest import Sandbox, flag
+from legacy_support import Sandbox, flag
 
 FORBIDDEN = ["plan", "work", "adr accept", "adr reject", "adr supersede", "task discard",
              "task stop", "task retry", "question answer"]

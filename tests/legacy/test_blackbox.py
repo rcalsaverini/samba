@@ -6,7 +6,7 @@ import json
 import time
 from pathlib import Path
 
-from conftest import Sandbox, flag, git, prompt_of
+from legacy_support import Sandbox, flag, git, prompt_of
 
 # ---- happy paths ---------------------------------------------------------------------------
 
@@ -279,7 +279,7 @@ def test_work_protocol_requires_the_spec_step(sb: Sandbox) -> None:
 
 
 def test_repo_workflow_body_has_the_spec_step() -> None:
-    text = (Path(__file__).resolve().parent.parent / "WORKFLOW.md").read_text()
+    text = (Path(__file__).resolve().parent.parent.parent / "WORKFLOW.md").read_text()
     assert "Spec changes" in text
     assert "docs/spec" in text
     assert "docs/adr" in text

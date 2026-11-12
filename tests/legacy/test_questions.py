@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from conftest import Sandbox, prompt_of, samba_cmd
+from legacy_support import Sandbox, prompt_of, samba_cmd
 
 TWO = [{"text": "Which database?", "context": "storage choice"},
        {"text": "Which port?", "context": "networking"}]

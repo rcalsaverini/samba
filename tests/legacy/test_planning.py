@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 
-from conftest import Sandbox, flag, git, prompt_of
+from legacy_support import Sandbox, flag, git, prompt_of
 
 
 def move(sb: Sandbox, task_id: str, src: str, dst: str) -> None:

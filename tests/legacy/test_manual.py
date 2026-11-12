@@ -11,9 +11,9 @@ import re
 import subprocess
 from pathlib import Path
 
-from conftest import samba_cmd
+from legacy_support import samba_cmd
 
-ROOT = Path(__file__).parent.parent
+ROOT = Path(__file__).parent.parent.parent
 MANUAL = ROOT / "docs" / "manual.md"
 README = ROOT / "README.md"
 EM_DASH = chr(0x2014)

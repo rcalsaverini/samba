@@ -6,7 +6,7 @@ import re
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).parent.parent
+ROOT = Path(__file__).parent.parent.parent
 SPEC_DIR = ROOT / "docs" / "spec"
 OLD_NAME = "SPEC" + ".md"  # built in pieces so this file does not match itself
 OLD_REF = "SPEC" + " §"

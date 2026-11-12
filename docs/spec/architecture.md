@@ -51,7 +51,7 @@ passes plain values (the id or `TASK[/QID]` as typed, text, flags) to exactly on
 (0, 1 for `refused`, 2 for `usage`). It holds no rule, does not resolve ids and has no `if`
 chain on command names. `run`, `explore` and `dev transitions` keep their own small paths and are
 outside the contract. No entry point calls another: `cli.py` imports neither `orchestrator.py` nor
-`workers.py`, and `tests/test_architecture.py` guards it, along with `cli.py` importing neither
+`workers.py`, and `tests/checks/test_architecture.py` guards it, along with `cli.py` importing neither
 `app/resolve.py` nor `domain/task_id.py`, `domain/` and `app/` modules never importing `typer` or
 `click`, and no module importing `argparse`.
 
@@ -80,7 +80,7 @@ as parse, call, render.
 | `Journal` | `debug`, `info`, `warning`, `exception(event, **fields)`; `exception` adds the traceback | `LogJournal` in `adapters/log_journal.py` (`samba.log` at DEBUG, stderr at INFO, the `kv` format), `NullJournal` for commands that write no log. Injected into `Machine`, `Tick`, `TurnFlow`, `Startup`, `RunTask`, `Finisher`, `Workers`, `Orchestrator` and `ClaudeCliRunner`; `bootstrap.build_orchestrator(repo)` builds the `LogJournal` for `samba run` only |
 | `Adrs` | `parse_number(text)`, `load_all() -> list[AdrInfo]`, `find(number)`, `set_status(number, verb, allowed_from, status) -> files`, `supersede(old, new) -> files`; every method may raise `AdrError(message, code)` (`code` 1 refused, 2 usage); `AdrInfo` carries `file` as text | `FileAdrs` in `adapters/adr_files.py` (wraps `adapters/adr_format.py`) |
 | `InteractiveSession` | `run(LaunchSpec(argv, cwd)) -> exit code`, not async; runs the program attached to the person's terminal. Raises `LaunchError(message)` when it cannot start (for example `claude` not found). `LaunchSpec` is in `domain/launch.py` | `TerminalSession` in `adapters/interactive_session.py`: `subprocess.run` with the terminal inherited, SIGINT ignored in Samba while the child runs. It reads no stream-json and is not an `AgentRunner`. Used by `StartExplore` (`app/explore.py`) |
-| `Tasks` | `get(id)`, `list(status)`, `ids(status?)`, `create(task)`, `save(task) -> bool`, `observe_moves()`, `accept_move(move)`, `revert_move(move)`, `rejected_names(status)`, `location(id)`, `prepare()` | `MarkdownTasks` in `adapters/markdown_tasks.py`; the in-memory `FakeTasks` for tests is `tests/fake_tasks.py` |
+| `Tasks` | `get(id)`, `list(status)`, `ids(status?)`, `create(task)`, `save(task) -> bool`, `observe_moves()`, `accept_move(move)`, `revert_move(move)`, `rejected_names(status)`, `location(id)`, `prepare()` | `MarkdownTasks` in `adapters/markdown_tasks.py`; the in-memory `FakeTasks` for tests is `tests/fakes/fake_tasks.py` |
 
 ### The Tasks port and stale saves
 
@@ -124,7 +124,7 @@ same port.
 `AgentRequest`, `AgentReport`, `Failure`, `QuestionDraft` and `Readiness` are frozen dataclasses in
 `domain/agent.py` (running-claude, Adapter boundary and the report). The orchestrator takes an
 `agent`, passed in by the composition root, like the clock. The fake runner for tests is
-`tests/fake_agent.py`.
+`tests/fakes/fake_agent.py`.
 
 The clock is threaded through `Machine`, the transition effects (`not_before`,
 `first_dispatched_at`, `queued_at`), the question helpers (`add_questions`, `answer_question`,
@@ -196,12 +196,12 @@ wires and supervises:
 | `Orchestrator` | `entrypoints/orchestrator.py` | builds the parts and runs: startup, then tick and sleep until stopped, `Workers.shutdown` in a `finally`, exit when idle. About a hundred lines, no rule |
 
 `Startup` and `RunTask` are tested with the fakes and without a loop
-(`tests/test_app_startup.py`, `tests/test_app_run_task.py`); the lifecycle scenarios still run
+(`tests/component/test_app_startup.py`, `tests/component/test_app_run_task.py`); the lifecycle scenarios still run
 over the `Orchestrator`.
 
 ## The architecture test
 
-`tests/test_architecture.py` reads sources with `ast` and never imports `samba`. It checks that:
+`tests/checks/test_architecture.py` reads sources with `ast` and never imports `samba`. It checks that:
 
 - the domain modules (`DOMAIN_MODULES`, which also holds `domain/ports.py`, `domain/template.py` and
   `domain/prompts.py`) import no I/O module and no adapter;
@@ -227,16 +227,36 @@ over the `Orchestrator`.
   none of `Path`, `mtime`, `sidecar`, `front matter`;
 - only `bootstrap.py` constructs `MarkdownTasks`, no module of `entrypoints/` imports an
   adapter, `entrypoints/cli.py` holds no rule (`human_events`, `merge.`, `TaskId.slug`, `Machine`), and
-  `tests/test_scenarios.py` imports no adapter;
-- only `adapters/claude_cli.py` mentions Claude's JSON fields, and `samba.tasks` does not exist.
+  `tests/component/test_scenarios.py` imports no adapter;
+- only `adapters/claude_cli.py` mentions Claude's JSON fields, and `samba.tasks` does not exist;
+- each test folder keeps its import rule (see Test levels): `tests/unit` imports no adapter, no
+  module of `tests/fakes/` and no test or legacy support module; `tests/component` imports no
+  adapter (fakes allowed); `tests/integration` imports neither `samba.entrypoints` nor
+  `samba.bootstrap`; `tests/e2e` imports no `samba`;
+- every test file sits in `unit`, `component`, `integration`, `e2e`, `checks` or `legacy`, the root of
+  `tests/` holds no `.py`, `tests/fakes/` holds no test, and no two test files share a basename
+  (the folders have no `__init__.py`, so pytest would fail with an import mismatch).
 
 The scanners are themselves tested against temporary modules that break each rule.
 
+## Test levels
+
+ADR 0016 divides the tests in four levels, one folder each under `tests/`: `unit` (one pure piece
+of the domain), `component` (use cases and parts over the in-memory fakes), `integration` (one real
+adapter against git, files or a shell) and `e2e` (the `samba` command as a subprocess). The two
+widest levels stay few and a test goes to the lowest level that can show the behavior. Next to
+them: `checks/` (guards such as the architecture test and the spec drift check), `fakes/` (the
+fakes of the ports and `fake_claude.py`, put on the pytest `pythonpath` so tests import them by
+module name) and `legacy/`. `legacy/` is temporary: the old subprocess suite, moved there intact as
+the behavior inventory while the new levels are written, and removed when the chain of tasks that
+rewrites the suite ends; it is not extended. The fast loop is
+`uv run pytest -q tests/unit tests/component`; the full run takes about 4.5 minutes, mostly legacy.
+
 ## Scenarios
 
-The rules of the core are tested with data (ADR 0012). `tests/scenarios/*.json` holds the cases and
-`tests/test_scenarios.py` loads and runs them in-process, one pytest case per scenario. The runner
-imports the domain and the use cases only: never an adapter (the in-memory `tests/fake_tasks.py`
+The rules of the core are tested with data (ADR 0012). `tests/component/scenarios/*.json` holds the cases and
+`tests/component/test_scenarios.py` loads and runs them in-process, one pytest case per scenario. The runner
+imports the domain and the use cases only: never an adapter (the in-memory `tests/fakes/fake_tasks.py`
 stands in for the store), so the fake clock lives in the test file. A rewrite in another language
 can reuse the JSON unchanged.
 

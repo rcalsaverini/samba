@@ -11,7 +11,7 @@
   subprocess with `--exit-when-idle`, and asserts only on files (task folders, sidecars, task `## Log`,
   branches, worktrees) and on the calls recorded by a fake `claude`. Nothing in it imports the
   Python package. Unit tests of Python internals are kept few.
-- The fake `claude` (`tests/fake_claude.py`) follows a per-task script of steps (outcome, cost, file
+- The fake `claude` (`tests/fakes/fake_claude.py`) follows a per-task script of steps (outcome, cost, file
   writes, commits, exit code, `is_error`, missing result, hang, malformed lines, permission denials,
   missing session on resume) and records each invocation's argv for assertions.
 - Samba checks `claude auth status` at startup and refuses to start when logged out.

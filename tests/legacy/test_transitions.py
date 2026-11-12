@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from conftest import Sandbox, stop, wait_for
+from legacy_support import Sandbox, stop, wait_for
 
-STATES_DOC = Path(__file__).parent.parent / "docs" / "spec" / "states.md"
+STATES_DOC = Path(__file__).parent.parent.parent / "docs" / "spec" / "states.md"
 BLOCKER = ["no-such-task"]  # an unknown dependency keeps a todo task where it is
 
 # Live-orchestrator tests poll conditions with a generous deadline (polling returns as soon as the

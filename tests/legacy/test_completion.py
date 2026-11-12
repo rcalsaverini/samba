@@ -6,7 +6,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from conftest import Sandbox, samba_cmd
+from legacy_support import Sandbox, samba_cmd
 from test_adr import write_adr
 
 

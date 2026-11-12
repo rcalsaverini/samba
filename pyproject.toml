@@ -22,7 +22,8 @@ dev = ["pytest>=8", "pyright>=1.1.380", "types-pyyaml"]
 include = ["src", "tests"]
 typeCheckingMode = "strict"
 pythonVersion = "3.11"
+extraPaths = ["src", "tests/fakes", "tests/legacy", "tests/component"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests"]
+pythonpath = ["tests/fakes", "tests/legacy", "tests/component"]

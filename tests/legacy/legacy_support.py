@@ -22,7 +22,7 @@ from typing import Any
 import pytest
 import yaml
 
-FAKE_CLAUDE = Path(__file__).parent / "fake_claude.py"
+FAKE_CLAUDE = Path(__file__).parent.parent / "fakes" / "fake_claude.py"
 STATES = ("plan-todo", "plan-running", "plan-review", "work-todo", "work-running", "work-review",
           "question", "stuck", "done", "discarded")
 

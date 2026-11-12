@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from conftest import Sandbox, flag, git, samba_cmd
+from legacy_support import Sandbox, flag, git, samba_cmd
 
 
 def adr_text(number: int, title: str, status: str = "accepted", decision: str | None = None,

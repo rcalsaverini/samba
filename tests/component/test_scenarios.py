@@ -1,6 +1,6 @@
 """Scenario runner (ADR 0012, docs/spec/architecture.md, Scenarios).
 
-Loads `tests/scenarios/*.json` and runs each scenario in-process against the domain. It imports the
+Loads `tests/component/scenarios/*.json` and runs each scenario in-process against the domain. It imports the
 domain and use cases only: never an adapter (`FakeTasks` stands in for the store). The fake clock lives
 here for that reason.
 """

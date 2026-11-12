@@ -9,7 +9,8 @@ import ast
 import re
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parent.parent / "src" / "samba"
+TESTS = Path(__file__).resolve().parents[1]
+SRC = Path(__file__).resolve().parents[2] / "src" / "samba"
 
 # Modules that belong to the pure domain, relative to src/samba. Later tasks of the refactor
 # chain append to this list as they move modules in.
@@ -81,7 +82,7 @@ def test_the_check_catches_an_adapter_and_io_import(tmp_path: Path) -> None:
 
 
 def test_scenario_runner_imports_no_adapter_and_no_store() -> None:
-    for name in imported_modules(Path(__file__).parent / "test_scenarios.py"):
+    for name in imported_modules(TESTS / "component" / "test_scenarios.py"):
         assert not (name == "samba.adapters" or name.startswith("samba.adapters.")), name
 
 
@@ -371,3 +372,110 @@ def test_no_direct_clock_or_uuid_calls() -> None:
     for rel in ["entrypoints/orchestrator.py", "entrypoints/workers.py", *APP_MODULES, *DOMAIN_MODULES]:
         hits = pattern.findall(code_without_comments(SRC / rel))
         assert not hits, f"{rel} calls the clock or uuid directly"
+
+
+# Test levels (ADR 0016): what each folder of tests/ may import.
+LEVELS = {"unit", "component", "integration", "e2e", "checks", "legacy"}
+
+
+def fake_modules(tests: Path) -> set[str]:
+    return {p.stem for p in (tests / "fakes").glob("*.py")}
+
+
+def folder_imports(tests: Path, folder: str) -> list[tuple[str, str]]:
+    """(file, imported module) pairs over the python files of one level folder."""
+    return [(p.name, n) for p in sorted((tests / folder).rglob("*.py")) for n in imported_modules(p)]
+
+
+def unit_violations(tests: Path) -> list[tuple[str, str]]:
+    fakes = fake_modules(tests)
+    return [(f, n) for f, n in folder_imports(tests, "unit")
+            if is_adapter(n) or n.split(".")[0] in fakes
+            or n.split(".")[0].startswith("test_") or n.split(".")[0] == "legacy_support"]
+
+
+def component_violations(tests: Path) -> list[tuple[str, str]]:
+    return [(f, n) for f, n in folder_imports(tests, "component") if is_adapter(n)]
+
+
+def integration_violations(tests: Path) -> list[tuple[str, str]]:
+    return [(f, n) for f, n in folder_imports(tests, "integration") if is_outer(n)]
+
+
+def e2e_violations(tests: Path) -> list[tuple[str, str]]:
+    return [(f, n) for f, n in folder_imports(tests, "e2e") if n.split(".")[0] == "samba"]
+
+
+def test_unit_imports_no_adapter_and_no_fake() -> None:
+    assert unit_violations(TESTS) == []
+
+
+def test_component_imports_no_adapter() -> None:
+    assert component_violations(TESTS) == []
+
+
+def test_integration_imports_no_entrypoint_or_bootstrap() -> None:
+    assert integration_violations(TESTS) == []
+
+
+def test_e2e_imports_no_samba() -> None:
+    assert e2e_violations(TESTS) == []
+
+
+def level_problems(tests: Path) -> list[str]:
+    """Test files outside a level folder, python files at the root, tests among the fakes."""
+    problems = [f"{p.relative_to(tests).as_posix()}: not in a level folder"
+                for p in sorted(tests.rglob("*.py"))
+                if p.relative_to(tests).parts[0] not in {*LEVELS, "fakes"}]
+    problems += [f"fakes/{p.name}: a test among the fakes" for p in sorted((tests / "fakes").rglob("test_*.py"))]
+    return problems
+
+
+def test_every_test_file_sits_in_a_level_folder() -> None:
+    assert level_problems(TESTS) == []
+
+
+def duplicate_names(tests: Path) -> list[str]:
+    """Test file basenames used twice (no __init__.py: pytest would fail with an import mismatch)."""
+    seen: dict[str, int] = {}
+    for p in tests.rglob("test_*.py"):
+        seen[p.name] = seen.get(p.name, 0) + 1
+    return sorted(n for n, c in seen.items() if c > 1)
+
+
+def test_test_file_names_are_unique_across_tests() -> None:
+    assert duplicate_names(TESTS) == []
+
+
+def test_the_level_checks_catch_violations(tmp_path: Path) -> None:
+    for d in ("unit", "component", "integration", "e2e", "fakes"):
+        (tmp_path / d).mkdir()
+    (tmp_path / "fakes" / "fake_vcs.py").write_text("")
+    (tmp_path / "unit" / "test_a.py").write_text(
+        "from samba.adapters.system import SystemClock\nfrom fake_vcs import FakeVcs\n"
+        "from samba.domain.task import Task\nfrom legacy_support import sb\n")
+    (tmp_path / "component" / "test_b.py").write_text(
+        "from fake_vcs import FakeVcs\nfrom samba.adapters.git_vcs import GitVcs\n")
+    (tmp_path / "integration" / "test_c.py").write_text(
+        "from samba.bootstrap import build\nimport samba.entrypoints.cli\nfrom samba.adapters import x\n")
+    (tmp_path / "e2e" / "test_d.py").write_text("import samba.x\nfrom samba import y\nimport json\n")
+    assert unit_violations(tmp_path) == [("test_a.py", "samba.adapters.system"), ("test_a.py", "fake_vcs"),
+                                         ("test_a.py", "legacy_support")]
+    assert component_violations(tmp_path) == [("test_b.py", "samba.adapters.git_vcs")]
+    assert integration_violations(tmp_path) == [("test_c.py", "samba.bootstrap"),
+                                                ("test_c.py", "samba.entrypoints.cli")]
+    assert e2e_violations(tmp_path) == [("test_d.py", "samba.x"), ("test_d.py", "samba"),
+                                      ("test_d.py", "samba.y")]
+
+
+def test_the_layout_checks_catch_a_stray_test_and_a_duplicate_name(tmp_path: Path) -> None:
+    for d in ("unit", "component", "fakes"):
+        (tmp_path / d).mkdir()
+    assert level_problems(tmp_path) == []
+    (tmp_path / "test_x.py").write_text("")
+    (tmp_path / "fakes" / "test_f.py").write_text("")
+    (tmp_path / "unit" / "test_same.py").write_text("")
+    (tmp_path / "component" / "test_same.py").write_text("")
+    assert level_problems(tmp_path) == ["test_x.py: not in a level folder",
+                                        "fakes/test_f.py: a test among the fakes"]
+    assert duplicate_names(tmp_path) == ["test_same.py"]
