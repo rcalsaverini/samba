@@ -7,7 +7,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
 - `docs/spec/`: the specification, the source of truth for behavior. Start at `docs/spec/README.md`,
   the index: one line per chapter saying when to read it. Chapters are named by topic (`overview`,
   `layout`, `task-files`, `states`, `orchestrator`, `workflow-config`, `workspaces`, `prompts`,
-  `running-claude`, `observability`, `cli`, `architecture`, `implementation-notes`, `backlog`) and are referenced by name, not by number. Read the chapters relevant to your task
+  `running-claude`, `observability`, `cli`, `principles`, `architecture`, `implementation-notes`, `backlog`) and are referenced by name, not by number. Read the chapters relevant to your task
   before changing code, and update the spec in the same change when behavior changes.
 - `README.md`: entry point with a short quickstart; links to the manual and the spec.
 - `docs/manual.md`: the user manual (setup, daily loop, troubleshooting), for people using Samba.

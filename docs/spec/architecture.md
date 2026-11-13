@@ -2,7 +2,7 @@
 
 Samba is layered so the rules of the core can be tested without a clock, a disk, a subprocess or a
 network (ADR 0011, ADR 0012). This chapter describes the layers, the ports and where each piece
-lives.
+lives. The principles behind the layering, and the vocabulary, are in the `principles` chapter.
 
 ## Layers
 

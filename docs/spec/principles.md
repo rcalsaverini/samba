@@ -1,0 +1,182 @@
+# Architecture principles
+
+This chapter states the principles behind Samba's layering, in the vocabulary of domain-driven
+design and hexagonal architecture, so that a design question ("may this depend on that", "where
+does this go") has an answer before it becomes a decision. The ADRs record the decisions that
+apply these principles; the `architecture` chapter says where each piece lives and how the rules
+are enforced. This chapter is normative: the code follows it, and a change that cannot follow a
+principle is a decision for an ADR, not an exception.
+
+## Vocabulary
+
+Samba uses these words with these meanings.
+
+- **Domain.** The rules and data of the problem: a task and its lifecycle, the states and the
+  transition table, questions, the dependencies between tasks, the retry and budget policy, and
+  the decision of what to do after an agent turn. Pure: no I/O, no clock, no ids, no log. The
+  domain is data and functions over data.
+- **Aggregate.** A record the domain loads, changes and saves as a whole, with the invariants that
+  must hold at every save. `Task` is the one aggregate (DDD: aggregate root).
+- **Value.** An immutable fact with no identity of its own: an id, a state, an instant, a question
+  record, an agent report, a validation result. Values are compared by content and passed freely.
+- **Use case.** One operation a person or the orchestrator can perform, named for what the person
+  does: change a task's state, answer a question, accept work, run a tick, run a turn. A use case
+  orchestrates the domain and talks to the outside through ports (DDD: application service;
+  hexagonal: the inside, together with the domain).
+- **Port.** An interface the inside declares so that the outside can be plugged in, written over
+  the inside's own types and holding no implementation. A driven port is something the inside
+  needs: the task store, the clock, the agent, git, validation, the journal, the terminal, the
+  lock. A driving port is how the outside calls in: the use cases themselves are that contract.
+- **Adapter.** An implementation of a port for one technology (markdown folders, the system clock,
+  the `claude` command, git worktrees, a shell command, a file lock, a log file, a terminal), or a
+  driving adapter that turns an outside event into a use case call (the command line driven by a
+  person, the orchestrator loop driven by time).
+- **Composition root.** The one place that builds adapters and hands them to use cases.
+- **Inside and outside.** The inside is the domain and the use cases. Everything else, including
+  the entry points, the adapters, the operating system and the person, is outside. Ports are the
+  edge of the inside.
+
+## Principles
+
+### 1. Dependencies point inward
+
+Entry points depend on the composition root, the use cases and the domain. Adapters depend on the
+ports and the domain. Use cases depend on the domain and on the ports they declare. The domain
+depends on the standard library and on itself. Nothing inside imports the composition root or an
+entry point, and nothing but the composition root imports an adapter.
+
+Why: the rules of Samba can then be tested without a clock, a disk, a process or a network, and
+rewritten without untangling them from storage and processes (ADR 0010, ADR 0011).
+
+### 2. The inside declares the ports, the outside implements them
+
+A port is created by the code that will receive the adapter and call it, in that code's own
+vocabulary. The adapter adapts to the port, never the reverse: a use case receives an agent report
+in Samba's terms, not the agent's raw output, and the store port speaks of tasks and states, not
+of folders and files.
+
+Importing a port is importing a type the inside declared, and breaks no rule. Importing an adapter
+from the inside is the breach. The distinction that matters is port against adapter, not interface
+against class.
+
+A port lives with the layer that declares it. Because of principle 3 the domain declares none, so
+every port belongs to the use-case layer (ADR 0018).
+
+Ports are added only where they buy a fast test or a seam for the rewrite. There is no dependency
+injection framework, no event bus and no interface for its own sake (ADR 0011).
+
+### 3. The domain takes values, never capabilities
+
+A domain function receives the results of I/O as arguments and performs none, not even through a
+port it could declare. Time arrives as a value built by the use case once per operation, so every
+timestamp of one operation is the same instant (ADR 0017).
+
+When a rule seems to need a capability during its computation, the boundary between inside and
+outside is drawn in the wrong place. Redraw it, trying these in order:
+
+1. Pass the values: a fixed number of them, known before the rule runs.
+2. Pass a seed and keep the rule deterministic.
+3. Pass a stream the rule pulls from, typed with the standard library.
+4. Make the rule a step function or a generator and let the use case run the loop against the
+   port, as the decision after an agent turn and the turn loop already do for the agent.
+
+If none fits, the operation is not a domain rule but a use case, and only its pure part stays in
+the domain.
+
+Why: a function of its arguments is deterministic, replayable from a record of its inputs and
+testable with literals, and an aggregate method that performs no I/O cannot fail halfway through
+and leave the aggregate half-changed (principle 5).
+
+### 4. The domain owns the vocabulary, the use cases own the needs
+
+The types every layer speaks in (the task, its id, its state, an instant, a question, an agent
+request and report, a validation result, a launch) are domain values. Ports are written over them
+but declared by the use cases. Being written in the domain's vocabulary is not the same as being
+declared by the domain.
+
+The domain knows no folder, path, sidecar, process, branch, worktree or agent output format. Those
+words belong to adapters, and the architecture test rejects them inside (ADR 0005, ADR 0006).
+
+### 5. An aggregate is a consistency boundary
+
+`Task` is loaded, changed and saved as a whole, and its invariants hold at every save. A state
+change goes through the one path that applies a transition row and saves. Concurrency between a
+running worker and a command is the store's business, resolved by merging a stale save field by
+field (architecture, The Tasks port and stale saves); the domain carries no version field and no
+retry loop.
+
+### 6. Every operation is one use case, and interfaces are thin
+
+Each thing a person or the orchestrator can do is one use case that takes plain values and returns
+one of a closed set of results. Input rules, such as resolving a task id from a prefix, live in the
+use case. An entry point parses its own input, makes one call and renders the result; it holds no
+rule, and no entry point calls another (ADR 0013, ADR 0014). The use cases are the contract a
+second interface, such as a web page or an MCP server, would call.
+
+Entry points are driving adapters: the command line is driven by a person, the orchestrator loop
+by the clock. The orchestrator is named parts with one reason to change each, plus a loop that
+holds no rule (ADR 0015).
+
+### 7. Adapters translate and hold no rule
+
+An adapter turns a port's calls into one technology and the technology's answers back into the
+port's types. It decides how, never whether: the markdown store decides how to merge a stale save
+and how to detect a hand move, never whether a move is legal; the agent runner builds a command
+line and parses a stream, never what an outcome means.
+
+Every port has an in-memory fake for the tests of the inside. A fake with behavior of its own is
+kept honest by a port contract: one set of cases run against the fake and the real adapter
+(ADR 0016).
+
+### 8. One composition root, and nothing inside knows what it was given
+
+Only the composition root builds adapters and wires them into use cases. Constructors take their
+ports, with no defaults. A use case cannot tell a fake from the real thing, which is what makes a
+component test mean something.
+
+### 9. The behavior contract lives outside the code
+
+Samba is written to be rewritten (ADR 0010). The contract of a rewrite is the spec, the scenario
+data that states the rules of the core, and the small end-to-end suite that drives the real command
+(ADR 0012, ADR 0016). Unit, component and integration tests protect this implementation and go
+with it. A new behavior gets a test at the lowest level that can show it.
+
+## Where a piece goes
+
+Ask these in order and stop at the first yes.
+
+| Question | Where it goes |
+|---|---|
+| Is it a fact or a rule about tasks that needs nothing from outside? | The domain: a value, a method of the aggregate, or a pure function. |
+| Does it need something from outside (the store, time, the agent, git, the person) to do its job? | A use case, which declares the port it needs and hands the domain the values it fetched. |
+| Does it speak to one technology (files, processes, git, a terminal, a log)? | An adapter of the port that names the need. |
+| Does it parse what a person or a timer gives, or render what a use case returns? | An entry point. |
+| Does it need to know which adapter is in use? | The composition root, and nowhere else. |
+
+A rule found in an adapter or an entry point moves inward. A technology word found inside moves
+outward. A capability found in the domain is redrawn with the list in principle 3.
+
+## How the principles are enforced
+
+- The architecture test reads the sources and checks the import rules of principles 1, 2 and 4,
+  the module lists of each layer, the absence of storage and process vocabulary inside, and that
+  only the composition root builds adapters (architecture, The architecture test).
+- Pyright in strict mode checks, wherever an adapter or a fake is handed to a use case, that it
+  satisfies the port, and that no `Any` reaches a public signature.
+- Port contracts keep the fakes honest (principle 7); scenario files and the end-to-end suite keep
+  the behavior contract (principle 9).
+- A change that cannot follow a principle is a decision for an ADR, not an exception.
+
+## Decisions that apply them
+
+| Principle | ADRs |
+|---|---|
+| 1. Dependencies point inward | 0011 |
+| 2. The inside declares the ports | 0011, 0018 |
+| 3. Values, never capabilities | 0017 |
+| 4. Vocabulary and needs | 0005, 0006, 0011 |
+| 5. The aggregate | 0005 |
+| 6. One use case per operation | 0013, 0014, 0015 |
+| 7. Adapters hold no rule | 0006, 0007, 0008, 0016 |
+| 8. One composition root | 0011 |
+| 9. The contract outside the code | 0009, 0010, 0012, 0016 |
