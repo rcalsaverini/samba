@@ -18,7 +18,7 @@ from samba.domain.ports import EditResult
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
 from fake_terminal import FakeLock, FakeTerminal
-from test_scenarios import FakeClock
+from fake_clock import FakeClock
 
 
 def make(status: State, tid: str = "t1") -> tuple[FakeTasks, TaskId]:

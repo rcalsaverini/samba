@@ -8,7 +8,7 @@ from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
 from fake_terminal import FakeLock
 from fake_vcs import FakeVcs
-from test_scenarios import FakeClock
+from fake_clock import FakeClock
 
 from samba.app.machine import Machine
 from samba.app.tick import Notes, Running, Tick

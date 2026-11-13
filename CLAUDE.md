@@ -134,8 +134,12 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `test_command_messages.py` (retry hints, the discard prompt), `test_question_rounds.py`,
     `test_task_new_inputs.py`.
   - `integration/`: one adapter against the real thing (`test_config.py`, `test_tasks_port.py`,
-    `test_adapters_vcs_validator_journal.py`). Imports neither `samba.entrypoints` nor
-    `samba.bootstrap`. Few.
+    `test_adapters_vcs_validator_journal.py`, `test_markdown_task_files.py` (the file layout),
+    `test_lock_port.py` (contract on `FakeLock` and `FileLock`, real contention, commands under
+    the lock), `test_terminal_adapter.py` (a real pseudo terminal, `$EDITOR`)). Where a fake has
+    behavior of its own (tasks, lock, ADRs) the port contract runs against both fake and adapter
+    through one parametrized fixture; scripted fakes are not paired. Imports neither
+    `samba.entrypoints` nor `samba.bootstrap`. Few.
   - `e2e/`: the `samba` CLI as a subprocess, asserting only on files and on calls recorded by the
     fake claude. **It must never import the `samba` package**: the suite is meant to be reused
     unchanged against a future rewrite in another language. Few. Empty for now (README only).
@@ -146,8 +150,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `fakes/`: `fake_claude.py` (scripted fake of the `claude` CLI, standard library only, shared by
     legacy and the future e2e tests), `fake_agent.py` (fake `AgentRunner`), `fake_session.py`
     (`FakeSession`, the `InteractiveSession` fake), `fake_tasks.py`, `fake_vcs.py`,
-    `fake_validator.py`, `fake_journal.py`, `fake_terminal.py` (with `FakeLock`): in-memory fakes
-    of the ports.
+    `fake_validator.py`, `fake_journal.py`, `fake_terminal.py` (with `FakeLock`), `fake_clock.py`
+    (`FakeClock`), `fake_adrs.py` (`FakeAdrs`): in-memory fakes of the ports.
   - `legacy/`: temporary, removed by the end of the test-levels chain (not extended). The old
     subprocess suite (`test_blackbox.py` and the other CLI tests, including `test_manual.py`, the
     drift check for `docs/manual.md`), the `Sandbox` helpers in `legacy_support.py` and a thin

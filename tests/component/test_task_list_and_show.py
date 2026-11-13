@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from fake_tasks import FakeTasks
-from test_scenarios import FakeClock
+from fake_clock import FakeClock
 
 from samba.app.queries import HEADER, QUESTION_HEADER, ListQuestions, ListTasks, ShowTask
 from samba.app.results import Table, Text

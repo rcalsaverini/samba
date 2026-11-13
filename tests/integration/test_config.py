@@ -120,3 +120,15 @@ def test_unknown_keys_warn_and_empty_body_fails(tmp_path: Path) -> None:
     write(tmp_path, "", body="\n")
     with pytest.raises(ConfigError):
         load_config(tmp_path)
+
+
+def test_a_workspaces_root_inside_the_repository_is_refused(tmp_path: Path) -> None:
+    write(tmp_path, "workspaces_root: inside/ws\n")
+    with pytest.raises(ConfigError, match="workspaces_root"):
+        load_config(tmp_path)
+
+
+def test_an_invalid_value_is_refused_naming_its_key(tmp_path: Path) -> None:
+    write(tmp_path, "max_concurrent: 0\n")
+    with pytest.raises(ConfigError, match="max_concurrent"):
+        load_config(tmp_path)

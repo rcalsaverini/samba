@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fake_tasks import FakeTasks
 from fake_terminal import FakeTerminal
-from test_scenarios import FakeClock
+from fake_clock import FakeClock
 
 from samba.app.create_task import CreateTask
 from samba.app.results import Done, Refused

@@ -247,7 +247,12 @@ adapter against git, files or a shell) and `e2e` (the `samba` command as a subpr
 widest levels stay few and a test goes to the lowest level that can show the behavior. Next to
 them: `checks/` (guards such as the architecture test and the spec drift check), `fakes/` (the
 fakes of the ports and `fake_claude.py`, put on the pytest `pythonpath` so tests import them by
-module name) and `legacy/`. `legacy/` is temporary: the old subprocess suite, moved there intact as
+module name) and `legacy/`. A port whose fake has behavior of its own (the task store, the lock,
+the ADR store) has its contract written once and run against both the fake and the real adapter
+through one parametrized fixture, so the component level cannot drift from the real store. A fake
+that only replays a script (the agent runner, the merge and validation results, the interactive
+session) has nothing to drift: its adapter gets integration tests of its own, and the port's
+signature is held by pyright. `legacy/` is temporary: the old subprocess suite, moved there intact as
 the behavior inventory while the new levels are written, and removed when the chain of tasks that
 rewrites the suite ends; it is not extended. Also temporary, and removed with it: `migration/`,
 with `inventory.json` (one entry per legacy test function: the behavior it checks, the level it

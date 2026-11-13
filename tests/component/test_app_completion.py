@@ -11,7 +11,7 @@ from samba.domain.transitions import human_events
 
 from fake_tasks import FakeTasks
 from test_app_queries import FakeAdrs, adr
-from test_scenarios import FakeClock
+from fake_clock import FakeClock
 
 
 def store(*specs: tuple[str, State]) -> FakeTasks:

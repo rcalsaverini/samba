@@ -7,7 +7,7 @@ import asyncio
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
 from fake_terminal import FakeLock, FakeTerminal
-from test_scenarios import FakeClock
+from fake_clock import FakeClock
 from test_tick import Rig
 
 from samba.app.answer_question import AnswerQuestion

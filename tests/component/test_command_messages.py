@@ -6,7 +6,10 @@ import pytest
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
 from fake_terminal import FakeLock, FakeTerminal
-from test_scenarios import FakeClock
+from fake_clock import FakeClock
+from fake_vcs import FakeVcs
+from test_app_accept_create import accept, accept_uc, names
+from test_app_use_cases import make
 
 from samba.app.change_state import ChangeState, retry_hint
 from samba.app.machine import Machine
@@ -59,6 +62,18 @@ def test_retrying_a_stopped_task_prints_no_hint_and_clears_the_cause() -> None:
     assert isinstance(res, Done) and res.notes == ()
     task = store.records[TaskId("t1")]
     assert (task.status, task.blocked_cause) == ("plan-todo", None)
+
+
+@pytest.mark.parametrize("answer, merged", [(["n"], False), ([""], False), (["y"], True)])
+def test_work_accept_on_a_terminal_merges_only_on_yes(answer: list[str], merged: bool) -> None:
+    tasks, tid = make("work-review")
+    vcs = FakeVcs()
+    terminal = FakeTerminal(interactive=True, lines=answer)
+    res = accept(accept_uc(tasks, vcs, terminal=terminal), tid)
+    assert len(terminal.prompts) == 1 and tid in terminal.prompts[0]
+    assert isinstance(res, Done) is merged
+    assert ("begin_merge" in names(vcs)) is merged
+    assert tasks.records[tid].status == ("done" if merged else "work-review")
 
 
 def test_the_discard_prompt_names_the_full_id_resolved_from_a_prefix() -> None:

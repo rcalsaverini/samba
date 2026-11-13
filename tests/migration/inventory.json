@@ -224,8 +224,11 @@
       "tests/integration/test_tasks_port.py::test_agents_body_edit_survives_a_worker_save",
       "tests/integration/test_tasks_port.py::test_markdown_counter_save_does_not_touch_the_task_file"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_tasks_port.py::test_agents_body_edit_survives_a_worker_save",
+      "tests/integration/test_tasks_port.py::test_markdown_counter_save_does_not_touch_the_task_file"
+    ],
     "reason": ""
   },
   {
@@ -392,8 +395,10 @@
     "existing": [
       "tests/integration/test_tasks_port.py::test_markdown_rejects_invalid_names_and_legacy_folders"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_tasks_port.py::test_markdown_rejects_invalid_names_and_legacy_folders"
+    ],
     "reason": ""
   },
   {
@@ -607,8 +612,10 @@
     "behavior": "an invalid config value (max_concurrent 0) is a config error naming the key",
     "why": "validated by workflow_file adapter on a real file",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_config.py::test_an_invalid_value_is_refused_naming_its_key"
+    ],
     "reason": ""
   },
   {
@@ -633,8 +640,10 @@
     "behavior": "a workspaces_root inside the repository is a config error naming workspaces_root",
     "why": "validated by workflow_file adapter on a real file",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_config.py::test_a_workspaces_root_inside_the_repository_is_refused"
+    ],
     "reason": ""
   },
   {
@@ -883,8 +892,10 @@
     "existing": [
       "tests/integration/test_tasks_port.py::test_markdown_file_layout_matches_the_old_writers"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_tasks_port.py::test_markdown_file_layout_matches_the_old_writers"
+    ],
     "reason": ""
   },
   {
@@ -1040,8 +1051,11 @@
     "behavior": "a command blocks while another process holds .samba/lock, then completes once released",
     "why": "blocking flock with timeout",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_lock_port.py::test_a_command_waits_for_the_lock_then_applies",
+      "tests/integration/test_lock_port.py::test_a_blocking_taker_waits_for_the_release"
+    ],
     "reason": ""
   },
   {
@@ -1051,8 +1065,10 @@
     "behavior": "plan/work accept/reject issued while the orchestrator runs is applied once, never seen as a hand move or illegal move, attempts stay 0",
     "why": "real flock serialises command and tick across processes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_lock_port.py::test_a_command_is_samba_own_move_and_never_a_hand_move"
+    ],
     "reason": ""
   },
   {
@@ -1062,8 +1078,11 @@
     "behavior": "--edit takes the feedback text from $EDITOR",
     "why": "real $EDITOR process via StdTerminal.edit",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_terminal_adapter.py::test_the_editor_from_the_environment_edits_the_text",
+      "tests/component/test_app_use_cases.py::test_edit_failure_refuses_and_edit_text_is_used"
+    ],
     "reason": ""
   },
   {
@@ -1073,8 +1092,11 @@
     "behavior": "an editor exiting non-zero refuses (exit 1) and leaves task file and state unchanged",
     "why": "editor exit code mapping is in StdTerminal; refusal itself is component",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_terminal_adapter.py::test_an_editor_that_fails_changes_nothing",
+      "tests/component/test_app_use_cases.py::test_edit_failure_refuses_and_edit_text_is_used"
+    ],
     "reason": ""
   },
   {
@@ -1084,8 +1106,10 @@
     "behavior": "new feedback round is appended after human prose already in ## Feedback, before the next section",
     "why": "markdown section editing",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_markdown_task_files.py::test_feedback_goes_after_human_prose_already_in_the_section"
+    ],
     "reason": ""
   },
   {
@@ -1106,8 +1130,10 @@
     "behavior": "a missing ## Feedback section is created once, placed before ## Log",
     "why": "markdown section placement",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_markdown_task_files.py::test_the_first_feedback_creates_the_section_once_before_the_log"
+    ],
     "reason": ""
   },
   {
@@ -1219,8 +1245,10 @@
     "behavior": "repeated rejects append '### Round N' blocks in order in the task file, demote '##' headings in feedback, log round 2",
     "why": "markdown layout of Feedback section",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_markdown_task_files.py::test_repeated_rejects_append_rounds_in_order_and_demote_headings"
+    ],
     "reason": ""
   },
   {
@@ -1300,8 +1328,11 @@
     "behavior": "question answer and task retry while the orchestrator runs are applied once, never seen as hand or illegal moves, then the task runs to work-review",
     "why": "real flock serialises command and tick across processes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_lock_port.py::test_a_command_is_samba_own_move_and_never_a_hand_move",
+      "tests/integration/test_lock_port.py::test_an_answer_is_samba_own_move_too"
+    ],
     "reason": ""
   },
   {
@@ -1337,8 +1368,11 @@
     "behavior": "on a real tty discard asks [y/N]; n or empty declines (exit 1), y discards",
     "why": "prompt over a pseudo terminal; policy is component",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_terminal_adapter.py::test_on_a_tty_the_prompt_is_shown_and_the_typed_line_is_read",
+      "tests/component/test_app_use_cases.py::test_confirm_policy"
+    ],
     "reason": ""
   },
   {
@@ -1454,8 +1488,10 @@
     "behavior": "a markdown heading in an answer is demoted in the task file",
     "why": "markdown rendering of answers",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_markdown_task_files.py::test_a_heading_inside_an_answer_is_demoted_in_the_task_file"
+    ],
     "reason": ""
   },
   {
@@ -1808,8 +1844,11 @@
     "behavior": "a depends_on that is not a list is ignored and the task runs",
     "why": "front matter parsing in the store",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_markdown_task_files.py::test_a_depends_on_that_is_not_a_list_is_ignored",
+      "tests/component/test_scenarios.py::test_deps[deps.json::no dependencies is ready]"
+    ],
     "reason": ""
   },
   {
@@ -2162,8 +2201,10 @@
     "behavior": "empty old-layout folders do not block startup",
     "why": "folder check in markdown store",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_markdown_task_files.py::test_empty_old_layout_folders_do_not_block_startup"
+    ],
     "reason": ""
   },
   {
@@ -2221,8 +2262,11 @@
       "tests/integration/test_tasks_port.py::test_markdown_rejects_invalid_names_and_legacy_folders",
       "tests/component/test_app_startup.py::test_a_store_error_becomes_a_startup_error"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_tasks_port.py::test_markdown_rejects_invalid_names_and_legacy_folders",
+      "tests/component/test_app_startup.py::test_a_store_error_becomes_a_startup_error"
+    ],
     "reason": ""
   },
   {
@@ -2232,8 +2276,10 @@
     "behavior": "an old sidecar with a phase key loads and the key is dropped on save",
     "why": "sidecar JSON parsing in store",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_markdown_task_files.py::test_an_old_sidecar_still_loads_and_its_old_key_is_dropped_on_save"
+    ],
     "reason": ""
   },
   {
@@ -2418,8 +2464,10 @@
     "behavior": "a plan containing ## headings stays one ## Plan section and is wholly replaced on revision",
     "why": "markdown section parsing in the store",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_markdown_task_files.py::test_a_plan_with_headings_stays_one_section_and_is_replaced_whole_on_revision"
+    ],
     "reason": ""
   },
   {
@@ -2717,8 +2765,10 @@
     "behavior": "a plan run's assumptions are written under ## Assumptions, no questions recorded",
     "why": "section name in the markdown file",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_markdown_task_files.py::test_assumptions_are_their_own_section_and_record_no_question"
+    ],
     "reason": ""
   },
   {
@@ -2865,8 +2915,10 @@
     "behavior": "task new without tty writes priority 3, no depends_on, '# Title' and an empty body, no template text",
     "why": "empty-body file layout; default 3 is a CLI default",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_markdown_task_files.py::test_a_new_task_without_a_terminal_is_front_matter_and_the_title_only"
+    ],
     "reason": ""
   },
   {
@@ -3026,8 +3078,10 @@
     "existing": [
       "tests/integration/test_tasks_port.py::test_observe_accept_and_revert"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_tasks_port.py::test_observe_accept_and_revert"
+    ],
     "reason": ""
   },
   {
@@ -3139,8 +3193,10 @@
     "existing": [
       "tests/integration/test_tasks_port.py::test_save_after_status_change_records_the_new_status"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_tasks_port.py::test_save_after_status_change_records_the_new_status"
+    ],
     "reason": ""
   },
   {
@@ -3332,8 +3388,11 @@
     "behavior": "on a real tty answering n declines and y merges",
     "why": "real pty prompt in StdTerminal",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_terminal_adapter.py::test_on_a_tty_the_prompt_is_shown_and_the_typed_line_is_read",
+      "tests/component/test_command_messages.py::test_work_accept_on_a_terminal_merges_only_on_yes"
+    ],
     "reason": ""
   },
   {

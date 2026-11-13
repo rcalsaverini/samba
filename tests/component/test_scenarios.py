@@ -17,6 +17,7 @@ from typing import Any, cast
 
 import pytest
 from fake_agent import FakeAgentRunner
+from fake_clock import FakeClock
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
 from fake_terminal import FakeLock, FakeTerminal
@@ -76,26 +77,8 @@ from samba.domain.transitions import (
 )
 
 SCENARIO_DIR = Path(__file__).resolve().parent / "scenarios"
-FAKE_ISO = "2026-01-01T00:00:00+00:00"
 
 Scenario = dict[str, Any]
-
-
-class FakeClock:
-    def __init__(self, now: float = 0.0) -> None:
-        self.now = now
-
-    def time(self) -> float:
-        return self.now
-
-    def monotonic(self) -> float:
-        return self.now
-
-    def iso_seconds(self) -> str:
-        return FAKE_ISO
-
-    def log_stamp(self) -> str:
-        return "2026-01-01 00:00"
 
 
 def load(kind: str) -> list[Scenario]:

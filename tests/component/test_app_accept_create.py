@@ -19,7 +19,7 @@ from fake_terminal import FakeLock, FakeTerminal
 from fake_validator import FakeValidator, failing, passing
 from fake_vcs import FakeVcs
 from test_app_use_cases import make, messages
-from test_scenarios import FakeClock
+from fake_clock import FakeClock
 
 
 # --- AcceptWork -------------------------------------------------------------------------------
