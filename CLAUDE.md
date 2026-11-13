@@ -170,9 +170,14 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
 Run these as separate, plain commands (no pipes or `&&`):
 
 - `uv run pyright` (strict mode, must report 0 errors)
-- `uv run pytest -q tests/unit tests/component` (the fast loop, under a second): run it while working
-- `uv run pytest -q -n auto` (the full run in parallel with pytest-xdist, about 20 seconds;
-  about a minute without `-n auto`, mostly `tests/e2e`): run it before reporting done
+- While working, run the fast levels only: `uv run pytest -q tests/unit tests/component tests/checks`
+  (about a second).
+- When you change an adapter or anything it reads or writes on disk, also run
+  `uv run pytest -q tests/integration` (a few seconds).
+- Do not run `tests/e2e` while working. The full run, end-to-end level included, is the last step,
+  once, before asking for a work review: `uv run pytest -q -n auto` (in parallel with
+  pytest-xdist, about 20 seconds). Under Samba this is the validation it runs itself when you
+  report done, so an agent does not run it. If it fails, the work is not done: fix it and go on.
 
 ## Conventions
 

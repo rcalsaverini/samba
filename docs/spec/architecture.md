@@ -264,10 +264,15 @@ Each of its tests says in its docstring what only that level shows, and
 The suite was rewritten this way from the old subprocess suite, using it as a behavior inventory
 (every old test mapped to the new tests that cover it) and keeping line and branch coverage of
 `src/samba` at least where it was (95.7% before, 95.9% after; `uv run pytest --cov`, subprocesses
-included). The fast loop `uv run pytest -q tests/unit tests/component` runs in under a second; the
-full run takes about a minute, most of it the end-to-end level, or about 20 seconds in
-parallel (`uv run pytest -q -n auto`, pytest-xdist; it is what validation runs). Tests
-therefore keep to their own temporary directories and processes, so any two can run at once.
+included).
+
+When each level runs: during development only the fast levels, `uv run pytest -q tests/unit
+tests/component tests/checks` (about a second), and `tests/integration` when an adapter or what it
+reads or writes changes (a few seconds). The end-to-end level is not run while working: it runs
+once, as the last step before a work review, in the full run `uv run pytest -q -n auto` (about 20
+seconds with pytest-xdist, about a minute serially). That full run is Samba's validation, so an
+agent never runs it itself: a failure comes back to the agent as a failed validation and the work
+continues. Tests keep to their own temporary directories and processes, so any two can run at once.
 
 ## Scenarios
 

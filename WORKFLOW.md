@@ -55,8 +55,15 @@ Task: {{ task.title }}
 {{ task.body }}
 
 Start by reading CLAUDE.md (the repo map) and the chapters of docs/spec/ the task points to
-(start at docs/spec/README.md). Write the black-box tests for the new behavior first, then the
-implementation. Keep existing tests passing and pyright at 0 errors.
+(start at docs/spec/README.md). Write the tests for the new behavior first, at the lowest level
+that can show it (ADR 0016: unit, component, integration, end-to-end), then the implementation.
+Keep existing tests passing and pyright at 0 errors.
+
+Which tests to run: while working, only `uv run pytest -q tests/unit tests/component tests/checks`
+(about a second), plus `uv run pytest -q tests/integration` when you change an adapter or what it
+reads or writes on disk. Do not run `tests/e2e` or the whole suite yourself: when you report done,
+Samba runs the full validation (`uv run pyright && uv run pytest -q -n auto`, end-to-end level
+included) and, if it fails, sends you the failing tail so you can fix it and go on.
 
 Updating the spec is a step of every task, not an option. Before reporting done, make the edits
 listed in the plan's "Spec changes" section in docs/spec/ on this branch (or, without a plan,
