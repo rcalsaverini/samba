@@ -46,8 +46,10 @@
     "behavior": "samba adr --help lists list, show, accept, reject, supersede",
     "why": "help output of the CLI",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_cli_shape.py::test_each_noun_lists_its_verbs"
+    ],
     "reason": ""
   },
   {
@@ -103,7 +105,8 @@
     "existing": [],
     "status": "covered",
     "covered_by": [
-      "tests/integration/test_adr_store.py::test_no_adr_folder_is_an_empty_list"
+      "tests/integration/test_adr_store.py::test_no_adr_folder_is_an_empty_list",
+      "tests/e2e/test_cli_shape.py::test_adr_and_dev_commands_need_no_workflow"
     ],
     "reason": "Running without WORKFLOW.md is the end-to-end half."
   },
@@ -697,9 +700,11 @@
     "behavior": "old top-level commands (new, list, show, status, transitions) exit 2 with No such command",
     "why": "command names and exit codes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
-    "reason": ""
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_cli_shape.py::test_usage_errors_exit_2_with_a_message_on_stderr_and_change_nothing"
+    ],
+    "reason": "The exact wording of the library's message ('No such command') is not asserted, only exit 2 and a message on stderr."
   },
   {
     "id": "test_blackbox.py::test_repo_workflow_body_has_the_spec_step",
@@ -1016,8 +1021,10 @@
     "behavior": "bash completion offers command names, verbs and options, hiding dev",
     "why": "completion via environment",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_completion_and_docs_e2e.py::test_completion_offers_commands_options_and_the_tasks_a_verb_can_act_on"
+    ],
     "reason": ""
   },
   {
@@ -1027,8 +1034,10 @@
     "behavior": "dev transitions works without WORKFLOW.md",
     "why": "command wiring without config",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_cli_shape.py::test_adr_and_dev_commands_need_no_workflow"
+    ],
     "reason": ""
   },
   {
@@ -1038,8 +1047,10 @@
     "behavior": "dev transitions prints the markdown transition table",
     "why": "command output; renderer itself could be unit",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_cli_shape.py::test_adr_and_dev_commands_need_no_workflow"
+    ],
     "reason": ""
   },
   {
@@ -1049,8 +1060,10 @@
     "behavior": "help is plain text with no ANSI or box drawing when piped",
     "why": "help output to a pipe",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_cli_shape.py::test_help_is_plain_text_when_piped"
+    ],
     "reason": ""
   },
   {
@@ -1060,8 +1073,10 @@
     "behavior": "top-level help lists exactly the public commands, with dev commands in an epilog",
     "why": "help output",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_cli_shape.py::test_help_lists_exactly_the_public_commands_and_dev_apart"
+    ],
     "reason": ""
   },
   {
@@ -1071,8 +1086,10 @@
     "behavior": "--repo is accepted after positional arguments",
     "why": "option parsing",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_cli_shape.py::test_the_repo_option_may_follow_the_arguments"
+    ],
     "reason": ""
   },
   {
@@ -1082,8 +1099,10 @@
     "behavior": "--show-completion prints a completion script for bash, zsh and fish",
     "why": "completion via process",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_completion_and_docs_e2e.py::test_show_completion_prints_a_script_for_each_shell"
+    ],
     "reason": ""
   },
   {
@@ -1093,8 +1112,10 @@
     "behavior": "bad commands, missing args, conflicting options and bad types exit 2 with a stderr message",
     "why": "argument parsing and exit codes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_cli_shape.py::test_usage_errors_exit_2_with_a_message_on_stderr_and_change_nothing"
+    ],
     "reason": ""
   },
   {
@@ -1172,8 +1193,10 @@
     "behavior": "--feedback with --edit is a usage error (exit 2), nothing changes",
     "why": "option conflict checked in the CLI",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_cli_shape.py::test_usage_errors_exit_2_with_a_message_on_stderr_and_change_nothing"
+    ],
     "reason": ""
   },
   {
@@ -1699,8 +1722,10 @@
     "behavior": "completion with a broken WORKFLOW.md offers nothing, exits 0, no stderr",
     "why": "error swallowing in CLI callbacks",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_completion_and_docs_e2e.py::test_completion_is_silent_when_it_cannot_read_a_repo"
+    ],
     "reason": ""
   },
   {
@@ -1710,8 +1735,10 @@
     "behavior": "completion outside a repo offers nothing and prints nothing to stderr",
     "why": "error swallowing in CLI callbacks",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_completion_and_docs_e2e.py::test_completion_is_silent_when_it_cannot_read_a_repo"
+    ],
     "reason": ""
   },
   {
@@ -1751,8 +1778,10 @@
     "behavior": "completion honors --repo typed on the line from another cwd",
     "why": "completion callbacks read the command line",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_completion_and_docs_e2e.py::test_completion_honors_a_repo_typed_on_the_line"
+    ],
     "reason": ""
   },
   {
@@ -2033,7 +2062,8 @@
     ],
     "status": "covered",
     "covered_by": [
-      "tests/component/test_app_explore.py::test_a_launch_error_is_a_refusal"
+      "tests/component/test_app_explore.py::test_a_launch_error_is_a_refusal",
+      "tests/e2e/test_explore_e2e.py::test_explore_with_a_missing_claude_binary_is_refused"
     ],
     "reason": ""
   },
@@ -2044,8 +2074,10 @@
     "behavior": "explore without WORKFLOW.md exits 2 with a config error and starts nothing",
     "why": "bootstrap config error and exit code",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_explore_e2e.py::test_explore_without_a_workflow_is_a_config_error_and_starts_nothing"
+    ],
     "reason": ""
   },
   {
@@ -2055,8 +2087,10 @@
     "behavior": "samba explore creates no .samba directory",
     "why": "only whole-process side effects show it",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_explore_e2e.py::test_explore_runs_claude_in_the_repo_and_leaves_no_samba_folder"
+    ],
     "reason": ""
   },
   {
@@ -2385,8 +2419,10 @@
     "behavior": "the subcommand list parsed from --help includes the known commands",
     "why": "needs real --help output",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_completion_and_docs_e2e.py::test_the_manual_mentions_every_command_the_help_lists"
+    ],
     "reason": ""
   },
   {
@@ -2396,8 +2432,10 @@
     "behavior": "README.md and docs/manual.md contain no em-dash",
     "why": "reads doc files only (fits tests/checks)",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/checks/test_manual_text.py::test_the_readme_and_the_manual_have_no_em_dashes"
+    ],
     "reason": ""
   },
   {
@@ -2407,8 +2445,10 @@
     "behavior": "docs/manual.md mentions --install-completion and --show-completion",
     "why": "reads a doc file only (fits tests/checks)",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/checks/test_manual_text.py::test_the_manual_documents_shell_completion"
+    ],
     "reason": ""
   },
   {
@@ -2418,8 +2458,10 @@
     "behavior": "docs/manual.md mentions samba <cmd> for every command listed in --help",
     "why": "needs real --help output",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_completion_and_docs_e2e.py::test_the_manual_mentions_every_command_the_help_lists"
+    ],
     "reason": ""
   },
   {
@@ -2874,8 +2916,10 @@
     "behavior": "samba question --help lists list, show, answer; top help lists question",
     "why": "help output of the CLI",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_cli_shape.py::test_each_noun_lists_its_verbs"
+    ],
     "reason": ""
   },
   {
@@ -3028,8 +3072,10 @@
     "behavior": "task new --plan is an unknown option (exit 2), nothing created",
     "why": "CLI option surface",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/e2e/test_cli_shape.py::test_usage_errors_exit_2_with_a_message_on_stderr_and_change_nothing"
+    ],
     "reason": ""
   },
   {

@@ -145,11 +145,19 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `samba.entrypoints` nor `samba.bootstrap`. Few.
   - `e2e/`: the `samba` CLI as a subprocess, asserting only on files and on calls recorded by the
     fake claude. **It must never import the `samba` package**: the suite is meant to be reused
-    unchanged against a future rewrite in another language. Few. Empty for now (README only).
+    unchanged against a future rewrite in another language (`SAMBA_CMD` replaces the command).
+    `e2e_box.py` is its own small sandbox (the `box` fixture in `conftest.py`): a temp git repo,
+    `WORKFLOW.md`, the scripted fake claude. Files: `test_cli_shape.py` (help, usage errors exit 2,
+    stdout vs stderr, config errors), `test_completion_and_docs_e2e.py` (completion through the
+    environment, and the manual drift check: every command in `--help` is in `docs/manual.md`),
+    `test_explore_e2e.py`, `test_journeys.py` (a few whole journeys), `test_signals_and_terminal.py`
+    (SIGINT, `task stop` of a live agent, prompts on a real pty). Each test's docstring says what
+    only this level shows; `checks/test_e2e_budget.py` caps it at 30 test functions.
   - `checks/`: `test_architecture.py` (the dependency rule and the per-folder import rules; reads
     sources with `ast`, never imports `samba`; append moved domain modules to its `DOMAIN_MODULES`)
     and `test_spec_docs.py` (spec drift), `test_repo_docs_match_the_code.py` (the states chapter
-    table and the repository `WORKFLOW.md` body agree with the code).
+    table and the repository `WORKFLOW.md` body agree with the code), `test_manual_text.py` (the
+    manual documents completion; no em-dashes in README and manual), `test_e2e_budget.py`.
   - `fakes/`: `fake_claude.py` (scripted fake of the `claude` CLI, standard library only, shared by
     legacy and the future e2e tests), `fake_agent.py` (fake `AgentRunner`), `fake_session.py`
     (`FakeSession`, the `InteractiveSession` fake), `fake_tasks.py`, `fake_vcs.py`,

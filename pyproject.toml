@@ -27,7 +27,7 @@ dev = [
 include = ["src", "tests"]
 typeCheckingMode = "strict"
 pythonVersion = "3.11"
-extraPaths = ["src", "tests/fakes", "tests/legacy", "tests/component"]
+extraPaths = ["src", "tests/fakes", "tests/legacy", "tests/component", "tests/e2e"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
