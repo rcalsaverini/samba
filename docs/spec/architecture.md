@@ -249,7 +249,13 @@ them: `checks/` (guards such as the architecture test and the spec drift check),
 fakes of the ports and `fake_claude.py`, put on the pytest `pythonpath` so tests import them by
 module name) and `legacy/`. `legacy/` is temporary: the old subprocess suite, moved there intact as
 the behavior inventory while the new levels are written, and removed when the chain of tasks that
-rewrites the suite ends; it is not extended. The fast loop is
+rewrites the suite ends; it is not extended. Also temporary, and removed with it: `migration/`,
+with `inventory.json` (one entry per legacy test function: the behavior it checks, the level it
+belongs to, and the new tests that cover it, or why it is dropped) and `baseline_coverage.json`
+(coverage of `src/samba` by the suite before the rewrite, subprocesses included, measured with
+`uv run pytest --cov`). `checks/test_migration_inventory.py` keeps the inventory complete and its
+references real; the rewrite ends when every entry is covered or dropped and the new levels alone
+match the baseline. The fast loop is
 `uv run pytest -q tests/unit tests/component`; the full run takes about 4.5 minutes, mostly legacy.
 
 ## Scenarios

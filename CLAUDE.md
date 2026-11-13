@@ -144,6 +144,13 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     subprocess suite (`test_blackbox.py` and the other CLI tests, including `test_manual.py`, the
     drift check for `docs/manual.md`), the `Sandbox` helpers in `legacy_support.py` and a thin
     `conftest.py` that exposes its `sb` fixture. These tests never import `samba` either.
+  - `migration/`: temporary, removed with `legacy/`. `inventory.json` (one entry per legacy test
+    function: behavior, target level, `status` todo, covered or dropped, `covered_by` new test ids,
+    `reason`) and `baseline_coverage.json` (coverage of `src/samba` before the rewrite).
+    `checks/test_migration_inventory.py` fails on a legacy test missing from the inventory or a
+    `covered_by` that names no real test. When you write a test that replaces a legacy one, mark
+    its entry covered. Coverage: `uv run pytest --cov` (configured in `pyproject.toml`,
+    subprocesses included).
 
 ## Checks
 

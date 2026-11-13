@@ -16,7 +16,12 @@ build-backend = "hatchling.build"
 packages = ["src/samba"]
 
 [dependency-groups]
-dev = ["pytest>=8", "pyright>=1.1.380", "types-pyyaml"]
+dev = [
+    "pytest>=8",
+    "pyright>=1.1.380",
+    "types-pyyaml",
+    "pytest-cov>=7.1.0",
+]
 
 [tool.pyright]
 include = ["src", "tests"]
@@ -27,3 +32,10 @@ extraPaths = ["src", "tests/fakes", "tests/legacy", "tests/component"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests/fakes", "tests/legacy", "tests/component"]
+
+[tool.coverage.run]
+# Measured only on request (`uv run pytest --cov`). The end-to-end tests run `python -m samba`
+# in subprocesses, so subprocess measurement is on.
+source = ["samba"]
+branch = true
+patch = ["subprocess"]

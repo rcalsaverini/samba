@@ -1,0 +1,418 @@
+{
+  "note": "Coverage of src/samba by the whole suite before the rewrite (legacy plus the in-process tests), measured with uv run pytest --cov, subprocesses included. Run on 2026-11-13: 741 passed, 1 failed (tests/legacy/test_commands_phase2.py::test_command_while_orchestrator_runs[retry], timing-sensitive under coverage overhead; it passes in a plain run).",
+  "totals": {
+    "statements": 3476,
+    "covered_lines": 3378,
+    "branches": 900,
+    "covered_branches": 808,
+    "percent": 95.7
+  },
+  "modules": {
+    "src/samba/__init__.py": {
+      "statements": 0,
+      "covered_lines": 0,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/__main__.py": {
+      "statements": 3,
+      "covered_lines": 3,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/adapters/__init__.py": {
+      "statements": 0,
+      "covered_lines": 0,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/adapters/adr_files.py": {
+      "statements": 19,
+      "covered_lines": 19,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/adapters/adr_format.py": {
+      "statements": 125,
+      "covered_lines": 115,
+      "branches": 52,
+      "covered_branches": 42,
+      "percent": 88.7
+    },
+    "src/samba/adapters/claude_cli.py": {
+      "statements": 227,
+      "covered_lines": 214,
+      "branches": 70,
+      "covered_branches": 59,
+      "percent": 91.9
+    },
+    "src/samba/adapters/file_lock.py": {
+      "statements": 34,
+      "covered_lines": 34,
+      "branches": 4,
+      "covered_branches": 4,
+      "percent": 100.0
+    },
+    "src/samba/adapters/git_vcs.py": {
+      "statements": 134,
+      "covered_lines": 127,
+      "branches": 46,
+      "covered_branches": 39,
+      "percent": 92.2
+    },
+    "src/samba/adapters/interactive_session.py": {
+      "statements": 13,
+      "covered_lines": 13,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/adapters/log_journal.py": {
+      "statements": 51,
+      "covered_lines": 49,
+      "branches": 10,
+      "covered_branches": 10,
+      "percent": 96.7
+    },
+    "src/samba/adapters/markdown_tasks.py": {
+      "statements": 361,
+      "covered_lines": 339,
+      "branches": 152,
+      "covered_branches": 132,
+      "percent": 91.8
+    },
+    "src/samba/adapters/process.py": {
+      "statements": 40,
+      "covered_lines": 36,
+      "branches": 2,
+      "covered_branches": 2,
+      "percent": 90.5
+    },
+    "src/samba/adapters/shell_validator.py": {
+      "statements": 17,
+      "covered_lines": 17,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/adapters/system.py": {
+      "statements": 16,
+      "covered_lines": 16,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/adapters/terminal.py": {
+      "statements": 40,
+      "covered_lines": 37,
+      "branches": 6,
+      "covered_branches": 5,
+      "percent": 91.3
+    },
+    "src/samba/adapters/workflow_file.py": {
+      "statements": 147,
+      "covered_lines": 131,
+      "branches": 56,
+      "covered_branches": 42,
+      "percent": 85.2
+    },
+    "src/samba/app/__init__.py": {
+      "statements": 0,
+      "covered_lines": 0,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/app/accept_work.py": {
+      "statements": 100,
+      "covered_lines": 99,
+      "branches": 42,
+      "covered_branches": 40,
+      "percent": 97.9
+    },
+    "src/samba/app/adr.py": {
+      "statements": 44,
+      "covered_lines": 44,
+      "branches": 2,
+      "covered_branches": 2,
+      "percent": 100.0
+    },
+    "src/samba/app/answer_question.py": {
+      "statements": 81,
+      "covered_lines": 78,
+      "branches": 32,
+      "covered_branches": 29,
+      "percent": 94.7
+    },
+    "src/samba/app/change_state.py": {
+      "statements": 82,
+      "covered_lines": 79,
+      "branches": 34,
+      "covered_branches": 32,
+      "percent": 95.7
+    },
+    "src/samba/app/completion.py": {
+      "statements": 42,
+      "covered_lines": 42,
+      "branches": 12,
+      "covered_branches": 12,
+      "percent": 100.0
+    },
+    "src/samba/app/confirm.py": {
+      "statements": 15,
+      "covered_lines": 15,
+      "branches": 6,
+      "covered_branches": 6,
+      "percent": 100.0
+    },
+    "src/samba/app/create_task.py": {
+      "statements": 49,
+      "covered_lines": 49,
+      "branches": 16,
+      "covered_branches": 16,
+      "percent": 100.0
+    },
+    "src/samba/app/explore.py": {
+      "statements": 17,
+      "covered_lines": 17,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/app/finish.py": {
+      "statements": 47,
+      "covered_lines": 47,
+      "branches": 6,
+      "covered_branches": 5,
+      "percent": 98.1
+    },
+    "src/samba/app/guard.py": {
+      "statements": 14,
+      "covered_lines": 14,
+      "branches": 4,
+      "covered_branches": 4,
+      "percent": 100.0
+    },
+    "src/samba/app/machine.py": {
+      "statements": 39,
+      "covered_lines": 36,
+      "branches": 10,
+      "covered_branches": 7,
+      "percent": 87.8
+    },
+    "src/samba/app/prompt_builder.py": {
+      "statements": 50,
+      "covered_lines": 50,
+      "branches": 8,
+      "covered_branches": 8,
+      "percent": 100.0
+    },
+    "src/samba/app/queries.py": {
+      "statements": 113,
+      "covered_lines": 110,
+      "branches": 44,
+      "covered_branches": 40,
+      "percent": 95.5
+    },
+    "src/samba/app/resolve.py": {
+      "statements": 37,
+      "covered_lines": 37,
+      "branches": 8,
+      "covered_branches": 8,
+      "percent": 100.0
+    },
+    "src/samba/app/results.py": {
+      "statements": 31,
+      "covered_lines": 31,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/app/run_task.py": {
+      "statements": 48,
+      "covered_lines": 48,
+      "branches": 8,
+      "covered_branches": 8,
+      "percent": 100.0
+    },
+    "src/samba/app/startup.py": {
+      "statements": 32,
+      "covered_lines": 32,
+      "branches": 12,
+      "covered_branches": 11,
+      "percent": 97.7
+    },
+    "src/samba/app/task_commands.py": {
+      "statements": 34,
+      "covered_lines": 34,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/app/tick.py": {
+      "statements": 144,
+      "covered_lines": 141,
+      "branches": 60,
+      "covered_branches": 55,
+      "percent": 96.1
+    },
+    "src/samba/app/turn.py": {
+      "statements": 114,
+      "covered_lines": 113,
+      "branches": 42,
+      "covered_branches": 40,
+      "percent": 98.1
+    },
+    "src/samba/bootstrap.py": {
+      "statements": 83,
+      "covered_lines": 83,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/domain/__init__.py": {
+      "statements": 0,
+      "covered_lines": 0,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/domain/agent.py": {
+      "statements": 44,
+      "covered_lines": 44,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/domain/deps.py": {
+      "statements": 69,
+      "covered_lines": 69,
+      "branches": 32,
+      "covered_branches": 32,
+      "percent": 100.0
+    },
+    "src/samba/domain/launch.py": {
+      "statements": 16,
+      "covered_lines": 16,
+      "branches": 4,
+      "covered_branches": 4,
+      "percent": 100.0
+    },
+    "src/samba/domain/policy.py": {
+      "statements": 81,
+      "covered_lines": 81,
+      "branches": 18,
+      "covered_branches": 18,
+      "percent": 100.0
+    },
+    "src/samba/domain/ports.py": {
+      "statements": 94,
+      "covered_lines": 94,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/domain/prompts.py": {
+      "statements": 25,
+      "covered_lines": 24,
+      "branches": 6,
+      "covered_branches": 5,
+      "percent": 93.5
+    },
+    "src/samba/domain/questions.py": {
+      "statements": 61,
+      "covered_lines": 61,
+      "branches": 12,
+      "covered_branches": 11,
+      "percent": 98.6
+    },
+    "src/samba/domain/settings.py": {
+      "statements": 55,
+      "covered_lines": 55,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/domain/states.py": {
+      "statements": 19,
+      "covered_lines": 19,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/domain/task.py": {
+      "statements": 62,
+      "covered_lines": 62,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/domain/task_id.py": {
+      "statements": 41,
+      "covered_lines": 41,
+      "branches": 8,
+      "covered_branches": 8,
+      "percent": 100.0
+    },
+    "src/samba/domain/template.py": {
+      "statements": 10,
+      "covered_lines": 10,
+      "branches": 2,
+      "covered_branches": 2,
+      "percent": 100.0
+    },
+    "src/samba/domain/transitions.py": {
+      "statements": 108,
+      "covered_lines": 108,
+      "branches": 22,
+      "covered_branches": 22,
+      "percent": 100.0
+    },
+    "src/samba/domain/validation.py": {
+      "statements": 26,
+      "covered_lines": 26,
+      "branches": 4,
+      "covered_branches": 4,
+      "percent": 100.0
+    },
+    "src/samba/entrypoints/__init__.py": {
+      "statements": 0,
+      "covered_lines": 0,
+      "branches": 0,
+      "covered_branches": 0,
+      "percent": 100.0
+    },
+    "src/samba/entrypoints/cli.py": {
+      "statements": 198,
+      "covered_lines": 197,
+      "branches": 28,
+      "covered_branches": 27,
+      "percent": 99.1
+    },
+    "src/samba/entrypoints/orchestrator.py": {
+      "statements": 47,
+      "covered_lines": 47,
+      "branches": 2,
+      "covered_branches": 2,
+      "percent": 100.0
+    },
+    "src/samba/entrypoints/table.py": {
+      "statements": 15,
+      "covered_lines": 15,
+      "branches": 6,
+      "covered_branches": 5,
+      "percent": 95.2
+    },
+    "src/samba/entrypoints/workers.py": {
+      "statements": 62,
+      "covered_lines": 60,
+      "branches": 12,
+      "covered_branches": 10,
+      "percent": 94.6
+    }
+  }
+}

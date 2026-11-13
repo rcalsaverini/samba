@@ -1,0 +1,3012 @@
+[
+  {
+    "id": "test_adr.py::test_accept_and_reject_edit_one_line_and_never_commit",
+    "area": "int-adrs",
+    "target": "integration",
+    "behavior": "adr accept/reject change only the status line of a proposed ADR, print its path, never commit",
+    "why": "file edit in FileAdrs",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_adr_without_front_matter_is_an_error",
+    "area": "int-adrs",
+    "target": "integration",
+    "behavior": "an ADR file without front matter makes accept, show and list fail (exit 1) naming front matter",
+    "why": "parsing in adapters/adr_format",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_default_allow_has_read_commands_only",
+    "area": "core",
+    "target": "unit",
+    "behavior": "default plan and work allow lists include only samba adr list/show, and the system prompt mentions them",
+    "why": "DEFAULT_* lists and built-in prompts are pure data",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_help_lists_adr_verbs",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "samba adr --help lists list, show, accept, reject, supersede",
+    "why": "help output of the CLI",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_list_all_adds_status_and_every_adr",
+    "area": "commands",
+    "target": "component",
+    "behavior": "adr list --all adds STATUS and lists every ADR in number order",
+    "why": "ListAdrs over a fake store",
+    "existing": [
+      "tests/component/test_app_queries.py::test_adr_list_shows_accepted_only_or_all"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_list_shows_only_accepted_with_summary",
+    "area": "commands",
+    "target": "component",
+    "behavior": "adr list shows NUMBER, TITLE, SUMMARY for accepted ADRs only, summary is the first sentence",
+    "why": "ListAdrs over a fake store",
+    "existing": [
+      "tests/component/test_app_queries.py::test_adr_list_shows_accepted_only_or_all"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_list_truncates_summary_to_terminal_width",
+    "area": "commands",
+    "target": "unit",
+    "behavior": "adr list rows fit the terminal width, summary cut with '...'",
+    "why": "table printer is pure",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_list_without_adr_dir_or_workflow",
+    "area": "int-adrs",
+    "target": "integration",
+    "behavior": "adr list without docs/adr or WORKFLOW.md prints only the header",
+    "why": "missing dir in FileAdrs; no-WORKFLOW part is e2e",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_show_number_forms_and_any_status",
+    "area": "int-adrs",
+    "target": "integration",
+    "behavior": "adr show accepts 3, 03, 0003 and prints the file verbatim for any status",
+    "why": "number parsing and file text in FileAdrs",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_summary_is_first_sentence_of_decision",
+    "area": "int-adrs",
+    "target": "integration",
+    "behavior": "the summary is the first sentence of the Decision section, joining wrapped bullets, or the first bullet without a period",
+    "why": "parsing lives in adapters/adr_format",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_supersede_itself_is_usage_error",
+    "area": "int-adrs",
+    "target": "integration",
+    "behavior": "an ADR cannot supersede itself (also via another number form): usage error, nothing changes",
+    "why": "check lives in adapters/adr_format",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_supersede_marks_old_and_lists_it_in_new",
+    "area": "int-adrs",
+    "target": "integration",
+    "behavior": "supersede marks the old ADR superseded and appends it to the new one's supersedes list, no commit",
+    "why": "front matter edits in FileAdrs",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_unknown_and_malformed_numbers",
+    "area": "commands",
+    "target": "component",
+    "behavior": "unknown or malformed ADR numbers in show, accept, supersede are usage errors (exit 2, stderr, empty stdout)",
+    "why": "use cases map AdrError to usage",
+    "existing": [
+      "tests/component/test_app_queries.py::test_adr_show_prints_the_text_and_refuses_unknown_and_bad_numbers",
+      "tests/component/test_app_queries.py::test_adr_accept_and_reject_write_the_file_or_refuse_with_code_1",
+      "tests/component/test_app_queries.py::test_adr_supersede_lists_both_files"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_adr.py::test_wrong_state_changes_nothing",
+    "area": "int-adrs",
+    "target": "integration",
+    "behavior": "accept/reject of a non-proposed ADR and illegal supersede pairs are refused (exit 1), files untouched",
+    "why": "status rules enforced in FileAdrs",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_after_create_hook_failure_fails_attempt",
+    "area": "int-vcs",
+    "target": "integration",
+    "behavior": "a failing after_create hook fails the attempt before any agent call and removes the worktree",
+    "why": "real hook in git worktree",
+    "existing": [
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_failing_after_create_hook_removes_the_worktree",
+      "tests/component/test_app_run_task.py::test_a_workspace_failure_retries_then_gives_up"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_after_create_hook_runs_once_in_worktree",
+    "area": "int-vcs",
+    "target": "integration",
+    "behavior": "the after_create hook runs once, inside the new worktree, not on reuse",
+    "why": "real hook and worktree",
+    "existing": [
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_the_after_create_hook_runs_in_the_new_workspace",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_workspace_create_reuse_and_remove"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_agent_runs_in_worktree_outside_repo",
+    "area": "int-vcs",
+    "target": "integration",
+    "behavior": "claude runs with cwd set to the task worktree, which lies outside the repository",
+    "why": "real worktree location and process cwd",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_agents_edit_of_its_own_file_survives_the_orchestrators_writes",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "an agent's edit of its own task file survives the orchestrator's log and sidecar writes",
+    "why": "merge of real file edits",
+    "existing": [
+      "tests/integration/test_tasks_port.py::test_agents_body_edit_survives_a_worker_save",
+      "tests/integration/test_tasks_port.py::test_markdown_counter_save_does_not_touch_the_task_file"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_blocked_moves_to_question",
+    "area": "core",
+    "target": "component",
+    "behavior": "blocked outcome with questions moves the task to question, records the questions and summary, last_outcome blocked",
+    "why": "turn flow and transition rows",
+    "existing": [
+      "tests/component/test_scenarios.py::test_lifecycle",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_budget_cap_blocks_task",
+    "area": "core",
+    "target": "component",
+    "behavior": "max_cost_usd_per_task passes the remaining budget per turn and sticks the task with blocked_cause budget once spent",
+    "why": "budget gate in turn flow; argv flag is int-agent",
+    "existing": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_budget",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_claude_argv_contract",
+    "area": "int-agent",
+    "target": "integration",
+    "behavior": "claude argv: -p, stream-json, verbose, permission mode, model, allowedTools, isolation, add-dir tasks, outcome json schema, system prompt naming branch, task file, validate command and allowed commands, no budget flag without a cap",
+    "why": "argv built by claude_cli against fake claude",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_concurrency_limit_respected",
+    "area": "core",
+    "target": "component",
+    "behavior": "never more than max_concurrent tasks run at once, and all finish",
+    "why": "Tick concurrency cap",
+    "existing": [
+      "tests/component/test_tick.py::test_dispatch_respects_the_concurrency_cap_and_not_before"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_continue_then_done_resumes_same_session",
+    "area": "core",
+    "target": "component",
+    "behavior": "continue and missing outcome keep turning in the same session with the continue prompt until done",
+    "why": "turn flow over fake runner",
+    "existing": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_turn_decision"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_done_with_passing_validation_goes_to_review",
+    "area": "core",
+    "target": "component",
+    "behavior": "work run reporting done with passing validation lands in work-review; log has summary; branch, commit and worktree exist; sidecar counts turns, cost, last_outcome done, attempts 0",
+    "why": "run flow over fakes; git part already in vcs integration",
+    "existing": [
+      "tests/component/test_scenarios.py::test_lifecycle",
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_app_run_task.py::test_a_work_run_ends_in_work_review",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_workspace_create_reuse_and_remove"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_failure_is_retried_then_succeeds",
+    "area": "core",
+    "target": "component",
+    "behavior": "a failed agent turn (non-zero exit, no result) is retried and a later success resets attempts to 0 with a retry log line",
+    "why": "retry rule over fakes; exit-code parsing is int-agent",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_scenarios.py::test_retry_policy"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_gives_up_after_max_attempts_with_reflection_turn",
+    "area": "core",
+    "target": "component",
+    "behavior": "after max_attempts failures the task goes stuck (attempts, last_outcome failed, last_error) and a give-up reflection turn asking for Harness gaps is sent",
+    "why": "finisher/retry policy over fakes",
+    "existing": [
+      "tests/component/test_app_run_task.py::test_the_give_up_prompt_is_sent_with_resume_when_reflecting_is_allowed",
+      "tests/component/test_scenarios.py::test_retry_policy",
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_scenarios.py::test_turn_rule"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_human_discarding_running_task_kills_agent_and_removes_worktree",
+    "area": "core",
+    "target": "component",
+    "behavior": "hand-moving a running task to discarded stops its agent, removes the worktree and keeps the branch",
+    "why": "Tick reconcile and cleanup; process kill is int-agent",
+    "existing": [
+      "tests/component/test_tick.py::test_reconcile_stops_a_worker_whose_file_left_its_folder",
+      "tests/component/test_tick.py::test_cleanup_removes_done_discarded_and_missing_but_not_running_or_open"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_invalid_task_names_are_skipped",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "task files with invalid names are left alone and skipped while valid tasks run",
+    "why": "file naming in markdown store",
+    "existing": [
+      "tests/integration/test_tasks_port.py::test_markdown_rejects_invalid_names_and_legacy_folders"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_is_error_result_counts_as_failure",
+    "area": "int-agent",
+    "target": "integration",
+    "behavior": "a stream result with is_error counts as a failed attempt even with exit 0",
+    "why": "stream-json parsing lives only in claude_cli",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_isolation_can_be_disabled",
+    "area": "int-agent",
+    "target": "integration",
+    "behavior": "isolate_user_config false drops --setting-sources, --strict-mcp-config and --settings",
+    "why": "argv built in claude_cli",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_isolation_excludes_ancestor_claude_md",
+    "area": "int-agent",
+    "target": "integration",
+    "behavior": "isolation passes claudeMdExcludes for every ancestor CLAUDE.md up to / but not the worktree's own memory files",
+    "why": "argv built in claude_cli from real paths",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_list_empty_prints_header_only",
+    "area": "commands",
+    "target": "component",
+    "behavior": "an empty task list prints only the header row",
+    "why": "ListTasks result shape",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_list_filters_by_full_name_and_prefix",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task list filters by full state name or prefix (a prefix may match several states) and shows question cause",
+    "why": "ListTasks state matcher",
+    "existing": [
+      "tests/component/test_app_queries.py::test_task_list_all_states_in_order_and_filtered_by_prefix"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_list_several_states_in_canonical_order",
+    "area": "commands",
+    "target": "component",
+    "behavior": "several state filters list in canonical state order and stuck shows its cause",
+    "why": "ListTasks state matcher",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_list_shows_waiting_on",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task list shows waiting on <dep> for a task with unmet dependencies",
+    "why": "ListTasks over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_list_unknown_state_exits_2",
+    "area": "commands",
+    "target": "component",
+    "behavior": "an unknown state filter is a usage error listing valid states",
+    "why": "usage refusal kind; exit 2 mapping is e2e",
+    "existing": [
+      "tests/component/test_app_queries.py::test_task_list_unknown_state_is_a_usage_error_listing_the_states"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_list_without_filter_shows_all_states",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task list without a filter lists tasks of every state",
+    "why": "ListTasks over fakes",
+    "existing": [
+      "tests/component/test_app_queries.py::test_task_list_all_states_in_order_and_filtered_by_prefix"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_malformed_lines_are_skipped",
+    "area": "int-agent",
+    "target": "integration",
+    "behavior": "malformed stream-json lines are skipped and the turn still completes",
+    "why": "stream parsing in claude_cli",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_max_turns_exhausted_is_a_failure",
+    "area": "core",
+    "target": "component",
+    "behavior": "running out of max_turns without done is a failure with max_turns in last_error",
+    "why": "turn flow rule",
+    "existing": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_turn_rule"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_missing_session_on_resume_starts_fresh",
+    "area": "core",
+    "target": "component",
+    "behavior": "resuming a session the agent no longer has starts a fresh session with the first prompt, without counting a failed attempt",
+    "why": "restart rule in turn flow; detection is int-agent",
+    "existing": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_turn_rule"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_no_validate_command_done_goes_straight_to_review",
+    "area": "core",
+    "target": "component",
+    "behavior": "without a validate command, done goes straight to work-review",
+    "why": "turn decision rule",
+    "existing": [
+      "tests/component/test_scenarios.py::test_turn_decision"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_permission_denials_are_logged",
+    "area": "int-agent",
+    "target": "integration",
+    "behavior": "permission denials reported by claude are written to the task log with the tool name",
+    "why": "parsing permission_denials is claude_cli only; logging half shown by turn_flow scenario",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_priority_order_with_single_slot",
+    "area": "core",
+    "target": "component",
+    "behavior": "with one slot tasks dispatch by priority, unprioritized last",
+    "why": "Tick dispatch order",
+    "existing": [
+      "tests/component/test_tick.py::test_dispatch_orders_by_priority_then_queued_at_then_id"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_refuses_invalid_config",
+    "area": "int-config",
+    "target": "integration",
+    "behavior": "an invalid config value (max_concurrent 0) is a config error naming the key",
+    "why": "validated by workflow_file adapter on a real file",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_refuses_to_start_when_logged_out",
+    "area": "core",
+    "target": "component",
+    "behavior": "samba run refuses to start when claude auth says logged out",
+    "why": "Startup readiness check over fake runner",
+    "existing": [
+      "tests/component/test_app_startup.py::test_an_agent_that_is_not_logged_in_becomes_a_startup_error"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_refuses_workspaces_inside_repo",
+    "area": "int-config",
+    "target": "integration",
+    "behavior": "a workspaces_root inside the repository is a config error naming workspaces_root",
+    "why": "validated by workflow_file adapter on a real file",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_removed_top_level_commands_are_usage_errors",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "old top-level commands (new, list, show, status, transitions) exit 2 with No such command",
+    "why": "command names and exit codes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_repo_workflow_body_has_the_spec_step",
+    "area": "core",
+    "target": "unit",
+    "behavior": "the repository's own WORKFLOW.md body mentions spec changes, docs/spec and docs/adr",
+    "why": "reads a repo file only; no samba code",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_resolver_exact_prefix_ambiguous_unknown",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task ids resolve exact, then unique prefix; ambiguous lists candidates and unknown names the id, both usage errors",
+    "why": "resolution in use cases",
+    "existing": [
+      "tests/component/test_app_queries.py::test_show_commands_resolve_prefixes",
+      "tests/component/test_app_resolve.py::test_exact_id_and_unique_prefix",
+      "tests/component/test_app_resolve.py::test_ambiguous_prefix_is_a_usage_refusal_with_candidates",
+      "tests/component/test_app_resolve.py::test_unknown_id_is_a_usage_refusal",
+      "tests/unit/test_task_domain.py::test_resolve_exact_wins_over_prefix",
+      "tests/unit/test_task_domain.py::test_resolve_ambiguous_and_unknown"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_rework_from_review_resumes_session_with_resume_prompt",
+    "area": "core",
+    "target": "component",
+    "behavior": "hand move work-review to work-todo (with feedback) is work.reject, keeps the session and resumes it with the resume prompt",
+    "why": "hand move row plus prompt builder",
+    "existing": [
+      "tests/component/test_scenarios.py::test_human_row",
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_app_run_task.py::test_the_work_setup_carries_the_prompts_and_limits"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_running_tasks_recovered_on_startup",
+    "area": "core",
+    "target": "component",
+    "behavior": "a task left in work-running is recovered at startup and resumed with its session",
+    "why": "Startup recovery plus prompt setup",
+    "existing": [
+      "tests/component/test_app_startup.py::test_running_tasks_are_recovered_to_their_todo_folders",
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_app_run_task.py::test_the_work_setup_carries_the_prompts_and_limits"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_samba_dir_is_git_excluded",
+    "area": "int-vcs",
+    "target": "integration",
+    "behavior": ".samba/ is added to .git/info/exclude and a run leaves the main checkout clean",
+    "why": "real git exclude file",
+    "existing": [
+      "tests/component/test_app_startup.py::test_the_samba_dir_is_excluded",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_exclude_samba_dir_is_idempotent"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_show_depends_on_with_states",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task show lists dependencies with their states, unknown ones, and waiting",
+    "why": "ShowTask over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_show_done_task",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task show works for a done task",
+    "why": "ShowTask over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_show_events_come_from_the_table",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task show lists exactly the human events the transition table allows for each state and stage",
+    "why": "ShowTask over fakes vs transition table",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_show_plan_review",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task show prints title, state, cause, counters, cost, outcome, full error, branch, worktree, sessions and the legal events",
+    "why": "ShowTask renderer over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_show_question_cause",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task show of a question task shows the cause and question.answer -> work-todo",
+    "why": "ShowTask over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_stall_kills_agent_and_retries",
+    "area": "int-agent",
+    "target": "integration",
+    "behavior": "an agent with no output past stall_timeout_s is killed and the attempt retried",
+    "why": "real process timing and kill",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_stuck_task_moved_back_to_todo_resets_attempts",
+    "area": "core",
+    "target": "component",
+    "behavior": "hand move stuck to work-todo is task.retry, resets attempts and runs again",
+    "why": "hand move row and transition effects",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_tick.py::test_observe_notes_a_hand_move_and_reverts_an_illegal_one"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_task_list_error_column_uses_terminal_width",
+    "area": "commands",
+    "target": "unit",
+    "behavior": "the error column fills the terminal width and is cut with ... when narrow",
+    "why": "print_table is pure given a width",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_task_list_shows_cause_and_cost",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task list shows id, blocked outcome and cost for a blocked task",
+    "why": "ListTasks rows over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_task_new_creates_plan_todo_task",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task new slugs the title into a plan-todo task with priority, no template placeholder, and suffixes -2 on collision",
+    "why": "CreateTask over fake store",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_task_new_writes_front_matter_and_title_exactly",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "a new task file is exactly front matter, # title, blank line, body",
+    "why": "exact file bytes of markdown store",
+    "existing": [
+      "tests/integration/test_tasks_port.py::test_markdown_file_layout_matches_the_old_writers"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_template_unknown_variable_fails_attempt",
+    "area": "core",
+    "target": "component",
+    "behavior": "an unknown template variable fails the attempt naming the variable, without calling the agent",
+    "why": "prompt builder in RunTask over fakes",
+    "existing": [
+      "tests/component/test_app_run_task.py::test_a_template_error_fails_the_attempt"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_turn_timeout_kills_agent",
+    "area": "int-agent",
+    "target": "integration",
+    "behavior": "an agent past turn_timeout_s is killed and the failure says timeout",
+    "why": "real process timing and kill",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_validation_failure_is_fed_back_then_passes",
+    "area": "core",
+    "target": "component",
+    "behavior": "failed validation output is fed back to the agent as the next prompt, then a passing run reaches work-review; validation logs under .samba/runs",
+    "why": "turn flow with fake validator",
+    "existing": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_lifecycle",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_validator_pass_writes_the_full_log"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_blackbox.py::test_work_protocol_requires_the_spec_step",
+    "area": "core",
+    "target": "unit",
+    "behavior": "the work protocol system prompt requires the spec step and proposed ADRs before done, without hardcoding docs/spec",
+    "why": "static prompt text in domain/prompts",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_cli_surface.py::test_bash_completion_offers_command_names_and_options",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "bash completion offers command names, verbs and options, hiding dev",
+    "why": "completion via environment",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_cli_surface.py::test_dev_transitions_needs_no_repo_config",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "dev transitions works without WORKFLOW.md",
+    "why": "command wiring without config",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_cli_surface.py::test_dev_transitions_prints_the_table",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "dev transitions prints the markdown transition table",
+    "why": "command output; renderer itself could be unit",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_cli_surface.py::test_help_is_plain_text_when_piped",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "help is plain text with no ANSI or box drawing when piped",
+    "why": "help output to a pipe",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_cli_surface.py::test_help_lists_only_the_known_commands",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "top-level help lists exactly the public commands, with dev commands in an epilog",
+    "why": "help output",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_cli_surface.py::test_repo_option_may_follow_the_arguments",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "--repo is accepted after positional arguments",
+    "why": "option parsing",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_cli_surface.py::test_show_completion_prints_a_script",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "--show-completion prints a completion script for bash, zsh and fish",
+    "why": "completion via process",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_cli_surface.py::test_usage_errors_exit_2",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "bad commands, missing args, conflicting options and bad types exit 2 with a stderr message",
+    "why": "argument parsing and exit codes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_command_waits_for_lock_and_orchestrator_keeps_ticking",
+    "area": "int-lock",
+    "target": "integration",
+    "behavior": "a command blocks while another process holds .samba/lock, then completes once released",
+    "why": "blocking flock with timeout",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_command_while_orchestrator_runs",
+    "area": "int-lock",
+    "target": "integration",
+    "behavior": "plan/work accept/reject issued while the orchestrator runs is applied once, never seen as a hand move or illegal move, attempts stay 0",
+    "why": "real flock serialises command and tick across processes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_edit_uses_editor",
+    "area": "int-terminal",
+    "target": "integration",
+    "behavior": "--edit takes the feedback text from $EDITOR",
+    "why": "real $EDITOR process via StdTerminal.edit",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_failing_editor_changes_nothing",
+    "area": "int-terminal",
+    "target": "integration",
+    "behavior": "an editor exiting non-zero refuses (exit 1) and leaves task file and state unchanged",
+    "why": "editor exit code mapping is in StdTerminal; refusal itself is component",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_feedback_after_existing_prose_in_section",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "new feedback round is appended after human prose already in ## Feedback, before the next section",
+    "why": "markdown section editing",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_feedback_and_edit_together_is_a_usage_error",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "--feedback with --edit is a usage error (exit 2), nothing changes",
+    "why": "option conflict checked in the CLI",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_feedback_section_created_before_log",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "a missing ## Feedback section is created once, placed before ## Log",
+    "why": "markdown section placement",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_hand_move_work_reject_is_still_observed_and_keeps_session",
+    "area": "core",
+    "target": "component",
+    "behavior": "a hand move work-review to work-todo is observed as work.reject (never reject_fresh) and the next run resumes the session",
+    "why": "human_row plus Tick.observe over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_human_row[human_row.json::work-review to work-todo is work.reject, never work.reject_fresh]",
+      "tests/component/test_tick.py::test_observe_notes_a_hand_move_and_reverts_an_illegal_one"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_id_prefix_resolution",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task ids resolve by exact id or unique prefix; ambiguous prefix (lists candidates) and unknown id are usage errors changing nothing; exact id beats a longer id",
+    "why": "resolution inside the use case",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_change_state_resolves_a_unique_prefix",
+      "tests/component/test_app_use_cases.py::test_change_state_ambiguous_and_unknown_change_nothing",
+      "tests/component/test_app_resolve.py::test_exact_id_wins_over_a_longer_id_it_prefixes",
+      "tests/unit/test_task_domain.py::test_resolve_exact_wins_over_prefix"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_orchestrator_skips_ticks_while_lock_is_held",
+    "area": "core",
+    "target": "component",
+    "behavior": "the orchestrator does not dispatch while the lock is held, and dispatches after release",
+    "why": "Tick skips on a held lock (fake lock)",
+    "existing": [
+      "tests/component/test_tick.py::test_the_tick_is_skipped_while_the_lock_is_held_by_someone_else"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_plan_accept",
+    "area": "commands",
+    "target": "component",
+    "behavior": "plan accept moves plan-review to work-todo, prints the new location, approves the plan, drops session_id but keeps plan_session_id, logs plan.accept (not as observed)",
+    "why": "AcceptPlan over fakes plus transition row",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_accept_plan_moves_a_plan_review_task",
+      "tests/component/test_scenarios.py::test_transition[transition.json::plan.accept approves the plan and drops the session]"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_plan_reject_with_feedback",
+    "area": "commands",
+    "target": "component",
+    "behavior": "plan reject with feedback moves to plan-todo, records feedback round 1 and logs it; Feedback section sits before Log",
+    "why": "RejectPlan over fakes; section order is int-tasks",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_feedback_is_written_before_the_move_with_a_round_log",
+      "tests/component/test_app_use_cases.py::test_reject_plan_records_feedback"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_reject_without_feedback_warns",
+    "area": "commands",
+    "target": "component",
+    "behavior": "plan reject without feedback still moves the task, warns 'rejecting without feedback', writes no round",
+    "why": "ChangeState optional feedback note",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_empty_feedback_warns_when_optional_and_fails_when_required"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_repeated_rejects_append_rounds",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "repeated rejects append '### Round N' blocks in order in the task file, demote '##' headings in feedback, log round 2",
+    "why": "markdown layout of Feedback section",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_work_reject_fresh_clears_session",
+    "area": "commands",
+    "target": "component",
+    "behavior": "work reject --fresh fires work.reject_fresh, clears session_id, keeps plan_session_id",
+    "why": "RejectWork fresh plus transition row",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_reject_work_fires_reject_or_reject_fresh",
+      "tests/component/test_scenarios.py::test_transition[transition.json::work.reject_fresh drops the session]"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_work_reject_keeps_session",
+    "area": "commands",
+    "target": "component",
+    "behavior": "work reject with feedback moves to work-todo, keeps session_id, logs work.reject with feedback round",
+    "why": "RejectWork over fakes plus transition row",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_reject_work_fires_reject_or_reject_fresh",
+      "tests/component/test_scenarios.py::test_transition[transition.json::work.reject keeps the session]"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_wrong_state_is_refused",
+    "area": "commands",
+    "target": "component",
+    "behavior": "plan/work accept/reject from an illegal state is refused: exit 1, empty stdout, 'X is in S; E not allowed. Legal events:', nothing changes",
+    "why": "check_legal refusal over fakes",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_check_legal_ok_missing_and_illegal",
+      "tests/component/test_app_use_cases.py::test_illegal_event_is_refused_and_names_the_legal_ones"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands.py::test_wrong_state_lists_legal_events",
+    "area": "commands",
+    "target": "component",
+    "behavior": "the refusal lists the legal human events of the current state ('none' for done)",
+    "why": "legal events come from the table",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_check_legal_ok_missing_and_illegal",
+      "tests/component/test_scenarios.py::test_human_events[human_events.json::plan-running]",
+      "tests/component/test_scenarios.py::test_human_events[human_events.json::done has no human events]"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_command_while_orchestrator_runs",
+    "area": "int-lock",
+    "target": "integration",
+    "behavior": "question answer and task retry while the orchestrator runs are applied once, never seen as hand or illegal moves, then the task runs to work-review",
+    "why": "real flock serialises command and tick across processes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_discard_prompt_names_resolved_id",
+    "area": "commands",
+    "target": "component",
+    "behavior": "the discard prompt names the full id resolved from a prefix",
+    "why": "ChangeState formats the prompt after resolution",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_discard_running_kills_agent_and_keeps_branch",
+    "area": "core",
+    "target": "component",
+    "behavior": "discarding a running task kills the agent, removes the worktree, keeps the branch",
+    "why": "Tick reconcile and cleanup over fakes; branch kept is int-vcs",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_discard_tty_prompt",
+    "area": "int-terminal",
+    "target": "integration",
+    "behavior": "on a real tty discard asks [y/N]; n or empty declines (exit 1), y discards",
+    "why": "prompt over a pseudo terminal; policy is component",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_discard_without_tty_needs_yes",
+    "area": "commands",
+    "target": "component",
+    "behavior": "discard without a tty and without --yes is a usage error naming --yes, nothing changes",
+    "why": "confirm policy over a fake terminal",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_discard_task_declines_without_yes_or_tty_and_passes_with_yes",
+      "tests/component/test_app_use_cases.py::test_confirm_policy"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_discard_wrong_state_lists_none",
+    "area": "commands",
+    "target": "component",
+    "behavior": "discard of a done task is refused before any confirmation, listing 'Legal events: none'",
+    "why": "legality checked before confirm",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_discard_asks_after_legality_and_before_the_lock",
+      "tests/component/test_scenarios.py::test_human_events[human_events.json::done has no human events]"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_discard_yes",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task discard --yes from review, stuck, todo states moves to discarded and logs",
+    "why": "DiscardTask plus transition rows",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_discard_task_declines_without_yes_or_tty_and_passes_with_yes",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.discard from work-review]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.discard from stuck]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.discard from plan-review]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.discard from work-todo]"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_question_answer",
+    "area": "commands",
+    "target": "component",
+    "behavior": "answering the only open question moves the task to the todo of last_stage (plan when none), resets attempts and blocked_cause, records 'Answer:' (no Feedback), logs answered and the move",
+    "why": "AnswerQuestion over fakes plus transition rows",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_single_open_question_is_answered_and_the_task_resumes",
+      "tests/component/test_scenarios.py::test_transition[transition.json::question.answer resumes the work stage]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::question.answer with no recorded stage goes to the plan stage]"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_question_answer_edit",
+    "area": "commands",
+    "target": "component",
+    "behavior": "question answer --edit takes the answer from the editor and resumes the task",
+    "why": "AnswerQuestion with a fake terminal edit",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_answer_from_the_editor_quotes_the_question_and_strips_comments"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_question_answer_edit_quotes_question_and_strips_comments",
+    "area": "commands",
+    "target": "component",
+    "behavior": "the editor buffer quotes the question and context as # comments, which are stripped from the answer",
+    "why": "initial text and stripping in the use case",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_answer_from_the_editor_quotes_the_question_and_strips_comments"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_question_answer_heading_in_answer_is_demoted",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "a markdown heading in an answer is demoted in the task file",
+    "why": "markdown rendering of answers",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_question_answer_usage_errors",
+    "area": "commands",
+    "target": "component",
+    "behavior": "answer with no text, both text and --edit, empty or blank text is a usage error (exit 2), nothing changes",
+    "why": "needs-text refusal in use case; 'both' is a CLI check (e2e)",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_answer_errors"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_retry",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task retry from stuck goes to the todo of last_stage, resets attempts and blocked_cause, logs, prints no hint for gave_up",
+    "why": "RetryTask plus transition rows",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.retry resumes the plan stage]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.retry resumes the work stage]"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_retry_hints",
+    "area": "commands",
+    "target": "unit",
+    "behavior": "retry of a task stuck on budget or dependency_discarded/cycle prints a hint naming WORKFLOW.md or depends_on, changes no config, still moves",
+    "why": "retry_hint is a pure helper",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_retry_stopped_has_no_hint",
+    "area": "commands",
+    "target": "unit",
+    "behavior": "retrying a stopped task prints no hint and clears blocked_cause",
+    "why": "retry_hint is a pure helper",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_stop_live_agent",
+    "area": "core",
+    "target": "component",
+    "behavior": "task stop on a running task kills the agent, moves it to stuck (stopped, last_stage), no redispatch, no stale sidecar from the cancelled worker; retry redispatches",
+    "why": "Workers/Tick cancel and reconcile over fakes; process kill is int-agent",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_stop_without_orchestrator",
+    "area": "commands",
+    "target": "component",
+    "behavior": "stop with no orchestrator moves *-running to stuck (stopped, last_stage); not dispatched; retry returns to the stage todo and the next run completes",
+    "why": "StopTask/RetryTask plus transition rows",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.stop in plan-running]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.stop in work-running]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.retry resumes the work stage]"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_commands_phase2.py::test_wrong_state",
+    "area": "commands",
+    "target": "component",
+    "behavior": "question answer, task retry, stop and discard from illegal states are refused with exit 1 and the legal-events message, nothing changes",
+    "why": "check_legal refusal over fakes",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_check_legal_ok_missing_and_illegal",
+      "tests/component/test_app_use_cases.py::test_stop_task_is_refused_when_not_running",
+      "tests/component/test_app_use_cases.py::test_answer_errors",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.discard does not apply to a done task]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.discard does not apply to a discarded task]"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_completion.py::test_a_prefix_filters_the_candidates",
+    "area": "commands",
+    "target": "component",
+    "behavior": "the typed prefix filters completion candidates",
+    "why": "CompleteTaskIds over fakes",
+    "existing": [
+      "tests/component/test_app_completion.py::test_prefix_filter_and_help_text"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_completion.py::test_adr_completion_follows_the_status",
+    "area": "commands",
+    "target": "component",
+    "behavior": "adr accept/reject complete proposed, supersede accepted, show all, with prefix filter",
+    "why": "CompleteAdrs over fakes",
+    "existing": [
+      "tests/component/test_app_completion.py::test_adr_numbers_by_status"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_completion.py::test_broken_workflow_gives_no_candidates_and_no_noise",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "completion with a broken WORKFLOW.md offers nothing, exits 0, no stderr",
+    "why": "error swallowing in CLI callbacks",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_completion.py::test_no_repo_gives_no_candidates_and_no_noise",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "completion outside a repo offers nothing and prints nothing to stderr",
+    "why": "error swallowing in CLI callbacks",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_completion.py::test_plan_accept_and_reject_offer_plan_review_tasks",
+    "area": "commands",
+    "target": "component",
+    "behavior": "plan accept/reject complete plan-review task ids",
+    "why": "CompleteTaskIds over fakes",
+    "existing": [
+      "tests/component/test_app_completion.py::test_each_command_offers_the_states_its_table_rows_start_from"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_completion.py::test_question_answer_offers_task_slash_qid_of_open_questions",
+    "area": "commands",
+    "target": "component",
+    "behavior": "question answer/show complete task/qid of open questions only",
+    "why": "CompleteQuestions over fakes",
+    "existing": [
+      "tests/component/test_app_completion.py::test_questions_offer_only_open_ones_as_task_slash_qid"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_completion.py::test_repo_option_is_honored",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "completion honors --repo typed on the line from another cwd",
+    "why": "completion callbacks read the command line",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_completion.py::test_task_retry_offers_stuck_and_stop_offers_running",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task retry completes stuck ids, task stop running ids",
+    "why": "CompleteTaskIds over fakes",
+    "existing": [
+      "tests/component/test_app_completion.py::test_each_command_offers_the_states_its_table_rows_start_from"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_completion.py::test_task_show_offers_every_task",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task show completes every task id",
+    "why": "CompleteTaskIds over fakes",
+    "existing": [
+      "tests/component/test_app_completion.py::test_each_command_offers_the_states_its_table_rows_start_from"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_completion.py::test_work_accept_and_reject_offer_work_review_tasks",
+    "area": "commands",
+    "target": "component",
+    "behavior": "work accept/reject complete work-review task ids",
+    "why": "CompleteTaskIds over fakes",
+    "existing": [
+      "tests/component/test_app_completion.py::test_each_command_offers_the_states_its_table_rows_start_from"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_all_dependencies_must_be_done",
+    "area": "core",
+    "target": "component",
+    "behavior": "every dependency must be done before dispatch",
+    "why": "deps evaluation and dispatch",
+    "existing": [
+      "tests/component/test_scenarios.py::test_deps"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_dependencies_gate_planning",
+    "area": "core",
+    "target": "component",
+    "behavior": "dependencies hold a plan-todo task too",
+    "why": "dispatch_plan guard",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_dependencies_gate_the_require_plan_route",
+    "area": "core",
+    "target": "component",
+    "behavior": "with require_plan, unmet dependencies hold the task in work-todo (no route to plan)",
+    "why": "route_to_plan guard",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_dependency_already_done_runs_immediately",
+    "area": "core",
+    "target": "component",
+    "behavior": "a task whose dependency is done runs at once",
+    "why": "deps evaluation and dispatch",
+    "existing": [
+      "tests/component/test_scenarios.py::test_deps"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_dependency_in_the_todo_folder_runs_first",
+    "area": "core",
+    "target": "component",
+    "behavior": "a todo dependency is dispatched while its dependent waits (review is not done)",
+    "why": "Tick dispatch over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_discarded_dependency_sends_dependent_to_stuck",
+    "area": "core",
+    "target": "component",
+    "behavior": "a discarded dependency sends the dependent to stuck with cause dependency_discarded and a log line",
+    "why": "Tick fires the row over fakes",
+    "existing": [
+      "tests/component/test_tick.py::test_dependency_cycle_and_discarded_dependency_fire_the_stuck_rows",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_malformed_depends_on_is_ignored",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "a depends_on that is not a list is ignored and the task runs",
+    "why": "front matter parsing in the store",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_self_dependency_is_a_cycle",
+    "area": "core",
+    "target": "component",
+    "behavior": "a task depending on itself is a cycle and goes to stuck",
+    "why": "deps evaluation and row",
+    "existing": [
+      "tests/component/test_scenarios.py::test_deps",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_status_shows_waiting_on",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task list shows 'waiting on a, b' for a held task",
+    "why": "ListTasks query over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_stuck_dependent_returns_with_a_hand_move_and_is_checked_again",
+    "area": "core",
+    "target": "component",
+    "behavior": "a dependent retried by hand while its dependency is still discarded goes back to stuck without running",
+    "why": "Tick observe and deps over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_task_runs_once_dependency_is_done",
+    "area": "core",
+    "target": "component",
+    "behavior": "a held task is dispatched once its dependency reaches done",
+    "why": "Tick over fakes across ticks",
+    "existing": [
+      "tests/component/test_scenarios.py::test_deps"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_task_waits_while_dependency_is_not_done",
+    "area": "core",
+    "target": "component",
+    "behavior": "a todo task is not dispatched while a dependency is in any non-done state",
+    "why": "Tick dispatch guard over fakes",
+    "existing": [
+      "tests/component/test_tick.py::test_a_waiting_dependency_holds_the_task",
+      "tests/component/test_scenarios.py::test_deps"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_two_task_cycle_sends_both_to_stuck",
+    "area": "core",
+    "target": "component",
+    "behavior": "a two-task dependency cycle sends both to stuck with cause dependency_cycle",
+    "why": "Tick fires the row over fakes",
+    "existing": [
+      "tests/component/test_tick.py::test_dependency_cycle_and_discarded_dependency_fire_the_stuck_rows",
+      "tests/component/test_scenarios.py::test_deps"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_unknown_dependency_stays_waiting_with_a_warning",
+    "area": "core",
+    "target": "component",
+    "behavior": "an unknown dependency id holds the task and journals unknown_dependency once",
+    "why": "Tick and fake journal",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_dependencies.py::test_waiting_task_does_not_hang_exit_when_idle",
+    "area": "core",
+    "target": "component",
+    "behavior": "exit-when-idle exits while a task waits on dependencies and others finished",
+    "why": "Orchestrator idle check over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_explore.py::test_a_missing_claude_binary_is_refused",
+    "area": "int-session",
+    "target": "integration",
+    "behavior": "a missing claude binary is a refusal (exit 1, 'samba: ' message)",
+    "why": "real process launch failure",
+    "existing": [
+      "tests/component/test_app_explore.py::test_a_launch_error_is_a_refusal"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_explore.py::test_a_missing_workflow_is_a_config_error_and_nothing_starts",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "explore without WORKFLOW.md exits 2 with a config error and starts nothing",
+    "why": "bootstrap config error and exit code",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_explore.py::test_nothing_is_created_under_samba",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "samba explore creates no .samba directory",
+    "why": "only whole-process side effects show it",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_explore.py::test_the_allow_list_is_the_adr_0004_list_and_nothing_forbidden",
+    "area": "commands",
+    "target": "component",
+    "behavior": "the explore allow list is the ADR 0004 samba commands and has no forbidden command",
+    "why": "StartExplore over fake session",
+    "existing": [
+      "tests/component/test_app_explore.py::test_allow_and_deny_lists"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_explore.py::test_the_deny_list_names_every_forbidden_command",
+    "area": "commands",
+    "target": "component",
+    "behavior": "the explore deny list names every forbidden samba command",
+    "why": "StartExplore over fake session",
+    "existing": [
+      "tests/component/test_app_explore.py::test_allow_and_deny_lists"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_explore.py::test_the_exit_code_of_claude_is_returned",
+    "area": "commands",
+    "target": "component",
+    "behavior": "samba explore exits with claude's exit code",
+    "why": "use case returns the code",
+    "existing": [
+      "tests/component/test_app_explore.py::test_the_exit_code_of_the_session_is_returned"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_explore.py::test_the_guide_is_appended",
+    "area": "commands",
+    "target": "component",
+    "behavior": "the explore guide is appended to the system prompt with its key phrases",
+    "why": "StartExplore over fake session",
+    "existing": [
+      "tests/component/test_app_explore.py::test_the_guide_is_appended_to_the_system_prompt"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_explore.py::test_the_model_comes_from_the_workflow",
+    "area": "commands",
+    "target": "component",
+    "behavior": "claude.model from WORKFLOW.md is passed as --model",
+    "why": "StartExplore over fake session",
+    "existing": [
+      "tests/component/test_app_explore.py::test_model_only_when_configured"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_explore.py::test_the_session_runs_in_the_repo_and_is_not_isolated",
+    "area": "commands",
+    "target": "component",
+    "behavior": "the explore session runs in the repo with no isolation flags",
+    "why": "StartExplore over fake session",
+    "existing": [
+      "tests/component/test_app_explore.py::test_the_session_is_interactive_and_not_isolated",
+      "tests/component/test_app_explore.py::test_a_topic_is_the_first_prompt_after_the_command_and_cwd_is_the_repo"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_explore.py::test_the_topic_is_the_first_prompt_and_there_is_no_headless_flag",
+    "area": "commands",
+    "target": "component",
+    "behavior": "explore passes the topic as the first positional and no -p/--output-format",
+    "why": "StartExplore over fake session",
+    "existing": [
+      "tests/component/test_app_explore.py::test_a_topic_is_the_first_prompt_after_the_command_and_cwd_is_the_repo",
+      "tests/component/test_app_explore.py::test_the_session_is_interactive_and_not_isolated"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_explore.py::test_without_a_topic_there_is_no_positional",
+    "area": "commands",
+    "target": "component",
+    "behavior": "explore without a topic passes no positional",
+    "why": "StartExplore over fake session",
+    "existing": [
+      "tests/component/test_app_explore.py::test_no_topic_means_no_positional"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_agent_blocked_goes_to_question",
+    "area": "core",
+    "target": "component",
+    "behavior": "a blocked work run goes to question with cause question, last_stage work, last_outcome blocked",
+    "why": "work_blocked row over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_scenarios.py::test_lifecycle"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_answered_question_clears_cause_and_resets_attempts",
+    "area": "core",
+    "target": "component",
+    "behavior": "answering a question clears blocked_cause and the task resumes and finishes",
+    "why": "question.answer row over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_scenarios.py::test_lifecycle"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_budget_goes_to_stuck",
+    "area": "core",
+    "target": "component",
+    "behavior": "exceeding the cost cap sends the task to stuck with cause budget",
+    "why": "turn flow and budget row",
+    "existing": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_done_and_discarded_remove_worktree_and_keep_branch",
+    "area": "core",
+    "target": "component",
+    "behavior": "done and discarded tasks have their worktree removed and their branch kept",
+    "why": "Tick cleanup over fakes; branch kept is int-vcs",
+    "existing": [
+      "tests/component/test_tick.py::test_cleanup_removes_done_discarded_and_missing_but_not_running_or_open"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_empty_old_folders_do_not_block",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "empty old-layout folders do not block startup",
+    "why": "folder check in markdown store",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_failed_attempt_retries_in_its_own_stage",
+    "area": "core",
+    "target": "component",
+    "behavior": "a failed attempt returns the task to its own stage's todo with attempts 1 and last_stage kept",
+    "why": "retry rows over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_giving_up_goes_to_stuck_for_both_stages",
+    "area": "core",
+    "target": "component",
+    "behavior": "giving up in plan or work goes to stuck with cause gave_up and the right last_stage",
+    "why": "give_up row over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_moving_running_task_to_discarded_stops_agent",
+    "area": "core",
+    "target": "component",
+    "behavior": "hand-moving a work-running task to discarded stops the agent, removes the worktree and keeps the branch",
+    "why": "Tick.reconcile and Workers over fakes",
+    "existing": [
+      "tests/component/test_tick.py::test_reconcile_stops_a_worker_whose_file_left_its_folder"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_old_folder_with_tasks_refuses_to_start",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "an old-layout folder holding tasks refuses startup with mv instructions and moves nothing",
+    "why": "folder check in markdown store",
+    "existing": [
+      "tests/integration/test_tasks_port.py::test_markdown_rejects_invalid_names_and_legacy_folders",
+      "tests/component/test_app_startup.py::test_a_store_error_becomes_a_startup_error"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_old_sidecar_still_loads",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "an old sidecar with a phase key loads and the key is dropped on save",
+    "why": "sidecar JSON parsing in store",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_shutdown_returns_task_to_its_stage",
+    "area": "core",
+    "target": "component",
+    "behavior": "on shutdown a running task returns to its stage's todo folder",
+    "why": "Workers.shutdown over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_startup_recovers_each_running_folder_to_its_todo",
+    "area": "core",
+    "target": "component",
+    "behavior": "startup recovers plan-running to plan-todo and work-running to work-todo",
+    "why": "Startup over fakes",
+    "existing": [
+      "tests/component/test_app_startup.py::test_running_tasks_are_recovered_to_their_todo_folders"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_layout.py::test_status_shows_cause_for_question_and_stuck",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task list shows the state with its cause, e.g. 'question (question)'",
+    "why": "ListTasks query over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_manual.py::test_command_discovery_is_not_vacuous",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "the subcommand list parsed from --help includes the known commands",
+    "why": "needs real --help output",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_manual.py::test_docs_have_no_em_dashes",
+    "area": "e2e",
+    "target": "unit",
+    "behavior": "README.md and docs/manual.md contain no em-dash",
+    "why": "reads doc files only (fits tests/checks)",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_manual.py::test_manual_documents_shell_completion",
+    "area": "e2e",
+    "target": "unit",
+    "behavior": "docs/manual.md mentions --install-completion and --show-completion",
+    "why": "reads a doc file only (fits tests/checks)",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_manual.py::test_manual_mentions_every_subcommand",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "docs/manual.md mentions samba <cmd> for every command listed in --help",
+    "why": "needs real --help output",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_allow_list_is_exactly_planning_allow",
+    "area": "int-agent",
+    "target": "integration",
+    "behavior": "the planner argv uses planning.allow exactly and dontAsk, ignoring claude.allow and claude.permission_mode",
+    "why": "argv built only in claude_cli",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_approval_runs_execution_in_a_new_session",
+    "area": "core",
+    "target": "component",
+    "behavior": "after plan.accept the work run starts a new session (not resumed), carries the approved-plan rule in the system prompt and sets plan_approved and last_stage=work",
+    "why": "PromptBuilder and transition effects over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_app_run_task.py::test_an_approved_plan_adds_its_rule_to_the_system_prompt"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_default_config_executes_todo_directly",
+    "area": "core",
+    "target": "component",
+    "behavior": "without require_plan a work-todo task runs work directly with a schema lacking 'planned' and no plan session",
+    "why": "guard and dispatch over fakes",
+    "existing": [
+      "tests/component/test_app_run_task.py::test_guard_plan_required_and_deps_met"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_missing_plan_text_is_a_failure",
+    "area": "core",
+    "target": "component",
+    "behavior": "a planned outcome with blank plan text is a failed attempt",
+    "why": "turn decision over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_turn_decision",
+      "tests/component/test_scenarios.py::test_turn_flow"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_moving_task_out_of_running_stops_the_planner",
+    "area": "core",
+    "target": "component",
+    "behavior": "hand-moving a planning task from plan-running to discarded stops the agent and removes the worktree",
+    "why": "Tick.reconcile and Workers over fakes",
+    "existing": [
+      "tests/component/test_tick.py::test_reconcile_stops_a_worker_whose_file_left_its_folder"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_new_plan_creates_task_in_plan_folder",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task new creates the task in plan-todo by default, not work-todo",
+    "why": "CreateTask use case over fakes",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_plan_headings_do_not_split_the_plan_section",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "a plan containing ## headings stays one ## Plan section and is wholly replaced on revision",
+    "why": "markdown section parsing in the store",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_plan_protocol_requires_spec_changes_section",
+    "area": "core",
+    "target": "unit",
+    "behavior": "the planning protocol prompt asks for a Spec changes section ('none, because') without naming docs/spec",
+    "why": "prompt text is a domain constant",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_plan_task_ends_in_plan_review_read_only",
+    "area": "int-agent",
+    "target": "integration",
+    "behavior": "a planning run ends in plan-review with the plan and summary written, no commits, and a read-only argv (dontAsk, Read/Grep/Glob allow list, no Edit/Write, planned|blocked outcome schema)",
+    "why": "argv built only in claude_cli; state part is component",
+    "existing": [
+      "tests/component/test_app_run_task.py::test_a_plan_run_ends_in_plan_review",
+      "tests/component/test_scenarios.py::test_turn_flow"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_planner_blocked_with_questions_then_replan",
+    "area": "core",
+    "target": "component",
+    "behavior": "a blocked planning run records questions and goes to question; answering returns it to plan-todo with attempts reset and it replans",
+    "why": "turn flow and transitions over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_planner_failure_is_retried_from_plan",
+    "area": "core",
+    "target": "component",
+    "behavior": "a failed planning attempt is retried in the plan stage and the second run reaches plan-review",
+    "why": "RunTask/Finisher retry over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_planner_gives_up_without_reflection",
+    "area": "core",
+    "target": "component",
+    "behavior": "giving up on planning goes to stuck with last_outcome failed and sends no reflection turn",
+    "why": "Finisher and should_reflect over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_turn_rule",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_planning_model_defaults_to_claude_model",
+    "area": "int-agent",
+    "target": "integration",
+    "behavior": "without planning.model the planner uses claude.model",
+    "why": "model choice made in claude_cli argv",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_planning_model_for_planning_and_claude_model_for_execution",
+    "area": "int-agent",
+    "target": "integration",
+    "behavior": "planning.model is passed to the planner and claude.model to the worker",
+    "why": "model choice made in claude_cli argv",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_recovery_replans_a_running_planning_task",
+    "area": "core",
+    "target": "component",
+    "behavior": "a task found in plan-running at startup is recovered to plan-todo and replanned",
+    "why": "Startup recovery over fakes",
+    "existing": [
+      "tests/component/test_app_startup.py::test_running_tasks_are_recovered_to_their_todo_folders",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_rejection_revises_the_same_plan",
+    "area": "core",
+    "target": "component",
+    "behavior": "plan.reject resumes the planning session with the revise prompt and replaces the single ## Plan section, keeping the feedback",
+    "why": "PromptBuilder resume choice; section rewrite is int-tasks",
+    "existing": [
+      "tests/component/test_app_run_task.py::test_the_plan_setup_has_one_turn_and_no_validation"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_require_plan_plans_todo_tasks_first",
+    "area": "core",
+    "target": "component",
+    "behavior": "with require_plan a work-todo task is routed to planning first, then runs work after plan approval",
+    "why": "route_to_plan row and guard over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_app_run_task.py::test_guard_plan_required_and_deps_met"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_planning.py::test_status_shows_plan_states",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task list shows plan-stage states",
+    "why": "ListTasks query over fakes",
+    "existing": [
+      "tests/component/test_app_queries.py::test_task_list_all_states_in_order_and_filtered_by_prefix"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_answer_usage_and_state_errors",
+    "area": "commands",
+    "target": "component",
+    "behavior": "unknown qid, missing or blank text, unknown task are usage errors; answering an answered question is refused 'not open'",
+    "why": "AnswerQuestion refusals",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_answer_errors",
+      "tests/component/test_app_use_cases.py::test_answer_ambiguous_and_unknown_change_nothing",
+      "tests/component/test_app_use_cases.py::test_several_open_questions_need_a_qid_and_the_task_waits_for_the_rest"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_blocked_planner_records_plan_stage_questions",
+    "area": "core",
+    "target": "component",
+    "behavior": "a blocked planner records plan-stage questions; answering moves to plan-todo; the next plan prompt carries Q and A",
+    "why": "TurnFlow and PromptBuilder over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_turn_flow[turn_flow.json::plan run blocked records questions]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::question.answer resumes the plan stage and dismisses open questions]",
+      "tests/component/test_app_run_task.py::test_answers_are_appended_to_a_custom_prompt_that_lacks_questions"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_blocked_run_records_two_open_questions",
+    "area": "core",
+    "target": "component",
+    "behavior": "a blocked report with questions moves the task to question and records q1,q2 (round 1, open, stage, text, context, asked_at), renders ## Questions, question list shows them",
+    "why": "TurnFlow plus queries over fakes; rendering is int-tasks",
+    "existing": [
+      "tests/unit/test_task_domain.py::test_add_questions_numbers_and_rounds",
+      "tests/component/test_scenarios.py::test_turn_flow[turn_flow.json::plan run blocked records questions]",
+      "tests/component/test_scenarios.py::test_lifecycle[lifecycle.json::blocked agent asks, the human answers, the task resumes and finishes]",
+      "tests/component/test_app_queries.py::test_question_list_and_show",
+      "tests/integration/test_tasks_port.py::test_markdown_file_layout_matches_the_old_writers"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_blocked_without_questions_synthesizes_one",
+    "area": "core",
+    "target": "component",
+    "behavior": "a blocked report without questions is not retried and gets one synthesized question from the summary, context naming the denials",
+    "why": "TurnFlow over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_hand_move_dismisses_open_questions",
+    "area": "core",
+    "target": "component",
+    "behavior": "hand moving question to work-todo is observed as question.answer, dismisses open questions (rendered dismissed) and the next prompt reports them dismissed",
+    "why": "human_row, transition effect, round_pairs",
+    "existing": [
+      "tests/component/test_scenarios.py::test_human_row[human_row.json::question to work-todo with last_stage work]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::question.answer resumes the plan stage and dismisses open questions]",
+      "tests/unit/test_task_domain.py::test_round_pairs"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_old_task_without_questions_field",
+    "area": "commands",
+    "target": "component",
+    "behavior": "a question task with no questions field lists nothing, answer is refused (no open question), a hand move still runs it",
+    "why": "AnswerQuestion refusal; missing field read is int-tasks",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_partial_answer_keeps_task_in_question_then_resumes",
+    "area": "commands",
+    "target": "component",
+    "behavior": "answering one of two questions keeps the task in question; answering the last resumes it; the next prompt carries both Q&A pairs",
+    "why": "AnswerQuestion plus lifecycle over fakes",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_several_open_questions_need_a_qid_and_the_task_waits_for_the_rest",
+      "tests/unit/test_task_domain.py::test_round_pairs",
+      "tests/component/test_scenarios.py::test_lifecycle[lifecycle.json::blocked agent asks, the human answers, the task resumes and finishes]"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_plan_assumptions_render_under_the_new_name",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "a plan run's assumptions are written under ## Assumptions, no questions recorded",
+    "why": "section name in the markdown file",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_prefix_and_omitted_qid_with_one_open",
+    "area": "commands",
+    "target": "component",
+    "behavior": "answer accepts a task prefix and an omitted qid when one question is open",
+    "why": "resolution in AnswerQuestion",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_answer_resolves_prefix_with_and_without_qid"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_qid_omitted_with_two_open_is_usage_error",
+    "area": "commands",
+    "target": "component",
+    "behavior": "omitting the qid with two open questions is a usage error listing both, nothing changes",
+    "why": "AnswerQuestion refusal",
+    "existing": [
+      "tests/component/test_app_use_cases.py::test_several_open_questions_need_a_qid_and_the_task_waits_for_the_rest"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_question_help_lists_verbs",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "samba question --help lists list, show, answer; top help lists question",
+    "why": "help output of the CLI",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_question_list_shows_full_text_on_wide_terminal",
+    "area": "commands",
+    "target": "unit",
+    "behavior": "on a wide terminal the full question shows; on a narrow one it is cut; TASK, QID, STAGE, ASKED date columns kept",
+    "why": "table printer flex column",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_question_list_truncates_to_terminal_width",
+    "area": "commands",
+    "target": "unit",
+    "behavior": "question list rows fit the terminal width, the question column cut with '...'",
+    "why": "table printer is pure",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_second_round_gets_next_id_and_round",
+    "area": "commands",
+    "target": "component",
+    "behavior": "a second block adds q3 in round 2; question show by task shows the latest round, by qid shows text, context and answer; unknown qid is usage",
+    "why": "numbering is unit; show is a query over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_questions.py::test_task_show_counts_open_questions",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task show prints open_questions with the open count",
+    "why": "ShowTask query over fakes",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_task_new.py::test_ambiguous_dependency_by_flag_creates_nothing",
+    "area": "commands",
+    "target": "component",
+    "behavior": "an ambiguous --depends-on prefix is a usage error listing candidates, nothing created",
+    "why": "CreateTask refusal",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_task_new.py::test_comma_separated_dependencies",
+    "area": "commands",
+    "target": "component",
+    "behavior": "--depends-on takes comma separated ids or prefixes, ignoring blanks and a trailing comma",
+    "why": "resolve_deps in CreateTask",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_task_new.py::test_default_destination_is_plan_todo",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task new puts the task in plan-todo by default and prints its path",
+    "why": "CreateTask over fakes",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_task_new.py::test_defaults_without_tty",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "task new without tty writes priority 3, no depends_on, '# Title' and an empty body, no template text",
+    "why": "empty-body file layout; default 3 is a CLI default",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_task_new.py::test_flags_only_full_task",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task new with body, depends-on prefix, priority, skip-plan writes front matter (priority, resolved depends_on) and '# Title' plus body",
+    "why": "CreateTask over fakes; file layout is int-tasks",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes",
+      "tests/component/test_app_accept_create.py::test_dependencies_by_flag_resolve_prefixes_or_fail",
+      "tests/integration/test_tasks_port.py::test_markdown_file_layout_matches_the_old_writers"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_task_new.py::test_no_title_and_no_tty_is_a_usage_error",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task new without title and without tty is a usage error, nothing created",
+    "why": "CreateTask over a non-interactive terminal",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_no_title_without_a_terminal_is_a_usage_error"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_task_new.py::test_plan_flag_is_gone",
+    "area": "e2e",
+    "target": "e2e",
+    "behavior": "task new --plan is an unknown option (exit 2), nothing created",
+    "why": "CLI option surface",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_task_new.py::test_skip_plan_goes_to_work_todo",
+    "area": "commands",
+    "target": "component",
+    "behavior": "task new --skip-plan puts the task in work-todo",
+    "why": "CreateTask over fakes",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_task_new.py::test_tty_only_prompts_for_missing_fields",
+    "area": "commands",
+    "target": "component",
+    "behavior": "on a tty, fields given by flags are not prompted",
+    "why": "CreateTask over a fake terminal",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_task_new.py::test_tty_prompts_for_all_fields",
+    "area": "commands",
+    "target": "component",
+    "behavior": "on a tty task new asks title, description (until empty line), dependencies and 'Plan first? [Y/n]'",
+    "why": "prompt sequence over a fake terminal",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_missing_fields_are_asked_on_a_terminal"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_task_new.py::test_tty_reasks_empty_title_and_bad_dependency",
+    "area": "commands",
+    "target": "component",
+    "behavior": "an empty title and an unknown dependency are asked again; an empty plan answer means plan-todo",
+    "why": "prompt loop over a fake terminal",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_missing_fields_are_asked_on_a_terminal"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_task_new.py::test_unknown_dependency_by_flag_creates_nothing",
+    "area": "commands",
+    "target": "component",
+    "behavior": "an unknown --depends-on id is a usage error naming it, nothing created",
+    "why": "CreateTask refusal",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_dependencies_by_flag_resolve_prefixes_or_fail"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_transitions.py::test_actors_and_known_names",
+    "area": "core",
+    "target": "unit",
+    "behavior": "rows have actors samba or human only and event names are lowercase dotted",
+    "why": "pure table data",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_transitions.py::test_every_row_has_a_test",
+    "area": "core",
+    "target": "component",
+    "behavior": "every transition table row has a scenario",
+    "why": "scenario coverage check",
+    "existing": [
+      "tests/component/test_scenarios.py::test_every_table_row_is_covered"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_transitions.py::test_first_sight_records_the_folder_and_fires_nothing",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "a task first seen records its folder in the sidecar and fires no transition",
+    "why": "sidecar baseline in markdown store",
+    "existing": [
+      "tests/integration/test_tasks_port.py::test_observe_accept_and_revert"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_transitions.py::test_human_row_is_observed",
+    "area": "core",
+    "target": "component",
+    "behavior": "each observed hand move selects its human row, logs 'observed hand move' and applies its sidecar effects",
+    "why": "Tick.observe and rows over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_human_row",
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_tick.py::test_observe_notes_a_hand_move_and_reverts_an_illegal_one"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_transitions.py::test_human_row_out_of_running_stops_agent",
+    "area": "core",
+    "target": "component",
+    "behavior": "task.stop/task.discard hand moves out of a running folder stop the agent; stopped stays stuck, discarded loses its worktree",
+    "why": "Tick.reconcile and Workers over fakes",
+    "existing": [
+      "tests/component/test_tick.py::test_reconcile_stops_a_worker_whose_file_left_its_folder",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_transitions.py::test_illegal_hand_move_is_moved_back",
+    "area": "core",
+    "target": "component",
+    "behavior": "a hand move without a row is moved back, logged 'illegal move' and journaled illegal_move",
+    "why": "Tick.observe over fakes; file revert is int-tasks",
+    "existing": [
+      "tests/component/test_tick.py::test_observe_notes_a_hand_move_and_reverts_an_illegal_one",
+      "tests/component/test_scenarios.py::test_human_row",
+      "tests/integration/test_tasks_port.py::test_observe_accept_and_revert"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_transitions.py::test_illegal_move_of_running_task_keeps_agent_and_defers_log",
+    "area": "core",
+    "target": "component",
+    "behavior": "an illegal move of a running task is reverted without stopping the agent and its log line is held until the run ends",
+    "why": "Tick and Notes over fakes",
+    "existing": [
+      "tests/component/test_tick.py::test_notes_are_held_while_the_agent_runs_and_written_after"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_transitions.py::test_question_answer_to_the_other_stage_is_illegal",
+    "area": "core",
+    "target": "component",
+    "behavior": "answering to the other stage's todo than last_stage is illegal and moved back",
+    "why": "human_row selection",
+    "existing": [
+      "tests/component/test_scenarios.py::test_human_row"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_transitions.py::test_rejected_plan_is_not_approved_by_inference",
+    "area": "core",
+    "target": "component",
+    "behavior": "plan.reject keeps plan_approved false, so require_plan replans again",
+    "why": "rows and guard over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_transitions.py::test_samba_own_moves_are_not_seen_as_hand_moves",
+    "area": "int-tasks",
+    "target": "integration",
+    "behavior": "samba's own moves are not observed as hand moves",
+    "why": "store records the new status",
+    "existing": [
+      "tests/integration/test_tasks_port.py::test_save_after_status_change_records_the_new_status"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_transitions.py::test_samba_row",
+    "area": "core",
+    "target": "component",
+    "behavior": "each samba row fires from its scenario, writes 'event: src -> dst' to the log and journals a transition event",
+    "why": "Machine.fire over fakes",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_scenarios.py::test_every_table_row_is_covered"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_transitions.py::test_spec_table_matches_the_code",
+    "area": "core",
+    "target": "unit",
+    "behavior": "the transition table embedded in docs/spec/states.md matches the rendered table",
+    "why": "pure renderer vs doc text",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_conflict_aborted",
+    "area": "commands",
+    "target": "component",
+    "behavior": "a merge conflict aborts the merge, restores a clean main, names the files, logs merge failed and keeps work-review",
+    "why": "AcceptWork over fakes; restore is int-vcs",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_merge_failures_log_and_stay_in_work_review",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_merge_conflict_lists_files_and_restores_the_checkout"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_dry_run",
+    "area": "commands",
+    "target": "component",
+    "behavior": "--dry-run describes branch, base, commit count and validate command and changes nothing",
+    "why": "AcceptWork over fakes",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_dry_run_prints_the_plan_and_changes_nothing"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_hand_move_does_not_merge",
+    "area": "core",
+    "target": "component",
+    "behavior": "a hand move work-review to done does not merge anything",
+    "why": "work.accept row has no merge effect",
+    "existing": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_no_merge",
+    "area": "commands",
+    "target": "component",
+    "behavior": "--no-merge marks the task done without merging or validating",
+    "why": "AcceptWork over fakes",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_accept_no_merge_and_already_merged"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_no_validate",
+    "area": "commands",
+    "target": "component",
+    "behavior": "--no-validate merges without validating and logs validation skipped",
+    "why": "AcceptWork over fakes",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_accept_no_validate_skips_the_validator"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_preflight_branch_missing",
+    "area": "int-vcs",
+    "target": "integration",
+    "behavior": "work accept refuses when the task branch does not exist",
+    "why": "branch lookup only real git shows",
+    "existing": [
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_preflight_checks"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_preflight_dirty_tracked",
+    "area": "int-vcs",
+    "target": "integration",
+    "behavior": "work accept refuses when tracked files have uncommitted changes and leaves them",
+    "why": "git status check only real git shows",
+    "existing": [
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_preflight_checks",
+      "tests/component/test_app_accept_create.py::test_accept_refusals_before_any_change"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_preflight_other_branch",
+    "area": "int-vcs",
+    "target": "integration",
+    "behavior": "work accept refuses when the main checkout is not on the base branch, changing nothing",
+    "why": "git branch check only real git shows",
+    "existing": [
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_preflight_checks",
+      "tests/component/test_app_accept_create.py::test_accept_refusals_before_any_change"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_refuses_without_tty_and_yes",
+    "area": "commands",
+    "target": "component",
+    "behavior": "without a terminal and without --yes work accept is a usage refusal and changes nothing",
+    "why": "confirm policy over fake terminal",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_accept_refusals_before_any_change"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_success",
+    "area": "commands",
+    "target": "component",
+    "behavior": "work accept merges the branch with a no-ff merge commit naming the task, keeps the branch, moves to done, logs work.accept and notes the missing validate command",
+    "why": "AcceptWork over fakes; merge commit shape is int-vcs",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_accept_merges_validates_and_fires",
+      "tests/component/test_app_accept_create.py::test_accept_without_a_validate_command_says_so",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_merge_pending_then_commit"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_tty_prompt",
+    "area": "int-terminal",
+    "target": "integration",
+    "behavior": "on a real tty answering n declines and y merges",
+    "why": "real pty prompt in StdTerminal",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_unknown_id",
+    "area": "commands",
+    "target": "component",
+    "behavior": "work accept of an unknown task id is a usage refusal",
+    "why": "id resolution in use case",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_accept_resolves_a_unique_prefix_and_refuses_ambiguous_or_unknown"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_untracked_file_does_not_block",
+    "area": "int-vcs",
+    "target": "integration",
+    "behavior": "an untracked file in the main checkout does not block work accept",
+    "why": "git status check only real git shows",
+    "existing": [],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_validation_failure_after_merge",
+    "area": "commands",
+    "target": "component",
+    "behavior": "validation failing on the merged tree aborts the merge, shows the output, logs it and keeps work-review and the branch",
+    "why": "AcceptWork over fakes; abort is int-vcs",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_validation_failure_aborts_the_merge_and_shows_the_tail",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_abort_merge_undoes_a_pending_merge_even_with_a_dirty_tracked_file"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_validation_passes_after_merge",
+    "area": "commands",
+    "target": "component",
+    "behavior": "validation runs on the merged tree and on success the merge is committed and logged as validated",
+    "why": "AcceptWork ordering over fakes",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_accept_merges_validates_and_fires"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_validation_runs_in_main_checkout",
+    "area": "commands",
+    "target": "component",
+    "behavior": "accept-time validation runs in the main checkout",
+    "why": "location passed to validator port",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_accept_merges_validates_and_fires",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_validator_pass_writes_the_full_log"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_validation_timeout",
+    "area": "commands",
+    "target": "component",
+    "behavior": "a timed out accept validation aborts the merge, keeps work-review and logs timed out",
+    "why": "AcceptWork over fakes; timeout is int-validator",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_a_timed_out_validation_says_so",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_validator_failure_and_timeout"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  },
+  {
+    "id": "test_work_accept.py::test_wrong_state",
+    "area": "commands",
+    "target": "component",
+    "behavior": "work accept from a state other than work-review is refused naming the legal events",
+    "why": "legality check over fakes",
+    "existing": [
+      "tests/component/test_app_accept_create.py::test_accept_refusals_before_any_change"
+    ],
+    "status": "todo",
+    "covered_by": [],
+    "reason": ""
+  }
+]
