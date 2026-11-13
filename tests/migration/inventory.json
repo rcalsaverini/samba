@@ -55,8 +55,10 @@
     "existing": [
       "tests/component/test_app_queries.py::test_adr_list_shows_accepted_only_or_all"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_queries.py::test_adr_list_shows_accepted_only_or_all"
+    ],
     "reason": ""
   },
   {
@@ -68,8 +70,10 @@
     "existing": [
       "tests/component/test_app_queries.py::test_adr_list_shows_accepted_only_or_all"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_queries.py::test_adr_list_shows_accepted_only_or_all"
+    ],
     "reason": ""
   },
   {
@@ -79,8 +83,11 @@
     "behavior": "adr list rows fit the terminal width, summary cut with '...'",
     "why": "table printer is pure",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/unit/test_table_printer.py::test_a_narrow_terminal_cuts_only_the_flex_column_with_dots",
+      "tests/component/test_app_queries.py::test_adr_list_shows_accepted_only_or_all"
+    ],
     "reason": ""
   },
   {
@@ -149,8 +156,12 @@
       "tests/component/test_app_queries.py::test_adr_accept_and_reject_write_the_file_or_refuse_with_code_1",
       "tests/component/test_app_queries.py::test_adr_supersede_lists_both_files"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_queries.py::test_adr_show_prints_the_text_and_refuses_unknown_and_bad_numbers",
+      "tests/component/test_app_queries.py::test_adr_accept_and_reject_write_the_file_or_refuse_with_code_1",
+      "tests/component/test_app_queries.py::test_adr_supersede_lists_both_files"
+    ],
     "reason": ""
   },
   {
@@ -425,8 +436,10 @@
     "behavior": "an empty task list prints only the header row",
     "why": "ListTasks result shape",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_an_empty_list_is_the_header_only"
+    ],
     "reason": ""
   },
   {
@@ -438,8 +451,10 @@
     "existing": [
       "tests/component/test_app_queries.py::test_task_list_all_states_in_order_and_filtered_by_prefix"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_queries.py::test_task_list_all_states_in_order_and_filtered_by_prefix"
+    ],
     "reason": ""
   },
   {
@@ -449,8 +464,11 @@
     "behavior": "several state filters list in canonical state order and stuck shows its cause",
     "why": "ListTasks state matcher",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_several_states_list_in_the_canonical_order_whatever_the_argument_order",
+      "tests/component/test_task_list_and_show.py::test_question_and_stuck_show_their_cause_next_to_the_state"
+    ],
     "reason": ""
   },
   {
@@ -460,8 +478,10 @@
     "behavior": "task list shows waiting on <dep> for a task with unmet dependencies",
     "why": "ListTasks over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_a_held_task_shows_what_it_waits_on"
+    ],
     "reason": ""
   },
   {
@@ -473,8 +493,10 @@
     "existing": [
       "tests/component/test_app_queries.py::test_task_list_unknown_state_is_a_usage_error_listing_the_states"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_queries.py::test_task_list_unknown_state_is_a_usage_error_listing_the_states"
+    ],
     "reason": ""
   },
   {
@@ -486,8 +508,10 @@
     "existing": [
       "tests/component/test_app_queries.py::test_task_list_all_states_in_order_and_filtered_by_prefix"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_queries.py::test_task_list_all_states_in_order_and_filtered_by_prefix"
+    ],
     "reason": ""
   },
   {
@@ -651,8 +675,15 @@
       "tests/unit/test_task_domain.py::test_resolve_exact_wins_over_prefix",
       "tests/unit/test_task_domain.py::test_resolve_ambiguous_and_unknown"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_queries.py::test_show_commands_resolve_prefixes",
+      "tests/component/test_app_resolve.py::test_exact_id_and_unique_prefix",
+      "tests/component/test_app_resolve.py::test_ambiguous_prefix_is_a_usage_refusal_with_candidates",
+      "tests/component/test_app_resolve.py::test_unknown_id_is_a_usage_refusal",
+      "tests/unit/test_task_domain.py::test_resolve_exact_wins_over_prefix",
+      "tests/unit/test_task_domain.py::test_resolve_ambiguous_and_unknown"
+    ],
     "reason": ""
   },
   {
@@ -714,8 +745,10 @@
     "behavior": "task show lists dependencies with their states, unknown ones, and waiting",
     "why": "ShowTask over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_show_lists_dependencies_with_their_states_and_why_it_is_held"
+    ],
     "reason": ""
   },
   {
@@ -725,8 +758,10 @@
     "behavior": "task show works for a done task",
     "why": "ShowTask over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_show_of_a_done_task_has_no_events"
+    ],
     "reason": ""
   },
   {
@@ -736,8 +771,10 @@
     "behavior": "task show lists exactly the human events the transition table allows for each state and stage",
     "why": "ShowTask over fakes vs transition table",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_show_lists_exactly_the_human_events_the_table_allows"
+    ],
     "reason": ""
   },
   {
@@ -747,8 +784,10 @@
     "behavior": "task show prints title, state, cause, counters, cost, outcome, full error, branch, worktree, sessions and the legal events",
     "why": "ShowTask renderer over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_show_prints_every_field_and_the_legal_events"
+    ],
     "reason": ""
   },
   {
@@ -758,8 +797,10 @@
     "behavior": "task show of a question task shows the cause and question.answer -> work-todo",
     "why": "ShowTask over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_show_of_a_question_task_names_the_cause_and_where_the_answer_resumes"
+    ],
     "reason": ""
   },
   {
@@ -797,8 +838,12 @@
     "behavior": "the error column fills the terminal width and is cut with ... when narrow",
     "why": "print_table is pure given a width",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/unit/test_table_printer.py::test_a_narrow_terminal_cuts_only_the_flex_column_with_dots",
+      "tests/unit/test_table_printer.py::test_a_wide_terminal_shows_the_whole_flex_column",
+      "tests/component/test_task_list_and_show.py::test_a_row_shows_the_outcome_the_cost_and_the_error_on_one_line"
+    ],
     "reason": ""
   },
   {
@@ -808,8 +853,10 @@
     "behavior": "task list shows id, blocked outcome and cost for a blocked task",
     "why": "ListTasks rows over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_a_row_shows_the_outcome_the_cost_and_the_error_on_one_line"
+    ],
     "reason": ""
   },
   {
@@ -821,8 +868,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes"
+    ],
     "reason": ""
   },
   {
@@ -1090,8 +1139,13 @@
       "tests/component/test_app_resolve.py::test_exact_id_wins_over_a_longer_id_it_prefixes",
       "tests/unit/test_task_domain.py::test_resolve_exact_wins_over_prefix"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_change_state_resolves_a_unique_prefix",
+      "tests/component/test_app_use_cases.py::test_change_state_ambiguous_and_unknown_change_nothing",
+      "tests/component/test_app_resolve.py::test_exact_id_wins_over_a_longer_id_it_prefixes",
+      "tests/unit/test_task_domain.py::test_resolve_exact_wins_over_prefix"
+    ],
     "reason": ""
   },
   {
@@ -1119,8 +1173,11 @@
       "tests/component/test_app_use_cases.py::test_accept_plan_moves_a_plan_review_task",
       "tests/component/test_scenarios.py::test_transition[transition.json::plan.accept approves the plan and drops the session]"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_accept_plan_moves_a_plan_review_task",
+      "tests/component/test_scenarios.py::test_transition[transition.json::plan.accept approves the plan and drops the session]"
+    ],
     "reason": ""
   },
   {
@@ -1133,8 +1190,11 @@
       "tests/component/test_app_use_cases.py::test_feedback_is_written_before_the_move_with_a_round_log",
       "tests/component/test_app_use_cases.py::test_reject_plan_records_feedback"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_feedback_is_written_before_the_move_with_a_round_log",
+      "tests/component/test_app_use_cases.py::test_reject_plan_records_feedback"
+    ],
     "reason": ""
   },
   {
@@ -1146,8 +1206,10 @@
     "existing": [
       "tests/component/test_app_use_cases.py::test_empty_feedback_warns_when_optional_and_fails_when_required"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_empty_feedback_warns_when_optional_and_fails_when_required"
+    ],
     "reason": ""
   },
   {
@@ -1171,8 +1233,11 @@
       "tests/component/test_app_use_cases.py::test_reject_work_fires_reject_or_reject_fresh",
       "tests/component/test_scenarios.py::test_transition[transition.json::work.reject_fresh drops the session]"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_reject_work_fires_reject_or_reject_fresh",
+      "tests/component/test_scenarios.py::test_transition[transition.json::work.reject_fresh drops the session]"
+    ],
     "reason": ""
   },
   {
@@ -1185,8 +1250,11 @@
       "tests/component/test_app_use_cases.py::test_reject_work_fires_reject_or_reject_fresh",
       "tests/component/test_scenarios.py::test_transition[transition.json::work.reject keeps the session]"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_reject_work_fires_reject_or_reject_fresh",
+      "tests/component/test_scenarios.py::test_transition[transition.json::work.reject keeps the session]"
+    ],
     "reason": ""
   },
   {
@@ -1199,8 +1267,11 @@
       "tests/component/test_app_use_cases.py::test_check_legal_ok_missing_and_illegal",
       "tests/component/test_app_use_cases.py::test_illegal_event_is_refused_and_names_the_legal_ones"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_check_legal_ok_missing_and_illegal",
+      "tests/component/test_app_use_cases.py::test_illegal_event_is_refused_and_names_the_legal_ones"
+    ],
     "reason": ""
   },
   {
@@ -1214,8 +1285,12 @@
       "tests/component/test_scenarios.py::test_human_events[human_events.json::plan-running]",
       "tests/component/test_scenarios.py::test_human_events[human_events.json::done has no human events]"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_check_legal_ok_missing_and_illegal",
+      "tests/component/test_scenarios.py::test_human_events[human_events.json::plan-running]",
+      "tests/component/test_scenarios.py::test_human_events[human_events.json::done has no human events]"
+    ],
     "reason": ""
   },
   {
@@ -1236,8 +1311,10 @@
     "behavior": "the discard prompt names the full id resolved from a prefix",
     "why": "ChangeState formats the prompt after resolution",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_command_messages.py::test_the_discard_prompt_names_the_full_id_resolved_from_a_prefix"
+    ],
     "reason": ""
   },
   {
@@ -1274,8 +1351,11 @@
       "tests/component/test_app_use_cases.py::test_discard_task_declines_without_yes_or_tty_and_passes_with_yes",
       "tests/component/test_app_use_cases.py::test_confirm_policy"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_discard_task_declines_without_yes_or_tty_and_passes_with_yes",
+      "tests/component/test_app_use_cases.py::test_confirm_policy"
+    ],
     "reason": ""
   },
   {
@@ -1288,8 +1368,11 @@
       "tests/component/test_app_use_cases.py::test_discard_asks_after_legality_and_before_the_lock",
       "tests/component/test_scenarios.py::test_human_events[human_events.json::done has no human events]"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_discard_asks_after_legality_and_before_the_lock",
+      "tests/component/test_scenarios.py::test_human_events[human_events.json::done has no human events]"
+    ],
     "reason": ""
   },
   {
@@ -1305,8 +1388,14 @@
       "tests/component/test_scenarios.py::test_transition[transition.json::task.discard from plan-review]",
       "tests/component/test_scenarios.py::test_transition[transition.json::task.discard from work-todo]"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_discard_task_declines_without_yes_or_tty_and_passes_with_yes",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.discard from work-review]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.discard from stuck]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.discard from plan-review]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.discard from work-todo]"
+    ],
     "reason": ""
   },
   {
@@ -1320,8 +1409,12 @@
       "tests/component/test_scenarios.py::test_transition[transition.json::question.answer resumes the work stage]",
       "tests/component/test_scenarios.py::test_transition[transition.json::question.answer with no recorded stage goes to the plan stage]"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_single_open_question_is_answered_and_the_task_resumes",
+      "tests/component/test_scenarios.py::test_transition[transition.json::question.answer resumes the work stage]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::question.answer with no recorded stage goes to the plan stage]"
+    ],
     "reason": ""
   },
   {
@@ -1333,8 +1426,10 @@
     "existing": [
       "tests/component/test_app_use_cases.py::test_answer_from_the_editor_quotes_the_question_and_strips_comments"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_answer_from_the_editor_quotes_the_question_and_strips_comments"
+    ],
     "reason": ""
   },
   {
@@ -1346,8 +1441,10 @@
     "existing": [
       "tests/component/test_app_use_cases.py::test_answer_from_the_editor_quotes_the_question_and_strips_comments"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_answer_from_the_editor_quotes_the_question_and_strips_comments"
+    ],
     "reason": ""
   },
   {
@@ -1370,8 +1467,10 @@
     "existing": [
       "tests/component/test_app_use_cases.py::test_answer_errors"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_answer_errors"
+    ],
     "reason": ""
   },
   {
@@ -1384,8 +1483,11 @@
       "tests/component/test_scenarios.py::test_transition[transition.json::task.retry resumes the plan stage]",
       "tests/component/test_scenarios.py::test_transition[transition.json::task.retry resumes the work stage]"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.retry resumes the plan stage]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.retry resumes the work stage]"
+    ],
     "reason": ""
   },
   {
@@ -1395,8 +1497,11 @@
     "behavior": "retry of a task stuck on budget or dependency_discarded/cycle prints a hint naming WORKFLOW.md or depends_on, changes no config, still moves",
     "why": "retry_hint is a pure helper",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_command_messages.py::test_retry_hints_name_what_to_fix_first",
+      "tests/component/test_command_messages.py::test_a_retry_with_a_hint_still_moves_the_task_and_prints_the_hint"
+    ],
     "reason": ""
   },
   {
@@ -1406,8 +1511,11 @@
     "behavior": "retrying a stopped task prints no hint and clears blocked_cause",
     "why": "retry_hint is a pure helper",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_command_messages.py::test_other_causes_have_no_hint",
+      "tests/component/test_command_messages.py::test_retrying_a_stopped_task_prints_no_hint_and_clears_the_cause"
+    ],
     "reason": ""
   },
   {
@@ -1434,8 +1542,12 @@
       "tests/component/test_scenarios.py::test_transition[transition.json::task.stop in work-running]",
       "tests/component/test_scenarios.py::test_transition[transition.json::task.retry resumes the work stage]"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.stop in plan-running]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.stop in work-running]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.retry resumes the work stage]"
+    ],
     "reason": ""
   },
   {
@@ -1451,8 +1563,14 @@
       "tests/component/test_scenarios.py::test_transition[transition.json::task.discard does not apply to a done task]",
       "tests/component/test_scenarios.py::test_transition[transition.json::task.discard does not apply to a discarded task]"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_check_legal_ok_missing_and_illegal",
+      "tests/component/test_app_use_cases.py::test_stop_task_is_refused_when_not_running",
+      "tests/component/test_app_use_cases.py::test_answer_errors",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.discard does not apply to a done task]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::task.discard does not apply to a discarded task]"
+    ],
     "reason": ""
   },
   {
@@ -1464,8 +1582,10 @@
     "existing": [
       "tests/component/test_app_completion.py::test_prefix_filter_and_help_text"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_completion.py::test_prefix_filter_and_help_text"
+    ],
     "reason": ""
   },
   {
@@ -1477,8 +1597,10 @@
     "existing": [
       "tests/component/test_app_completion.py::test_adr_numbers_by_status"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_completion.py::test_adr_numbers_by_status"
+    ],
     "reason": ""
   },
   {
@@ -1512,8 +1634,10 @@
     "existing": [
       "tests/component/test_app_completion.py::test_each_command_offers_the_states_its_table_rows_start_from"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_completion.py::test_each_command_offers_the_states_its_table_rows_start_from"
+    ],
     "reason": ""
   },
   {
@@ -1525,8 +1649,10 @@
     "existing": [
       "tests/component/test_app_completion.py::test_questions_offer_only_open_ones_as_task_slash_qid"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_completion.py::test_questions_offer_only_open_ones_as_task_slash_qid"
+    ],
     "reason": ""
   },
   {
@@ -1549,8 +1675,10 @@
     "existing": [
       "tests/component/test_app_completion.py::test_each_command_offers_the_states_its_table_rows_start_from"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_completion.py::test_each_command_offers_the_states_its_table_rows_start_from"
+    ],
     "reason": ""
   },
   {
@@ -1562,8 +1690,10 @@
     "existing": [
       "tests/component/test_app_completion.py::test_each_command_offers_the_states_its_table_rows_start_from"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_completion.py::test_each_command_offers_the_states_its_table_rows_start_from"
+    ],
     "reason": ""
   },
   {
@@ -1575,8 +1705,10 @@
     "existing": [
       "tests/component/test_app_completion.py::test_each_command_offers_the_states_its_table_rows_start_from"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_completion.py::test_each_command_offers_the_states_its_table_rows_start_from"
+    ],
     "reason": ""
   },
   {
@@ -1704,8 +1836,10 @@
     "behavior": "task list shows 'waiting on a, b' for a held task",
     "why": "ListTasks query over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_a_held_task_shows_what_it_waits_on"
+    ],
     "reason": ""
   },
   {
@@ -1840,8 +1974,10 @@
     "existing": [
       "tests/component/test_app_explore.py::test_allow_and_deny_lists"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_explore.py::test_allow_and_deny_lists"
+    ],
     "reason": ""
   },
   {
@@ -1853,8 +1989,10 @@
     "existing": [
       "tests/component/test_app_explore.py::test_allow_and_deny_lists"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_explore.py::test_allow_and_deny_lists"
+    ],
     "reason": ""
   },
   {
@@ -1866,8 +2004,10 @@
     "existing": [
       "tests/component/test_app_explore.py::test_the_exit_code_of_the_session_is_returned"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_explore.py::test_the_exit_code_of_the_session_is_returned"
+    ],
     "reason": ""
   },
   {
@@ -1879,8 +2019,10 @@
     "existing": [
       "tests/component/test_app_explore.py::test_the_guide_is_appended_to_the_system_prompt"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_explore.py::test_the_guide_is_appended_to_the_system_prompt"
+    ],
     "reason": ""
   },
   {
@@ -1892,8 +2034,10 @@
     "existing": [
       "tests/component/test_app_explore.py::test_model_only_when_configured"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_explore.py::test_model_only_when_configured"
+    ],
     "reason": ""
   },
   {
@@ -1906,8 +2050,11 @@
       "tests/component/test_app_explore.py::test_the_session_is_interactive_and_not_isolated",
       "tests/component/test_app_explore.py::test_a_topic_is_the_first_prompt_after_the_command_and_cwd_is_the_repo"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_explore.py::test_the_session_is_interactive_and_not_isolated",
+      "tests/component/test_app_explore.py::test_a_topic_is_the_first_prompt_after_the_command_and_cwd_is_the_repo"
+    ],
     "reason": ""
   },
   {
@@ -1920,8 +2067,11 @@
       "tests/component/test_app_explore.py::test_a_topic_is_the_first_prompt_after_the_command_and_cwd_is_the_repo",
       "tests/component/test_app_explore.py::test_the_session_is_interactive_and_not_isolated"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_explore.py::test_a_topic_is_the_first_prompt_after_the_command_and_cwd_is_the_repo",
+      "tests/component/test_app_explore.py::test_the_session_is_interactive_and_not_isolated"
+    ],
     "reason": ""
   },
   {
@@ -1933,8 +2083,10 @@
     "existing": [
       "tests/component/test_app_explore.py::test_no_topic_means_no_positional"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_explore.py::test_no_topic_means_no_positional"
+    ],
     "reason": ""
   },
   {
@@ -2119,8 +2271,10 @@
     "behavior": "task list shows the state with its cause, e.g. 'question (question)'",
     "why": "ListTasks query over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_question_and_stuck_show_their_cause_next_to_the_state"
+    ],
     "reason": ""
   },
   {
@@ -2251,8 +2405,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes"
+    ],
     "reason": ""
   },
   {
@@ -2422,8 +2578,10 @@
     "existing": [
       "tests/component/test_app_queries.py::test_task_list_all_states_in_order_and_filtered_by_prefix"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_queries.py::test_task_list_all_states_in_order_and_filtered_by_prefix"
+    ],
     "reason": ""
   },
   {
@@ -2437,8 +2595,12 @@
       "tests/component/test_app_use_cases.py::test_answer_ambiguous_and_unknown_change_nothing",
       "tests/component/test_app_use_cases.py::test_several_open_questions_need_a_qid_and_the_task_waits_for_the_rest"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_answer_errors",
+      "tests/component/test_app_use_cases.py::test_answer_ambiguous_and_unknown_change_nothing",
+      "tests/component/test_app_use_cases.py::test_several_open_questions_need_a_qid_and_the_task_waits_for_the_rest"
+    ],
     "reason": ""
   },
   {
@@ -2522,8 +2684,11 @@
     "behavior": "a question task with no questions field lists nothing, answer is refused (no open question), a hand move still runs it",
     "why": "AnswerQuestion refusal; missing field read is int-tasks",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_question_rounds.py::test_an_old_question_task_without_questions_lists_nothing_and_refuses_an_answer",
+      "tests/component/test_question_rounds.py::test_an_old_question_task_still_runs_after_a_hand_move"
+    ],
     "reason": ""
   },
   {
@@ -2537,8 +2702,12 @@
       "tests/unit/test_task_domain.py::test_round_pairs",
       "tests/component/test_scenarios.py::test_lifecycle[lifecycle.json::blocked agent asks, the human answers, the task resumes and finishes]"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_several_open_questions_need_a_qid_and_the_task_waits_for_the_rest",
+      "tests/unit/test_task_domain.py::test_round_pairs",
+      "tests/component/test_scenarios.py::test_lifecycle[lifecycle.json::blocked agent asks, the human answers, the task resumes and finishes]"
+    ],
     "reason": ""
   },
   {
@@ -2561,8 +2730,10 @@
     "existing": [
       "tests/component/test_app_use_cases.py::test_answer_resolves_prefix_with_and_without_qid"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_answer_resolves_prefix_with_and_without_qid"
+    ],
     "reason": ""
   },
   {
@@ -2574,8 +2745,10 @@
     "existing": [
       "tests/component/test_app_use_cases.py::test_several_open_questions_need_a_qid_and_the_task_waits_for_the_rest"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_use_cases.py::test_several_open_questions_need_a_qid_and_the_task_waits_for_the_rest"
+    ],
     "reason": ""
   },
   {
@@ -2596,8 +2769,11 @@
     "behavior": "on a wide terminal the full question shows; on a narrow one it is cut; TASK, QID, STAGE, ASKED date columns kept",
     "why": "table printer flex column",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_question_list_shows_the_whole_question_on_a_wide_terminal",
+      "tests/component/test_task_list_and_show.py::test_question_list_keeps_its_columns_and_cuts_the_question_on_a_narrow_terminal"
+    ],
     "reason": ""
   },
   {
@@ -2607,8 +2783,10 @@
     "behavior": "question list rows fit the terminal width, the question column cut with '...'",
     "why": "table printer is pure",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_question_list_keeps_its_columns_and_cuts_the_question_on_a_narrow_terminal"
+    ],
     "reason": ""
   },
   {
@@ -2618,8 +2796,12 @@
     "behavior": "a second block adds q3 in round 2; question show by task shows the latest round, by qid shows text, context and answer; unknown qid is usage",
     "why": "numbering is unit; show is a query over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_question_rounds.py::test_a_second_block_continues_the_ids_in_a_new_round",
+      "tests/component/test_question_rounds.py::test_show_by_task_is_the_latest_round_and_by_qid_is_one_question_with_its_answer",
+      "tests/component/test_question_rounds.py::test_an_unknown_qid_is_a_usage_error"
+    ],
     "reason": ""
   },
   {
@@ -2629,8 +2811,10 @@
     "behavior": "task show prints open_questions with the open count",
     "why": "ShowTask query over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_list_and_show.py::test_show_of_a_question_task_names_the_cause_and_where_the_answer_resumes"
+    ],
     "reason": ""
   },
   {
@@ -2640,8 +2824,10 @@
     "behavior": "an ambiguous --depends-on prefix is a usage error listing candidates, nothing created",
     "why": "CreateTask refusal",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_new_inputs.py::test_an_ambiguous_dependency_prefix_by_flag_creates_nothing"
+    ],
     "reason": ""
   },
   {
@@ -2651,8 +2837,10 @@
     "behavior": "--depends-on takes comma separated ids or prefixes, ignoring blanks and a trailing comma",
     "why": "resolve_deps in CreateTask",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_new_inputs.py::test_dependencies_are_comma_separated_ids_or_prefixes_ignoring_blanks"
+    ],
     "reason": ""
   },
   {
@@ -2664,8 +2852,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes"
+    ],
     "reason": ""
   },
   {
@@ -2690,8 +2880,12 @@
       "tests/component/test_app_accept_create.py::test_dependencies_by_flag_resolve_prefixes_or_fail",
       "tests/integration/test_tasks_port.py::test_markdown_file_layout_matches_the_old_writers"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes",
+      "tests/component/test_app_accept_create.py::test_dependencies_by_flag_resolve_prefixes_or_fail",
+      "tests/integration/test_tasks_port.py::test_markdown_file_layout_matches_the_old_writers"
+    ],
     "reason": ""
   },
   {
@@ -2703,8 +2897,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_no_title_without_a_terminal_is_a_usage_error"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_no_title_without_a_terminal_is_a_usage_error"
+    ],
     "reason": ""
   },
   {
@@ -2727,8 +2923,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_slug_collisions_get_numeric_suffixes"
+    ],
     "reason": ""
   },
   {
@@ -2738,8 +2936,11 @@
     "behavior": "on a tty, fields given by flags are not prompted",
     "why": "CreateTask over a fake terminal",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_task_new_inputs.py::test_on_a_terminal_only_the_missing_fields_are_asked",
+      "tests/component/test_task_new_inputs.py::test_on_a_terminal_flags_for_dependencies_skip_that_question_too"
+    ],
     "reason": ""
   },
   {
@@ -2751,8 +2952,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_missing_fields_are_asked_on_a_terminal"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_missing_fields_are_asked_on_a_terminal"
+    ],
     "reason": ""
   },
   {
@@ -2764,8 +2967,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_missing_fields_are_asked_on_a_terminal"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_missing_fields_are_asked_on_a_terminal"
+    ],
     "reason": ""
   },
   {
@@ -2777,8 +2982,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_dependencies_by_flag_resolve_prefixes_or_fail"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_dependencies_by_flag_resolve_prefixes_or_fail"
+    ],
     "reason": ""
   },
   {
@@ -2976,8 +3183,11 @@
       "tests/component/test_app_accept_create.py::test_merge_failures_log_and_stay_in_work_review",
       "tests/integration/test_adapters_vcs_validator_journal.py::test_merge_conflict_lists_files_and_restores_the_checkout"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_merge_failures_log_and_stay_in_work_review",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_merge_conflict_lists_files_and_restores_the_checkout"
+    ],
     "reason": ""
   },
   {
@@ -2989,8 +3199,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_dry_run_prints_the_plan_and_changes_nothing"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_dry_run_prints_the_plan_and_changes_nothing"
+    ],
     "reason": ""
   },
   {
@@ -3017,8 +3229,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_accept_no_merge_and_already_merged"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_accept_no_merge_and_already_merged"
+    ],
     "reason": ""
   },
   {
@@ -3030,8 +3244,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_accept_no_validate_skips_the_validator"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_accept_no_validate_skips_the_validator"
+    ],
     "reason": ""
   },
   {
@@ -3084,8 +3300,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_accept_refusals_before_any_change"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_accept_refusals_before_any_change"
+    ],
     "reason": ""
   },
   {
@@ -3099,8 +3317,12 @@
       "tests/component/test_app_accept_create.py::test_accept_without_a_validate_command_says_so",
       "tests/integration/test_adapters_vcs_validator_journal.py::test_merge_pending_then_commit"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_accept_merges_validates_and_fires",
+      "tests/component/test_app_accept_create.py::test_accept_without_a_validate_command_says_so",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_merge_pending_then_commit"
+    ],
     "reason": ""
   },
   {
@@ -3123,8 +3345,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_accept_resolves_a_unique_prefix_and_refuses_ambiguous_or_unknown"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_accept_resolves_a_unique_prefix_and_refuses_ambiguous_or_unknown"
+    ],
     "reason": ""
   },
   {
@@ -3148,8 +3372,11 @@
       "tests/component/test_app_accept_create.py::test_validation_failure_aborts_the_merge_and_shows_the_tail",
       "tests/integration/test_adapters_vcs_validator_journal.py::test_abort_merge_undoes_a_pending_merge_even_with_a_dirty_tracked_file"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_validation_failure_aborts_the_merge_and_shows_the_tail",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_abort_merge_undoes_a_pending_merge_even_with_a_dirty_tracked_file"
+    ],
     "reason": ""
   },
   {
@@ -3161,8 +3388,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_accept_merges_validates_and_fires"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_accept_merges_validates_and_fires"
+    ],
     "reason": ""
   },
   {
@@ -3175,8 +3404,11 @@
       "tests/component/test_app_accept_create.py::test_accept_merges_validates_and_fires",
       "tests/integration/test_adapters_vcs_validator_journal.py::test_validator_pass_writes_the_full_log"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_accept_merges_validates_and_fires",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_validator_pass_writes_the_full_log"
+    ],
     "reason": ""
   },
   {
@@ -3189,8 +3421,11 @@
       "tests/component/test_app_accept_create.py::test_a_timed_out_validation_says_so",
       "tests/integration/test_adapters_vcs_validator_journal.py::test_validator_failure_and_timeout"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_a_timed_out_validation_says_so",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_validator_failure_and_timeout"
+    ],
     "reason": ""
   },
   {
@@ -3202,8 +3437,10 @@
     "existing": [
       "tests/component/test_app_accept_create.py::test_accept_refusals_before_any_change"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_accept_create.py::test_accept_refusals_before_any_change"
+    ],
     "reason": ""
   }
 ]

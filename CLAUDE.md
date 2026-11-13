@@ -119,7 +119,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   `fakes`, `legacy` and `component` are on the pytest `pythonpath` (and pyright `extraPaths`), so
   fakes and helpers are imported by module name.
   - `unit/`: pure domain pieces (`test_task_domain.py`, `test_validation_domain.py`,
-    `test_transition_table_shape.py`). No adapter, no fake.
+    `test_transition_table_shape.py`, `test_table_printer.py` for `entrypoints/table.py`). No
+    adapter, no fake.
   - `component/`: use cases and parts over the in-memory fakes, no adapter: `test_app_*.py`
     (`Startup`, `RunTask` with `PromptBuilder` and `Finisher`, `Guard`, queries, completion,
     explore, resolve, use cases), `test_tick.py`, `test_agent_port.py` (the fake agent runner),
@@ -129,7 +130,9 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     Focused files reuse those rigs (`from test_tick import Rig`, `from test_app_run_task import
     Rig, make_config`): `test_system_prompts.py`, `test_dispatch_with_dependencies.py`,
     `test_workers_and_shutdown.py` (a live worker stopped, discarded, shut down; exit when idle),
-    `test_blocked_report_without_questions.py`.
+    `test_blocked_report_without_questions.py`, and for the commands `test_task_list_and_show.py`,
+    `test_command_messages.py` (retry hints, the discard prompt), `test_question_rounds.py`,
+    `test_task_new_inputs.py`.
   - `integration/`: one adapter against the real thing (`test_config.py`, `test_tasks_port.py`,
     `test_adapters_vcs_validator_journal.py`). Imports neither `samba.entrypoints` nor
     `samba.bootstrap`. Few.
