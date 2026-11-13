@@ -28,8 +28,11 @@
     "behavior": "default plan and work allow lists include only samba adr list/show, and the system prompt mentions them",
     "why": "DEFAULT_* lists and built-in prompts are pure data",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_system_prompts.py::test_the_default_allow_lists_grant_only_the_read_adr_commands",
+      "tests/component/test_system_prompts.py::test_both_system_prompts_name_the_read_adr_commands"
+    ],
     "reason": ""
   },
   {
@@ -224,8 +227,11 @@
       "tests/component/test_scenarios.py::test_lifecycle",
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_lifecycle",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -239,8 +245,12 @@
       "tests/component/test_scenarios.py::test_budget",
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_budget",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -263,8 +273,10 @@
     "existing": [
       "tests/component/test_tick.py::test_dispatch_respects_the_concurrency_cap_and_not_before"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_dispatch_respects_the_concurrency_cap_and_not_before"
+    ],
     "reason": ""
   },
   {
@@ -277,8 +289,11 @@
       "tests/component/test_scenarios.py::test_turn_flow",
       "tests/component/test_scenarios.py::test_turn_decision"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_turn_decision"
+    ],
     "reason": ""
   },
   {
@@ -293,8 +308,13 @@
       "tests/component/test_app_run_task.py::test_a_work_run_ends_in_work_review",
       "tests/integration/test_adapters_vcs_validator_journal.py::test_workspace_create_reuse_and_remove"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_lifecycle",
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_app_run_task.py::test_a_work_run_ends_in_work_review",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_workspace_create_reuse_and_remove"
+    ],
     "reason": ""
   },
   {
@@ -307,8 +327,11 @@
       "tests/component/test_scenarios.py::test_transition",
       "tests/component/test_scenarios.py::test_retry_policy"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_scenarios.py::test_retry_policy"
+    ],
     "reason": ""
   },
   {
@@ -323,8 +346,13 @@
       "tests/component/test_scenarios.py::test_transition",
       "tests/component/test_scenarios.py::test_turn_rule"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_run_task.py::test_the_give_up_prompt_is_sent_with_resume_when_reflecting_is_allowed",
+      "tests/component/test_scenarios.py::test_retry_policy",
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_scenarios.py::test_turn_rule"
+    ],
     "reason": ""
   },
   {
@@ -337,8 +365,11 @@
       "tests/component/test_tick.py::test_reconcile_stops_a_worker_whose_file_left_its_folder",
       "tests/component/test_tick.py::test_cleanup_removes_done_discarded_and_missing_but_not_running_or_open"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_reconcile_stops_a_worker_whose_file_left_its_folder",
+      "tests/component/test_tick.py::test_cleanup_removes_done_discarded_and_missing_but_not_running_or_open"
+    ],
     "reason": ""
   },
   {
@@ -480,8 +511,11 @@
       "tests/component/test_scenarios.py::test_turn_flow",
       "tests/component/test_scenarios.py::test_turn_rule"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_turn_rule"
+    ],
     "reason": ""
   },
   {
@@ -494,8 +528,11 @@
       "tests/component/test_scenarios.py::test_turn_flow",
       "tests/component/test_scenarios.py::test_turn_rule"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_turn_rule"
+    ],
     "reason": ""
   },
   {
@@ -507,8 +544,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_turn_decision"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_turn_decision"
+    ],
     "reason": ""
   },
   {
@@ -531,8 +570,10 @@
     "existing": [
       "tests/component/test_tick.py::test_dispatch_orders_by_priority_then_queued_at_then_id"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_dispatch_orders_by_priority_then_queued_at_then_id"
+    ],
     "reason": ""
   },
   {
@@ -555,8 +596,10 @@
     "existing": [
       "tests/component/test_app_startup.py::test_an_agent_that_is_not_logged_in_becomes_a_startup_error"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_startup.py::test_an_agent_that_is_not_logged_in_becomes_a_startup_error"
+    ],
     "reason": ""
   },
   {
@@ -588,8 +631,10 @@
     "behavior": "the repository's own WORKFLOW.md body mentions spec changes, docs/spec and docs/adr",
     "why": "reads a repo file only; no samba code",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/checks/test_repo_docs_match_the_code.py::test_the_repository_workflow_asks_agents_for_the_spec_step"
+    ],
     "reason": ""
   },
   {
@@ -621,8 +666,12 @@
       "tests/component/test_scenarios.py::test_transition",
       "tests/component/test_app_run_task.py::test_the_work_setup_carries_the_prompts_and_limits"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_human_row",
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_app_run_task.py::test_the_work_setup_carries_the_prompts_and_limits"
+    ],
     "reason": ""
   },
   {
@@ -636,8 +685,12 @@
       "tests/component/test_scenarios.py::test_transition",
       "tests/component/test_app_run_task.py::test_the_work_setup_carries_the_prompts_and_limits"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_startup.py::test_running_tasks_are_recovered_to_their_todo_folders",
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_app_run_task.py::test_the_work_setup_carries_the_prompts_and_limits"
+    ],
     "reason": ""
   },
   {
@@ -730,8 +783,11 @@
       "tests/component/test_scenarios.py::test_transition",
       "tests/component/test_tick.py::test_observe_notes_a_hand_move_and_reverts_an_illegal_one"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_tick.py::test_observe_notes_a_hand_move_and_reverts_an_illegal_one"
+    ],
     "reason": ""
   },
   {
@@ -791,8 +847,10 @@
     "existing": [
       "tests/component/test_app_run_task.py::test_a_template_error_fails_the_attempt"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_run_task.py::test_a_template_error_fails_the_attempt"
+    ],
     "reason": ""
   },
   {
@@ -817,8 +875,12 @@
       "tests/component/test_scenarios.py::test_lifecycle",
       "tests/integration/test_adapters_vcs_validator_journal.py::test_validator_pass_writes_the_full_log"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_lifecycle",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_validator_pass_writes_the_full_log"
+    ],
     "reason": ""
   },
   {
@@ -828,8 +890,10 @@
     "behavior": "the work protocol system prompt requires the spec step and proposed ADRs before done, without hardcoding docs/spec",
     "why": "static prompt text in domain/prompts",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_system_prompts.py::test_the_work_protocol_requires_the_spec_step_and_proposed_adrs"
+    ],
     "reason": ""
   },
   {
@@ -1007,8 +1071,11 @@
       "tests/component/test_scenarios.py::test_human_row[human_row.json::work-review to work-todo is work.reject, never work.reject_fresh]",
       "tests/component/test_tick.py::test_observe_notes_a_hand_move_and_reverts_an_illegal_one"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_human_row[human_row.json::work-review to work-todo is work.reject, never work.reject_fresh]",
+      "tests/component/test_tick.py::test_observe_notes_a_hand_move_and_reverts_an_illegal_one"
+    ],
     "reason": ""
   },
   {
@@ -1036,8 +1103,10 @@
     "existing": [
       "tests/component/test_tick.py::test_the_tick_is_skipped_while_the_lock_is_held_by_someone_else"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_the_tick_is_skipped_while_the_lock_is_held_by_someone_else"
+    ],
     "reason": ""
   },
   {
@@ -1178,9 +1247,11 @@
     "behavior": "discarding a running task kills the agent, removes the worktree, keeps the branch",
     "why": "Tick reconcile and cleanup over fakes; branch kept is int-vcs",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
-    "reason": ""
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_workers_and_shutdown.py::test_discarding_a_running_task_cancels_it_and_removes_its_workspace_only"
+    ],
+    "reason": "The kill of the agent's process group on cancel is shown by the agent runner integration contract."
   },
   {
     "id": "test_commands_phase2.py::test_discard_tty_prompt",
@@ -1346,9 +1417,11 @@
     "behavior": "task stop on a running task kills the agent, moves it to stuck (stopped, last_stage), no redispatch, no stale sidecar from the cancelled worker; retry redispatches",
     "why": "Workers/Tick cancel and reconcile over fakes; process kill is int-agent",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
-    "reason": ""
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_workers_and_shutdown.py::test_stopping_a_running_task_cancels_its_worker_and_it_stays_stuck"
+    ],
+    "reason": "The kill of the agent's process group on cancel is shown by the agent runner integration contract."
   },
   {
     "id": "test_commands_phase2.py::test_stop_without_orchestrator",
@@ -1515,8 +1588,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_deps"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_deps"
+    ],
     "reason": ""
   },
   {
@@ -1528,8 +1603,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -1541,8 +1618,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -1554,8 +1633,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_deps"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_deps"
+    ],
     "reason": ""
   },
   {
@@ -1565,8 +1646,10 @@
     "behavior": "a todo dependency is dispatched while its dependent waits (review is not done)",
     "why": "Tick dispatch over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_dispatch_with_dependencies.py::test_a_todo_dependency_runs_first_and_its_dependent_waits"
+    ],
     "reason": ""
   },
   {
@@ -1579,8 +1662,11 @@
       "tests/component/test_tick.py::test_dependency_cycle_and_discarded_dependency_fire_the_stuck_rows",
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_dependency_cycle_and_discarded_dependency_fire_the_stuck_rows",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -1604,8 +1690,11 @@
       "tests/component/test_scenarios.py::test_deps",
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_deps",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -1626,8 +1715,10 @@
     "behavior": "a dependent retried by hand while its dependency is still discarded goes back to stuck without running",
     "why": "Tick observe and deps over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_dispatch_with_dependencies.py::test_a_dependent_retried_by_hand_while_its_dependency_is_discarded_goes_back_to_stuck"
+    ],
     "reason": ""
   },
   {
@@ -1639,8 +1730,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_deps"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_deps"
+    ],
     "reason": ""
   },
   {
@@ -1653,8 +1746,11 @@
       "tests/component/test_tick.py::test_a_waiting_dependency_holds_the_task",
       "tests/component/test_scenarios.py::test_deps"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_a_waiting_dependency_holds_the_task",
+      "tests/component/test_scenarios.py::test_deps"
+    ],
     "reason": ""
   },
   {
@@ -1667,8 +1763,11 @@
       "tests/component/test_tick.py::test_dependency_cycle_and_discarded_dependency_fire_the_stuck_rows",
       "tests/component/test_scenarios.py::test_deps"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_dependency_cycle_and_discarded_dependency_fire_the_stuck_rows",
+      "tests/component/test_scenarios.py::test_deps"
+    ],
     "reason": ""
   },
   {
@@ -1678,8 +1777,10 @@
     "behavior": "an unknown dependency id holds the task and journals unknown_dependency once",
     "why": "Tick and fake journal",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_dispatch_with_dependencies.py::test_an_unknown_dependency_holds_the_task_and_is_journaled_once"
+    ],
     "reason": ""
   },
   {
@@ -1689,8 +1790,10 @@
     "behavior": "exit-when-idle exits while a task waits on dependencies and others finished",
     "why": "Orchestrator idle check over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_workers_and_shutdown.py::test_exit_when_idle_returns_while_a_task_still_waits_on_its_dependency"
+    ],
     "reason": ""
   },
   {
@@ -1844,8 +1947,11 @@
       "tests/component/test_scenarios.py::test_transition",
       "tests/component/test_scenarios.py::test_lifecycle"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_scenarios.py::test_lifecycle"
+    ],
     "reason": ""
   },
   {
@@ -1858,8 +1964,11 @@
       "tests/component/test_scenarios.py::test_transition",
       "tests/component/test_scenarios.py::test_lifecycle"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_scenarios.py::test_lifecycle"
+    ],
     "reason": ""
   },
   {
@@ -1872,8 +1981,11 @@
       "tests/component/test_scenarios.py::test_turn_flow",
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -1885,8 +1997,10 @@
     "existing": [
       "tests/component/test_tick.py::test_cleanup_removes_done_discarded_and_missing_but_not_running_or_open"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_cleanup_removes_done_discarded_and_missing_but_not_running_or_open"
+    ],
     "reason": ""
   },
   {
@@ -1909,8 +2023,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -1922,8 +2038,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -1935,8 +2053,10 @@
     "existing": [
       "tests/component/test_tick.py::test_reconcile_stops_a_worker_whose_file_left_its_folder"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_reconcile_stops_a_worker_whose_file_left_its_folder"
+    ],
     "reason": ""
   },
   {
@@ -1971,8 +2091,10 @@
     "behavior": "on shutdown a running task returns to its stage's todo folder",
     "why": "Workers.shutdown over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_workers_and_shutdown.py::test_shutdown_returns_a_running_task_to_its_stages_todo_folder"
+    ],
     "reason": ""
   },
   {
@@ -1984,8 +2106,10 @@
     "existing": [
       "tests/component/test_app_startup.py::test_running_tasks_are_recovered_to_their_todo_folders"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_startup.py::test_running_tasks_are_recovered_to_their_todo_folders"
+    ],
     "reason": ""
   },
   {
@@ -2064,8 +2188,11 @@
       "tests/component/test_scenarios.py::test_transition",
       "tests/component/test_app_run_task.py::test_an_approved_plan_adds_its_rule_to_the_system_prompt"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_app_run_task.py::test_an_approved_plan_adds_its_rule_to_the_system_prompt"
+    ],
     "reason": ""
   },
   {
@@ -2077,8 +2204,10 @@
     "existing": [
       "tests/component/test_app_run_task.py::test_guard_plan_required_and_deps_met"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_run_task.py::test_guard_plan_required_and_deps_met"
+    ],
     "reason": ""
   },
   {
@@ -2091,8 +2220,11 @@
       "tests/component/test_scenarios.py::test_turn_decision",
       "tests/component/test_scenarios.py::test_turn_flow"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_turn_decision",
+      "tests/component/test_scenarios.py::test_turn_flow"
+    ],
     "reason": ""
   },
   {
@@ -2104,8 +2236,10 @@
     "existing": [
       "tests/component/test_tick.py::test_reconcile_stops_a_worker_whose_file_left_its_folder"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_reconcile_stops_a_worker_whose_file_left_its_folder"
+    ],
     "reason": ""
   },
   {
@@ -2139,8 +2273,10 @@
     "behavior": "the planning protocol prompt asks for a Spec changes section ('none, because') without naming docs/spec",
     "why": "prompt text is a domain constant",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_system_prompts.py::test_the_plan_protocol_asks_for_a_spec_changes_section"
+    ],
     "reason": ""
   },
   {
@@ -2167,8 +2303,11 @@
       "tests/component/test_scenarios.py::test_turn_flow",
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -2180,8 +2319,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -2194,8 +2335,11 @@
       "tests/component/test_scenarios.py::test_turn_rule",
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_turn_rule",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -2230,8 +2374,11 @@
       "tests/component/test_app_startup.py::test_running_tasks_are_recovered_to_their_todo_folders",
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_startup.py::test_running_tasks_are_recovered_to_their_todo_folders",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -2243,8 +2390,10 @@
     "existing": [
       "tests/component/test_app_run_task.py::test_the_plan_setup_has_one_turn_and_no_validation"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_run_task.py::test_the_plan_setup_has_one_turn_and_no_validation"
+    ],
     "reason": ""
   },
   {
@@ -2257,8 +2406,11 @@
       "tests/component/test_scenarios.py::test_transition",
       "tests/component/test_app_run_task.py::test_guard_plan_required_and_deps_met"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_app_run_task.py::test_guard_plan_required_and_deps_met"
+    ],
     "reason": ""
   },
   {
@@ -2300,8 +2452,12 @@
       "tests/component/test_scenarios.py::test_transition[transition.json::question.answer resumes the plan stage and dismisses open questions]",
       "tests/component/test_app_run_task.py::test_answers_are_appended_to_a_custom_prompt_that_lacks_questions"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_turn_flow[turn_flow.json::plan run blocked records questions]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::question.answer resumes the plan stage and dismisses open questions]",
+      "tests/component/test_app_run_task.py::test_answers_are_appended_to_a_custom_prompt_that_lacks_questions"
+    ],
     "reason": ""
   },
   {
@@ -2317,8 +2473,14 @@
       "tests/component/test_app_queries.py::test_question_list_and_show",
       "tests/integration/test_tasks_port.py::test_markdown_file_layout_matches_the_old_writers"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/unit/test_task_domain.py::test_add_questions_numbers_and_rounds",
+      "tests/component/test_scenarios.py::test_turn_flow[turn_flow.json::plan run blocked records questions]",
+      "tests/component/test_scenarios.py::test_lifecycle[lifecycle.json::blocked agent asks, the human answers, the task resumes and finishes]",
+      "tests/component/test_app_queries.py::test_question_list_and_show",
+      "tests/integration/test_tasks_port.py::test_markdown_file_layout_matches_the_old_writers"
+    ],
     "reason": ""
   },
   {
@@ -2328,8 +2490,10 @@
     "behavior": "a blocked report without questions is not retried and gets one synthesized question from the summary, context naming the denials",
     "why": "TurnFlow over fakes",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_blocked_report_without_questions.py::test_a_blocked_report_without_questions_gets_one_synthesized_from_its_summary"
+    ],
     "reason": ""
   },
   {
@@ -2343,8 +2507,12 @@
       "tests/component/test_scenarios.py::test_transition[transition.json::question.answer resumes the plan stage and dismisses open questions]",
       "tests/unit/test_task_domain.py::test_round_pairs"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_human_row[human_row.json::question to work-todo with last_stage work]",
+      "tests/component/test_scenarios.py::test_transition[transition.json::question.answer resumes the plan stage and dismisses open questions]",
+      "tests/unit/test_task_domain.py::test_round_pairs"
+    ],
     "reason": ""
   },
   {
@@ -2620,8 +2788,11 @@
     "behavior": "rows have actors samba or human only and event names are lowercase dotted",
     "why": "pure table data",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/unit/test_transition_table_shape.py::test_only_samba_and_the_human_act_and_both_do",
+      "tests/unit/test_transition_table_shape.py::test_event_names_are_lowercase_and_dotted"
+    ],
     "reason": ""
   },
   {
@@ -2633,8 +2804,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_every_table_row_is_covered"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_every_table_row_is_covered"
+    ],
     "reason": ""
   },
   {
@@ -2661,8 +2834,12 @@
       "tests/component/test_scenarios.py::test_transition",
       "tests/component/test_tick.py::test_observe_notes_a_hand_move_and_reverts_an_illegal_one"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_human_row",
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_tick.py::test_observe_notes_a_hand_move_and_reverts_an_illegal_one"
+    ],
     "reason": ""
   },
   {
@@ -2675,8 +2852,11 @@
       "tests/component/test_tick.py::test_reconcile_stops_a_worker_whose_file_left_its_folder",
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_reconcile_stops_a_worker_whose_file_left_its_folder",
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -2690,8 +2870,12 @@
       "tests/component/test_scenarios.py::test_human_row",
       "tests/integration/test_tasks_port.py::test_observe_accept_and_revert"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_observe_notes_a_hand_move_and_reverts_an_illegal_one",
+      "tests/component/test_scenarios.py::test_human_row",
+      "tests/integration/test_tasks_port.py::test_observe_accept_and_revert"
+    ],
     "reason": ""
   },
   {
@@ -2703,8 +2887,10 @@
     "existing": [
       "tests/component/test_tick.py::test_notes_are_held_while_the_agent_runs_and_written_after"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_tick.py::test_notes_are_held_while_the_agent_runs_and_written_after"
+    ],
     "reason": ""
   },
   {
@@ -2716,8 +2902,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_human_row"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_human_row"
+    ],
     "reason": ""
   },
   {
@@ -2729,8 +2917,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {
@@ -2756,8 +2946,11 @@
       "tests/component/test_scenarios.py::test_transition",
       "tests/component/test_scenarios.py::test_every_table_row_is_covered"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition",
+      "tests/component/test_scenarios.py::test_every_table_row_is_covered"
+    ],
     "reason": ""
   },
   {
@@ -2767,8 +2960,10 @@
     "behavior": "the transition table embedded in docs/spec/states.md matches the rendered table",
     "why": "pure renderer vs doc text",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/checks/test_repo_docs_match_the_code.py::test_the_states_chapter_embeds_the_table_the_code_renders"
+    ],
     "reason": ""
   },
   {
@@ -2807,8 +3002,10 @@
     "existing": [
       "tests/component/test_scenarios.py::test_transition"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_scenarios.py::test_transition"
+    ],
     "reason": ""
   },
   {

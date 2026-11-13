@@ -118,14 +118,18 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   is unique across `tests/` (a new test must not reuse a legacy file name) and the folders
   `fakes`, `legacy` and `component` are on the pytest `pythonpath` (and pyright `extraPaths`), so
   fakes and helpers are imported by module name.
-  - `unit/`: pure domain pieces (`test_task_domain.py`, `test_validation_domain.py`). No adapter,
-    no fake.
+  - `unit/`: pure domain pieces (`test_task_domain.py`, `test_validation_domain.py`,
+    `test_transition_table_shape.py`). No adapter, no fake.
   - `component/`: use cases and parts over the in-memory fakes, no adapter: `test_app_*.py`
     (`Startup`, `RunTask` with `PromptBuilder` and `Finisher`, `Guard`, queries, completion,
     explore, resolve, use cases), `test_tick.py`, `test_agent_port.py` (the fake agent runner),
     and `test_scenarios.py` with `scenarios/*.json` (the scenario runner and its data, ADR 0012,
     `architecture` chapter, Scenarios; it defines the `FakeClock` that `test_tick.py` imports;
     `lifecycle.json` is the whole life of a task over the orchestrator, the use cases and the fakes).
+    Focused files reuse those rigs (`from test_tick import Rig`, `from test_app_run_task import
+    Rig, make_config`): `test_system_prompts.py`, `test_dispatch_with_dependencies.py`,
+    `test_workers_and_shutdown.py` (a live worker stopped, discarded, shut down; exit when idle),
+    `test_blocked_report_without_questions.py`.
   - `integration/`: one adapter against the real thing (`test_config.py`, `test_tasks_port.py`,
     `test_adapters_vcs_validator_journal.py`). Imports neither `samba.entrypoints` nor
     `samba.bootstrap`. Few.
@@ -134,7 +138,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     unchanged against a future rewrite in another language. Few. Empty for now (README only).
   - `checks/`: `test_architecture.py` (the dependency rule and the per-folder import rules; reads
     sources with `ast`, never imports `samba`; append moved domain modules to its `DOMAIN_MODULES`)
-    and `test_spec_docs.py` (spec drift).
+    and `test_spec_docs.py` (spec drift), `test_repo_docs_match_the_code.py` (the states chapter
+    table and the repository `WORKFLOW.md` body agree with the code).
   - `fakes/`: `fake_claude.py` (scripted fake of the `claude` CLI, standard library only, shared by
     legacy and the future e2e tests), `fake_agent.py` (fake `AgentRunner`), `fake_session.py`
     (`FakeSession`, the `InteractiveSession` fake), `fake_tasks.py`, `fake_vcs.py`,

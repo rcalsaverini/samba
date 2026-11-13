@@ -50,7 +50,8 @@ def new_test_exists(ref: str) -> bool:
     file, sep, name = ref.partition("::")
     path = TESTS.parent / file
     base = name.split("[", 1)[0]
-    return bool(sep) and path.is_file() and file.split("/")[1] in LEVELS and base in functions_of(path)
+    folder = file.split("/")[1] if file.count("/") >= 2 else ""
+    return bool(sep) and path.is_file() and folder in LEVELS | {"checks"} and base in functions_of(path)
 
 
 def test_every_legacy_test_is_in_the_inventory_once() -> None:
