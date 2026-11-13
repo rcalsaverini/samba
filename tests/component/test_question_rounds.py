@@ -14,6 +14,7 @@ from samba.app.answer_question import AnswerQuestion
 from samba.app.machine import Machine
 from samba.app.queries import ListQuestions, ShowQuestion
 from samba.app.results import Done, Refused, Table, Text
+from samba.domain.ports import EditResult
 from samba.domain.questions import Question, add_questions, answer_question
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
@@ -92,3 +93,12 @@ def test_answering_is_recorded_and_resumes_the_task() -> None:
     assert isinstance(answer.run("t1", "postgres", False), Done)
     task = tasks.records[T1]
     assert task.status == "work-todo" and task.questions[0].answer == "postgres"
+
+
+def test_the_editor_shows_the_question_and_its_context_as_comments() -> None:
+    tasks = store_with(add_questions((), "work", [("Which db?", "the cache layer")], CLOCK))
+    terminal = FakeTerminal(edits=[EditResult(text="# ignored\npostgres\n")])
+    answer = AnswerQuestion(tasks, Machine(tasks, CLOCK, FakeJournal()), terminal, FakeLock(), CLOCK)
+    assert isinstance(answer.run("t1", None, True), Done)
+    assert terminal.edit_initials == ["# q1: Which db?\n#\n# Context: the cache layer\n\n"]
+    assert tasks.records[T1].questions[0].answer == "postgres"

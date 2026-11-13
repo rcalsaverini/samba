@@ -179,3 +179,28 @@ def test_a_new_task_without_a_terminal_is_front_matter_and_the_title_only(store:
     [path] = list(store.root.glob("*/my-title.md"))
     assert path.parent.name == "plan-todo"
     assert path.read_text() == "---\npriority: 3\n---\n# My title\n\n"
+
+
+def test_a_new_round_goes_before_the_next_section_without_piling_up_blank_lines(
+        store: Store) -> None:
+    store.add()
+    [path] = list(store.root.glob("*/t1.md"))
+    path.write_text(path.read_text() + "\n## Feedback\n\n### Round 1\n\nold\n\n\n\n## Notes\nkeep\n")
+    task = store.tasks.get(T1)
+    assert task is not None
+    task.add_feedback("new")
+    assert store.tasks.save(task)
+    assert "old\n\n### Round 2\n\nnew\n\n## Notes\nkeep" in store.text()
+
+
+def test_a_log_line_goes_at_the_end_of_the_log_when_another_section_follows(
+        store: Store) -> None:
+    store.add()
+    [path] = list(store.root.glob("*/t1.md"))
+    path.write_text(path.read_text() + "\n## Log\n- first\n\n\n## Notes\nkeep\n")
+    task = store.tasks.get(T1)
+    assert task is not None
+    task.add_log("- second")
+    assert store.tasks.save(task)
+    # right after the last entry; the blank lines a person left before the next section stay
+    assert "## Log\n- first\n- second\n\n\n## Notes\nkeep" in store.text()

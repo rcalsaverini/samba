@@ -9,7 +9,7 @@ from samba.app.results import Refused, Table, Text, Written
 from samba.domain.states import State
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-from samba.domain.ports import AdrInfo
+from samba.domain.ports import AdrError, AdrInfo
 
 from fake_adrs import FakeAdrs
 from fake_tasks import FakeTasks
@@ -148,3 +148,12 @@ def test_show_commands_resolve_prefixes() -> None:
 def test_split_target() -> None:
     assert split_target("a/q1") == ("a", "q1")
     assert split_target("a") == ("a", None)
+
+
+def test_adr_list_refuses_when_the_store_cannot_read_an_adr() -> None:
+    class Broken(FakeAdrs):
+        def load_all(self) -> list[AdrInfo]:
+            raise AdrError("docs/adr/0001-x.md: no front matter", 1)
+
+    res = refusal(ListAdrs(Broken()).run(False))
+    assert res.kind == "refused" and "front matter" in res.messages[0]

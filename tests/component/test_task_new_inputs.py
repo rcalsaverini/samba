@@ -58,3 +58,12 @@ def test_on_a_terminal_flags_for_dependencies_skip_that_question_too() -> None:
     assert isinstance(res, Done)
     assert len(terminal.prompts) == 1 and "Plan" in terminal.prompts[0]
     assert tasks.records[TaskId("given-title")].status == "plan-todo"
+
+
+def test_on_a_terminal_skip_plan_skips_the_plan_question() -> None:
+    terminal = FakeTerminal(interactive=True, lines=[""])  # no dependencies
+    tasks = store()
+    res = CreateTask(tasks, terminal, CLOCK).run("Given title", "body", None, 3, True)
+    assert isinstance(res, Done)
+    assert len(terminal.prompts) == 1 and "Plan" not in terminal.prompts[0]
+    assert tasks.records[TaskId("given-title")].status == "work-todo"

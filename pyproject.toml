@@ -27,11 +27,11 @@ dev = [
 include = ["src", "tests"]
 typeCheckingMode = "strict"
 pythonVersion = "3.11"
-extraPaths = ["src", "tests/fakes", "tests/legacy", "tests/component", "tests/e2e"]
+extraPaths = ["src", "tests/fakes", "tests/component", "tests/e2e"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests/fakes", "tests/legacy", "tests/component"]
+pythonpath = ["tests/fakes", "tests/component"]
 
 [tool.coverage.run]
 # Measured only on request (`uv run pytest --cov`). The end-to-end tests run `python -m samba`

@@ -46,3 +46,13 @@ def test_a_dependent_retried_by_hand_while_its_dependency_is_discarded_goes_back
     log = rig.tasks.records[TaskId("t1")].log
     assert any("task.retry: stuck -> work-todo: observed hand move" in line for line in log), log
     assert sum("dependency was discarded" in line for line in log) == 2, log
+
+
+def test_a_todo_file_with_an_invalid_name_is_skipped_and_journaled_once() -> None:
+    rig = Rig()
+    rig.tasks.rejected["work-todo"] = ["Bad Name!.md"]
+    rig.add("t1")
+    tick(rig, times=3)
+    assert rig.spawned == ["t1"]  # the valid task still runs
+    warnings = [(e, f["file"]) for lvl, e, f in rig.journal.records if lvl == "warning"]
+    assert warnings == [("invalid_task_name", "Bad Name!.md")]

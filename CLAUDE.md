@@ -11,8 +11,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   before changing code, and update the spec in the same change when behavior changes.
 - `README.md`: entry point with a short quickstart; links to the manual and the spec.
 - `docs/manual.md`: the user manual (setup, daily loop, troubleshooting), for people using Samba.
-  `tests/legacy/test_manual.py` fails when a CLI subcommand is not mentioned in it, so update it when
-  you add, rename or remove a command.
+  `tests/e2e/test_completion_and_docs_e2e.py` fails when a CLI subcommand is not mentioned in it,
+  so update it when you add, rename or remove a command.
 - `src/samba/`: the root holds only `__init__.py`, `__main__.py`, `bootstrap.py` and the packages
   `domain`, `app`, `adapters` and `entrypoints` (guarded by `tests/checks/test_architecture.py`).
   - `entrypoints/cli.py`: a Typer app (ADR 0014; no argparse; `typer` is a runtime dependency, with
@@ -26,8 +26,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     (`explore_cmd`, an interactive claude session), `dev transitions`. Each command function makes
     one call that passes plain values to one use case, and `render(result)` prints it and maps
     the kind to the exit code (`finish` raises `typer.Exit`). No if/elif on command names;
-    `run` (`run_cmd`), `explore` and `dev transitions` keep their own small paths. `tests/legacy/test_cli_surface.py`
-    covers help shape, usage errors and completion. It imports
+    `run` (`run_cmd`), `explore` and `dev transitions` keep their own small paths. `tests/e2e/test_cli_shape.py`
+    and `tests/e2e/test_completion_and_docs_e2e.py` cover help shape, usage errors and completion. It imports
     neither `app/resolve.py` nor `domain/task_id.py` nor another entry point.
     The script entry is `samba.entrypoints.cli:main`.
   - `bootstrap.py`: the composition root, called by every entry point; the only module that may
@@ -113,11 +113,12 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `domain/prompts.py`: built-in prompts, the protocol prompt, the outcome schema.
   - `domain/template.py`: strict `{{ name }}` rendering.
 - `tests/`
-  Four levels (ADR 0016), one folder each, plus `checks/`, `fakes/` and the temporary `legacy/`.
-  The root of `tests/` holds no `.py`. Folders have no `__init__.py`, so every test file basename
-  is unique across `tests/` (a new test must not reuse a legacy file name) and the folders
-  `fakes`, `legacy` and `component` are on the pytest `pythonpath` (and pyright `extraPaths`), so
-  fakes and helpers are imported by module name.
+  Four levels (ADR 0016), one folder each, plus `checks/` and `fakes/`. The root of `tests/` holds
+  no `.py`. Folders have no `__init__.py`, so every test file basename is unique across `tests/`,
+  and `fakes` and `component` are on the pytest `pythonpath` (pyright `extraPaths` also has
+  `e2e`), so fakes and shared rigs are imported by module name. Sizes: about 40 unit, 330
+  component, 145 integration and 50 end-to-end cases (27 functions). Coverage of `src/samba`:
+  `uv run pytest --cov` (configured in `pyproject.toml`, subprocesses included), about 96%.
   - `unit/`: pure domain pieces (`test_task_domain.py`, `test_validation_domain.py`,
     `test_transition_table_shape.py`, `test_table_printer.py` for `entrypoints/table.py`). No
     adapter, no fake.
@@ -125,8 +126,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     (`Startup`, `RunTask` with `PromptBuilder` and `Finisher`, `Guard`, queries, completion,
     explore, resolve, use cases), `test_tick.py`, `test_agent_port.py` (the fake agent runner),
     and `test_scenarios.py` with `scenarios/*.json` (the scenario runner and its data, ADR 0012,
-    `architecture` chapter, Scenarios; it defines the `FakeClock` that `test_tick.py` imports;
-    `lifecycle.json` is the whole life of a task over the orchestrator, the use cases and the fakes).
+    `architecture` chapter, Scenarios; `lifecycle.json` is the whole life of a task over the orchestrator, the use cases and the fakes).
     Focused files reuse those rigs (`from test_tick import Rig`, `from test_app_run_task import
     Rig, make_config`): `test_system_prompts.py`, `test_dispatch_with_dependencies.py`,
     `test_workers_and_shutdown.py` (a live worker stopped, discarded, shut down; exit when idle),
@@ -151,42 +151,34 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     stdout vs stderr, config errors), `test_completion_and_docs_e2e.py` (completion through the
     environment, and the manual drift check: every command in `--help` is in `docs/manual.md`),
     `test_explore_e2e.py`, `test_journeys.py` (a few whole journeys), `test_signals_and_terminal.py`
-    (SIGINT, `task stop` of a live agent, prompts on a real pty). Each test's docstring says what
+    (SIGINT, `task stop` of a live agent, prompts on a real pty), `test_every_command_runs.py` (each
+    command binding reaches its use case). Each test's docstring says what
     only this level shows; `checks/test_e2e_budget.py` caps it at 30 test functions.
   - `checks/`: `test_architecture.py` (the dependency rule and the per-folder import rules; reads
     sources with `ast`, never imports `samba`; append moved domain modules to its `DOMAIN_MODULES`)
     and `test_spec_docs.py` (spec drift), `test_repo_docs_match_the_code.py` (the states chapter
     table and the repository `WORKFLOW.md` body agree with the code), `test_manual_text.py` (the
     manual documents completion; no em-dashes in README and manual), `test_e2e_budget.py`.
-  - `fakes/`: `fake_claude.py` (scripted fake of the `claude` CLI, standard library only, shared by
-    legacy and the future e2e tests), `fake_agent.py` (fake `AgentRunner`), `fake_session.py`
+  - `fakes/`: `fake_claude.py` (scripted fake of the `claude` CLI, standard library only, used by
+    the e2e tests and `integration/test_claude_runner.py`), `fake_agent.py` (fake `AgentRunner`), `fake_session.py`
     (`FakeSession`, the `InteractiveSession` fake), `fake_tasks.py`, `fake_vcs.py`,
     `fake_validator.py`, `fake_journal.py`, `fake_terminal.py` (with `FakeLock`), `fake_clock.py`
     (`FakeClock`), `fake_adrs.py` (`FakeAdrs`): in-memory fakes of the ports.
-  - `legacy/`: temporary, removed by the end of the test-levels chain (not extended). The old
-    subprocess suite (`test_blackbox.py` and the other CLI tests, including `test_manual.py`, the
-    drift check for `docs/manual.md`), the `Sandbox` helpers in `legacy_support.py` and a thin
-    `conftest.py` that exposes its `sb` fixture. These tests never import `samba` either.
-  - `migration/`: temporary, removed with `legacy/`. `inventory.json` (one entry per legacy test
-    function: behavior, target level, `status` todo, covered or dropped, `covered_by` new test ids,
-    `reason`) and `baseline_coverage.json` (coverage of `src/samba` before the rewrite).
-    `checks/test_migration_inventory.py` fails on a legacy test missing from the inventory or a
-    `covered_by` that names no real test. When you write a test that replaces a legacy one, mark
-    its entry covered. Coverage: `uv run pytest --cov` (configured in `pyproject.toml`,
-    subprocesses included).
 
 ## Checks
 
 Run these as separate, plain commands (no pipes or `&&`):
 
 - `uv run pyright` (strict mode, must report 0 errors)
-- `uv run pytest -q tests/unit tests/component` (the fast loop, seconds): run it while working
-- `uv run pytest -q` (the full run, about 4.5 minutes, mostly `tests/legacy`): run it before reporting done
+- `uv run pytest -q tests/unit tests/component` (the fast loop, under a second): run it while working
+- `uv run pytest -q` (the full run, about a minute, mostly `tests/e2e`): run it before reporting done
 
 ## Conventions
 
 - Python 3.11+, fully typed; no `Any` leaking into public signatures, use `cast` at JSON/YAML
   boundaries.
 - New behavior gets a test first, at the lowest level that can show it (ADR 0016: unit, component,
-  integration, end-to-end); integration and end-to-end tests stay few. `tests/legacy` is not extended.
+  integration, end-to-end); integration and end-to-end tests stay few. A port whose fake has
+  behavior of its own gets its contract run against both fake and adapter. An end-to-end test
+  needs a docstring saying what only that level shows, and the level has a budget.
 - Prose in docs and prompts: no em-dashes.

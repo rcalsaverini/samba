@@ -375,7 +375,7 @@ def test_no_direct_clock_or_uuid_calls() -> None:
 
 
 # Test levels (ADR 0016): what each folder of tests/ may import.
-LEVELS = {"unit", "component", "integration", "e2e", "checks", "legacy"}
+LEVELS = {"unit", "component", "integration", "e2e", "checks"}
 
 
 def fake_modules(tests: Path) -> set[str]:
@@ -391,7 +391,7 @@ def unit_violations(tests: Path) -> list[tuple[str, str]]:
     fakes = fake_modules(tests)
     return [(f, n) for f, n in folder_imports(tests, "unit")
             if is_adapter(n) or n.split(".")[0] in fakes
-            or n.split(".")[0].startswith("test_") or n.split(".")[0] == "legacy_support"]
+            or n.split(".")[0].startswith("test_") or n.split(".")[0] == "e2e_box"]
 
 
 def component_violations(tests: Path) -> list[tuple[str, str]]:
@@ -453,14 +453,14 @@ def test_the_level_checks_catch_violations(tmp_path: Path) -> None:
     (tmp_path / "fakes" / "fake_vcs.py").write_text("")
     (tmp_path / "unit" / "test_a.py").write_text(
         "from samba.adapters.system import SystemClock\nfrom fake_vcs import FakeVcs\n"
-        "from samba.domain.task import Task\nfrom legacy_support import sb\n")
+        "from samba.domain.task import Task\nfrom e2e_box import Box\n")
     (tmp_path / "component" / "test_b.py").write_text(
         "from fake_vcs import FakeVcs\nfrom samba.adapters.git_vcs import GitVcs\n")
     (tmp_path / "integration" / "test_c.py").write_text(
         "from samba.bootstrap import build\nimport samba.entrypoints.cli\nfrom samba.adapters import x\n")
     (tmp_path / "e2e" / "test_d.py").write_text("import samba.x\nfrom samba import y\nimport json\n")
     assert unit_violations(tmp_path) == [("test_a.py", "samba.adapters.system"), ("test_a.py", "fake_vcs"),
-                                         ("test_a.py", "legacy_support")]
+                                         ("test_a.py", "e2e_box")]
     assert component_violations(tmp_path) == [("test_b.py", "samba.adapters.git_vcs")]
     assert integration_violations(tmp_path) == [("test_c.py", "samba.bootstrap"),
                                                 ("test_c.py", "samba.entrypoints.cli")]

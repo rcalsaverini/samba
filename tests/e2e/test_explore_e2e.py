@@ -27,3 +27,5 @@ def test_explore_runs_claude_in_the_repo_and_leaves_no_samba_folder(box: Box) ->
     [call] = box.calls("repo")
     assert call["argv"][0] == "a topic" and call["cwd"] == str(box.repo.resolve())
     assert not (box.repo / ".samba").exists()
+    box.steps("repo", {}, {"exit_code": 3})  # the second session ends with an error code
+    assert box.run("explore").returncode == 3  # samba exits with claude's code

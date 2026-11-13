@@ -230,10 +230,10 @@ over the `Orchestrator`.
   `tests/component/test_scenarios.py` imports no adapter;
 - only `adapters/claude_cli.py` mentions Claude's JSON fields, and `samba.tasks` does not exist;
 - each test folder keeps its import rule (see Test levels): `tests/unit` imports no adapter, no
-  module of `tests/fakes/` and no test or legacy support module; `tests/component` imports no
+  module of `tests/fakes/`, no other test module and not the end-to-end sandbox; `tests/component` imports no
   adapter (fakes allowed); `tests/integration` imports neither `samba.entrypoints` nor
   `samba.bootstrap`; `tests/e2e` imports no `samba`;
-- every test file sits in `unit`, `component`, `integration`, `e2e`, `checks` or `legacy`, the root of
+- every test file sits in `unit`, `component`, `integration`, `e2e` or `checks`, the root of
   `tests/` holds no `.py`, `tests/fakes/` holds no test, and no two test files share a basename
   (the folders have no `__init__.py`, so pytest would fail with an import mismatch).
 
@@ -243,25 +243,29 @@ The scanners are themselves tested against temporary modules that break each rul
 
 ADR 0016 divides the tests in four levels, one folder each under `tests/`: `unit` (one pure piece
 of the domain), `component` (use cases and parts over the in-memory fakes), `integration` (one real
-adapter against git, files or a shell) and `e2e` (the `samba` command as a subprocess). The two
-widest levels stay few and a test goes to the lowest level that can show the behavior. Next to
-them: `checks/` (guards such as the architecture test and the spec drift check), `fakes/` (the
-fakes of the ports and `fake_claude.py`, put on the pytest `pythonpath` so tests import them by
-module name) and `legacy/`. A port whose fake has behavior of its own (the task store, the lock,
-the ADR store) has its contract written once and run against both the fake and the real adapter
-through one parametrized fixture, so the component level cannot drift from the real store. A fake
-that only replays a script (the agent runner, the merge and validation results, the interactive
-session) has nothing to drift: its adapter gets integration tests of its own, and the port's
-signature is held by pyright. `legacy/` is temporary: the old subprocess suite, moved there intact as
-the behavior inventory while the new levels are written, and removed when the chain of tasks that
-rewrites the suite ends; it is not extended. Also temporary, and removed with it: `migration/`,
-with `inventory.json` (one entry per legacy test function: the behavior it checks, the level it
-belongs to, and the new tests that cover it, or why it is dropped) and `baseline_coverage.json`
-(coverage of `src/samba` by the suite before the rewrite, subprocesses included, measured with
-`uv run pytest --cov`). `checks/test_migration_inventory.py` keeps the inventory complete and its
-references real; the rewrite ends when every entry is covered or dropped and the new levels alone
-match the baseline. The fast loop is
-`uv run pytest -q tests/unit tests/component`; the full run takes about 4.5 minutes, mostly legacy.
+adapter against git, files, a shell, a process or a terminal) and `e2e` (the `samba` command as a
+subprocess). The two widest levels stay few and a test goes to the lowest level that can show the
+behavior. Next to them: `checks/` (guards such as the architecture test, the spec and manual drift
+checks and the end-to-end budget) and `fakes/` (the fakes of the ports and `fake_claude.py`, put on
+the pytest `pythonpath` so tests import them by module name).
+
+A port whose fake has behavior of its own (the task store, the lock, the ADR store) has its contract
+written once and run against both the fake and the real adapter through one parametrized fixture,
+so the component level cannot drift from the real store. A fake that only replays a script (the
+agent runner, the merge and validation results, the interactive session) has nothing to drift: its
+adapter gets integration tests of its own, and the port's signature is held by pyright.
+
+The end-to-end level keeps the mechanics of ADR 0009: it runs the real command (`SAMBA_CMD` replaces
+it), never imports `samba`, and asserts on files, exit codes, output and the calls the fake claude
+recorded, so it is reusable against a rewrite. It has its own sandbox (`tests/e2e/e2e_box.py`).
+Each of its tests says in its docstring what only that level shows, and
+`checks/test_e2e_budget.py` caps it at 30 test functions.
+
+The suite was rewritten this way from the old subprocess suite, using it as a behavior inventory
+(every old test mapped to the new tests that cover it) and keeping line and branch coverage of
+`src/samba` at least where it was (95.7% before, 95.9% after; `uv run pytest --cov`, subprocesses
+included). The fast loop `uv run pytest -q tests/unit tests/component` runs in under a second; the
+full run takes about a minute, most of it the end-to-end level.
 
 ## Scenarios
 

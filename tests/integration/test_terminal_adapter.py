@@ -105,3 +105,9 @@ def test_a_missing_editor_is_an_error_not_a_crash(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("EDITOR", "/no/such/editor")
     res = StdTerminal().edit("initial")
     assert res.text is None and res.error is not None and "cannot run editor" in res.error
+
+
+def test_a_warning_is_one_line_on_stderr(capsys: pytest.CaptureFixture[str]) -> None:
+    StdTerminal().warn("samba: unknown task 'x'")
+    out = capsys.readouterr()
+    assert (out.out, out.err) == ("", "samba: unknown task 'x'\n")

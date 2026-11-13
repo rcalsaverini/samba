@@ -16,3 +16,11 @@ def test_a_blocked_report_without_questions_gets_one_synthesized_from_its_summar
     [q] = rig.task.questions
     assert q.status == "open" and q.text == "cannot run tests"
     assert "synthesized" in q.context and "Bash" in q.context
+
+
+def test_without_denials_the_synthesized_context_names_none() -> None:
+    rig = Rig("work-running", [AgentReport(outcome="blocked", summary="unsure what to do")])
+    rig.run()
+    [q] = rig.task.questions
+    assert q.text == "unsure what to do"
+    assert "synthesized" in q.context and "Permission denied" not in q.context
