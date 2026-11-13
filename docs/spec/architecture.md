@@ -265,7 +265,9 @@ The suite was rewritten this way from the old subprocess suite, using it as a be
 (every old test mapped to the new tests that cover it) and keeping line and branch coverage of
 `src/samba` at least where it was (95.7% before, 95.9% after; `uv run pytest --cov`, subprocesses
 included). The fast loop `uv run pytest -q tests/unit tests/component` runs in under a second; the
-full run takes about a minute, most of it the end-to-end level.
+full run takes about a minute, most of it the end-to-end level, or about 20 seconds in
+parallel (`uv run pytest -q -n auto`, pytest-xdist; it is what validation runs). Tests
+therefore keep to their own temporary directories and processes, so any two can run at once.
 
 ## Scenarios
 

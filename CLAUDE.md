@@ -171,7 +171,8 @@ Run these as separate, plain commands (no pipes or `&&`):
 
 - `uv run pyright` (strict mode, must report 0 errors)
 - `uv run pytest -q tests/unit tests/component` (the fast loop, under a second): run it while working
-- `uv run pytest -q` (the full run, about a minute, mostly `tests/e2e`): run it before reporting done
+- `uv run pytest -q -n auto` (the full run in parallel with pytest-xdist, about 20 seconds;
+  about a minute without `-n auto`, mostly `tests/e2e`): run it before reporting done
 
 ## Conventions
 

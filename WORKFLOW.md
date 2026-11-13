@@ -5,7 +5,7 @@ max_cost_usd_per_task: 5.0
 hooks:
   after_create: uv sync -q
 validate:
-  command: uv run pyright && uv run pytest -q
+  command: uv run pyright && uv run pytest -q -n auto
   timeout_s: 600
 claude:
   model: sonnet

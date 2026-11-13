@@ -21,6 +21,7 @@ dev = [
     "pyright>=1.1.380",
     "types-pyyaml",
     "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.8.0",
 ]
 
 [tool.pyright]
