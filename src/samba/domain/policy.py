@@ -59,9 +59,9 @@ class RetryPolicy:
 
 
 def should_reflect(reflect_on_give_up: bool, session_id: str | None, stage: Stage,
-                   in_running_folder: bool) -> bool:
+                   still_running: bool) -> bool:
     """Whether one last give-up turn runs before the task goes to `stuck` (work stage only)."""
-    return reflect_on_give_up and bool(session_id) and stage == "work" and in_running_folder
+    return reflect_on_give_up and bool(session_id) and stage == "work" and still_running
 
 
 # ---- after a turn ----------------------------------------------------------------------------

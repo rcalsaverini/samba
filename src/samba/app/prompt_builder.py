@@ -29,17 +29,21 @@ class PromptBuilder:
         self.tasks = tasks
         self.vcs = vcs
 
-    def variables(self, task: Task, ws: str) -> dict[str, str]:
+    def variables(self, task: Task, ws: str, writable: bool = True) -> dict[str, str]:
+        """The prompt variables. The adapters are asked here, once per call (ADR 0020)."""
         return {
             "task.id": task.id,
             "task.title": task.title,
             "task.body": task.body,
             "task.path": self.tasks.location(task.id),
+            "task.ref": self.tasks.reference(task.id),
+            "task_briefing": self.tasks.briefing(task.id, writable),
+            "workspace_briefing": self.vcs.briefing(task.id),
             "workspace": ws,
             "branch": self.vcs.branch_name(task.id),
-            "base_branch": self.config.repository.base_branch,
+            "base_branch": self.config.base_branch,
             "attempt": str(task.attempts),
-            "validate_command": self.config.validation.command or "",
+            "validate_command": self.config.validate_command or "",
             # The answered round, for the first run after a question (spec: prompts, Which prompt is sent).
             "questions": (round_pairs(task.questions)
                           if task.last_outcome == "blocked" and not open_questions(task.questions)
@@ -47,11 +51,10 @@ class PromptBuilder:
         }
 
     def system_prompt(self, variables: dict[str, str], task: Task) -> str:
-        agent = self.config.agent
         text = render(PROTOCOL, {
             **variables,
-            "validate_note": validate_note(self.config.validation.command),
-            "allowed_tools": allowed_tools_note(agent.allow, agent.permission_mode),
+            "validate_note": validate_note(self.config.validate_command),
+            "allowed_tools": allowed_tools_note(self.config.work_tools),
         })
         if task.plan_approved:
             text = text.rstrip("\n") + "\n" + APPROVED_PLAN_RULE
@@ -77,12 +80,12 @@ class PromptBuilder:
     def setup(self, task: Task, ws: str, stage: Stage) -> TurnSetup:
         """The prompts and limits of a run."""
         config = self.config
-        variables = self.variables(task, ws)
+        variables = self.variables(task, ws, writable=stage != "plan")
         cap = config.policy.max_cost_usd_per_task
         if stage == "plan":
             system_prompt = render(PLAN_PROTOCOL, {
                 **variables,
-                "allowed_tools": allowed_tools_note(config.agent.planning_allow, "dontAsk"),
+                "allowed_tools": allowed_tools_note(config.planning_tools),
             })
             first = self.first_plan_prompt(variables)
             resume = bool(task.plan_session_id)
@@ -100,5 +103,5 @@ class PromptBuilder:
             prompt=self.prompt("resume", variables) if resume else first, resume=resume,
             first_prompt=first, continue_prompt=self.prompt("continue", variables),
             validate_failed=lambda tail: failed + "\n\n```\n" + tail + "\n```",
-            max_turns=config.policy.max_turns, validate_enabled=bool(config.validation.command),
+            max_turns=config.policy.max_turns, validate_enabled=bool(config.validate_command),
             max_cost_usd=cap)

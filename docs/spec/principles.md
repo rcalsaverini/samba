@@ -68,16 +68,19 @@ injection framework, no event bus and no interface for its own sake (ADR 0011).
 ### 3. The domain takes values, never capabilities
 
 A domain function receives the results of I/O as arguments and performs none, not even through a
-port it could declare. Time arrives as a value built by the use case once per operation, so every
-timestamp of one operation is the same instant (ADR 0017).
+port it could declare. Time arrives as a value built by the use case once per recorded step (each
+transition, each answer, each log entry, each question round), so every timestamp of one step is
+the same instant (ADR 0017). A step, not a whole use-case run: a turn loop that runs for an hour
+builds a new instant for each entry it records.
 
 When a rule seems to need a capability during its computation, the boundary between inside and
 outside is drawn in the wrong place. Redraw it, trying these in order:
 
 1. Pass the values: a fixed number of them, known before the rule runs.
-2. Pass a seed and keep the rule deterministic.
-3. Pass a stream the rule pulls from, typed with the standard library.
-4. Make the rule a step function or a generator and let the use case run the loop against the
+2. Pass a seed, or a pure generator built from one (a seeded PRNG, a quasi-random sequence), and
+   keep the rule deterministic. The test is simple: if pulling from it performs I/O, it is a
+   capability and the rule does not take it.
+3. Make the rule a step function or a generator and let the use case run the loop against the
    port, as the decision after an agent turn and the turn loop already do for the agent.
 
 If none fits, the operation is not a domain rule but a use case, and only its pure part stays in

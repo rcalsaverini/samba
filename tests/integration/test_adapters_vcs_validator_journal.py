@@ -13,15 +13,15 @@ from pathlib import Path
 from typing import TypeVar
 
 import pytest
+from fake_vcs import FakeVcs
 
-from samba.adapters.git_vcs import GitVcs
+from samba.adapters.git_vcs import GitVcs, HookSettings
 from samba.adapters.log_journal import LogJournal, NullJournal
-from samba.adapters.shell_validator import ShellValidator
-from samba.adapters.workflow_file import Locations
-from samba.app.ports import WorkspaceError
-from samba.domain.settings import Hooks, Validation
+from samba.adapters.locations import Locations
+from samba.adapters.shell_validator import ShellValidator, ValidatorSettings
+from samba.app.ports import Preflight, Vcs, WorkspaceError
 
-SH = ["sh", "-c"]
+SH = ("sh", "-c")
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -48,7 +48,7 @@ def repo(tmp_path: Path) -> Path:
 
 def make_vcs(repo: Path, tmp_path: Path, hook: str | None = None) -> GitVcs:
     loc = Locations(repo=repo, samba_dir=repo / ".samba", workspaces_root=tmp_path / "ws")
-    return GitVcs(loc, "main", Hooks(after_create=hook, timeout_s=30), SH)
+    return GitVcs(loc, "main", HookSettings(after_create=hook, timeout_s=30, shell=SH))
 
 
 T = TypeVar("T")
@@ -102,12 +102,12 @@ def test_a_workspace_id_cannot_escape_the_root(repo: Path, tmp_path: Path) -> No
 def test_repository_problem(repo: Path, tmp_path: Path) -> None:
     assert run(make_vcs(repo, tmp_path).repository_problem()) is None
     loc = Locations(repo=repo, samba_dir=repo / ".samba", workspaces_root=tmp_path / "ws")
-    assert run(GitVcs(loc, "nope", Hooks(None, 1), SH).repository_problem()) == (
+    assert run(GitVcs(loc, "nope", HookSettings(None, 1, SH)).repository_problem()) == (
         "base_branch 'nope' does not exist")
     sub = repo / "sub"
     sub.mkdir()
     loc = Locations(repo=sub, samba_dir=sub / ".samba", workspaces_root=tmp_path / "ws")
-    assert run(GitVcs(loc, "main", Hooks(None, 1), SH).repository_problem()) == (
+    assert run(GitVcs(loc, "main", HookSettings(None, 1, SH)).repository_problem()) == (
         f"{sub} is not the root of a git repository")
 
 
@@ -130,14 +130,14 @@ def make_branch(repo: Path, branch: str, name: str, text: str) -> None:
 
 def test_preflight_checks(repo: Path, tmp_path: Path) -> None:
     vcs = make_vcs(repo, tmp_path)
-    assert run(vcs.preflight("samba/x")) == "branch samba/x does not exist"
+    assert run(vcs.preflight("samba/x")) == Preflight("main", False, False)
     (repo / "a.txt").write_text("dirty\n")
-    assert run(vcs.preflight("samba/x")) == (
-        "the main checkout has uncommitted changes to tracked files")
+    assert run(vcs.preflight("samba/x")) == Preflight("main", True, False)
     git(repo, "checkout", "-q", "--", "a.txt")
     git(repo, "checkout", "-q", "-b", "other")
-    assert run(vcs.preflight("samba/x")) == (
-        "the main checkout is on other, not the base branch main")
+    assert run(vcs.preflight("samba/x")) == Preflight("other", False, False)
+    git(repo, "checkout", "-q", "--detach")
+    assert run(vcs.preflight("samba/x")) == Preflight(None, False, False)
 
 
 def test_merge_pending_then_commit(repo: Path, tmp_path: Path) -> None:
@@ -209,7 +209,7 @@ def test_commit_merge_failure_undoes_the_merge(repo: Path, tmp_path: Path) -> No
 
 def make_validator(tmp_path: Path, command: str, timeout_s: float = 30,
                    tail_lines: int = 5) -> ShellValidator:
-    return ShellValidator(Validation(command, timeout_s, tail_lines, SH), tmp_path / "runs")
+    return ShellValidator(ValidatorSettings(command, SH, timeout_s, tail_lines), tmp_path / "runs")
 
 
 def test_validator_pass_writes_the_full_log(tmp_path: Path) -> None:
@@ -286,7 +286,7 @@ def test_an_untracked_file_does_not_block_the_accept_preflight(repo: Path, tmp_p
     vcs = make_vcs(repo, tmp_path)
     make_branch(repo, "samba/t1", "b.txt", "work\n")
     (repo / "notes.txt").write_text("a scratch file nobody added\n")
-    assert run(vcs.preflight("samba/t1")) is None
+    assert run(vcs.preflight("samba/t1")) == Preflight("main", False, True)
 
 
 def test_a_workspace_lies_outside_the_repository(repo: Path, tmp_path: Path) -> None:
@@ -294,3 +294,26 @@ def test_a_workspace_lies_outside_the_repository(repo: Path, tmp_path: Path) -> 
     ws = Path(run(vcs.ensure_workspace("t1")).location).resolve()
     assert not ws.is_relative_to(repo)
     assert git(ws, "rev-parse", "--show-toplevel") == str(ws)
+
+
+# ---- briefing (ADR 0020): the contract on the fake and on git ----------------------------
+
+
+@pytest.fixture(params=["fake", "git"])
+def any_vcs(request: pytest.FixtureRequest, repo: Path, tmp_path: Path) -> Vcs:
+    return FakeVcs() if request.param == "fake" else make_vcs(repo, tmp_path)
+
+
+def test_the_workspace_briefing_is_text_that_is_specific_to_the_task(any_vcs: Vcs) -> None:
+    one, two = any_vcs.briefing("t1"), any_vcs.briefing("t2")
+    assert isinstance(one, str) and one.strip() and one != two
+    assert any_vcs.briefing("t1") == one
+
+
+def test_the_git_briefing_names_the_branch_and_the_rules(repo: Path, tmp_path: Path) -> None:
+    vcs = make_vcs(repo, tmp_path)
+    text = vcs.briefing("t1")
+    assert f"on branch `{vcs.branch_name('t1')}`" in text
+    assert "commit your work on this branch without asking" in text
+    assert "small, coherent steps" in text
+    assert "Never push, merge, rebase onto other branches, or delete branches." in text

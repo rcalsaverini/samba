@@ -18,6 +18,7 @@ from typing import Any, cast
 import pytest
 from fake_agent import FakeAgentRunner
 from fake_clock import FakeClock
+from fake_ids import FakeIds
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
 from fake_terminal import FakeLock, FakeTerminal
@@ -31,15 +32,7 @@ from samba.app.guard import Guard
 from samba.app.machine import Machine
 from samba.app.results import Done, Refused
 from samba.app.turn import TurnFlow, TurnSetup
-from samba.domain.settings import (
-    AgentSettings,
-    Config,
-    Hooks,
-    Policy,
-    Prompts,
-    Repository,
-    Validation,
-)
+from samba.domain.settings import Config, Policy, Prompts, ToolAccess
 from samba.entrypoints.orchestrator import Orchestrator
 from samba.app.ports import MergeAttempt
 from samba.domain.agent import AgentReport, Failure, QuestionDraft
@@ -292,14 +285,6 @@ def test_turn_rule(sc: Scenario) -> None:
 
 # ---- the turn flow with the fake runner ------------------------------------------------------
 
-class SeqIds:
-    def __init__(self) -> None:
-        self.n = 0
-
-    def new_session_id(self) -> str:
-        self.n += 1
-        return f"s{self.n}"
-
 
 TURN_FLOW = load("turn_flow")
 
@@ -321,7 +306,7 @@ def test_turn_flow(sc: Scenario) -> None:
     agent = FakeAgentRunner([report_of(r) for r in sc["reports"]])
     validator = FakeValidator(*[passing(tail) if ok else failing(tail)
                                 for ok, tail in sc.get("validate", [])])
-    flow = TurnFlow(agent, SeqIds(), store, FakeClock(), validator, FakeJournal())
+    flow = TurnFlow(agent, FakeIds(), store, FakeClock(), validator, FakeJournal())
     calls = validator.calls
 
     turns: list[int] = []
@@ -359,14 +344,10 @@ def lifecycle_config(sc: Scenario) -> Config:
                       max_retry_backoff_s=1.0, max_cost_usd_per_task=None,
                       reflect_on_give_up=False, require_plan=c["require_plan"],
                       max_concurrent=2, poll_interval_s=1.0),
-        agent=AgentSettings(command=["claude"], model=None, permission_mode="dontAsk", allow=[],
-                            args=[], isolate_user_config=True, turn_timeout_s=60.0,
-                            stall_timeout_s=60.0),
-        repository=Repository(base_branch="main"),
         prompts=Prompts(template="Do {{ task.title }}"),
-        validation=Validation(command=c["validate"], timeout_s=60.0, tail_lines=20,
-                              shell=["bash", "-c"]),
-        hooks=Hooks(after_create=None, timeout_s=60.0))
+        base_branch="main", validate_command=c["validate"],
+        work_tools=ToolAccess(allowed=(), unrestricted=False),
+        planning_tools=ToolAccess(allowed=(), unrestricted=False))
 
 
 async def play(sc: Scenario) -> tuple[FakeTasks, FakeVcs, FakeValidator, FakeJournal,
@@ -380,13 +361,13 @@ async def play(sc: Scenario) -> tuple[FakeTasks, FakeVcs, FakeValidator, FakeJou
     validator = FakeValidator(*[passing(out) if ok else failing(out)
                                 for ok, out in sc["validator"]])
     agent = FakeAgentRunner([report_of(r) for r in sc["reports"]])
-    orch = Orchestrator(config, clock, SeqIds(), agent, tasks, vcs, validator, lock, journal)
+    orch = Orchestrator(config, clock, FakeIds(), agent, tasks, vcs, validator, lock, journal)
     terminal = FakeTerminal()
     machine = Machine(tasks, clock, journal, Guard(config.policy.require_plan, tasks))
     change = ChangeState(tasks, machine, terminal, lock)
     answer = AnswerQuestion(tasks, machine, terminal, lock, clock)
     accept = AcceptWork(tasks, machine, terminal, lock, vcs, validator, "main",
-                        config.validation.command)
+                        config.validate_command)
     tid = TaskId("t1")
     tasks.create(Task.new(tid, "feature", "", 3, (), cast(State, sc["status"]), clock.now()))
     await orch.startup()

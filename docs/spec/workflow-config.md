@@ -5,9 +5,20 @@ Markdown with YAML front matter. The body is the first-turn prompt template.
 ## Config (all optional, defaults shown)
 
 The file format is unchanged by how the code groups it: `adapters/workflow_file.load_config` splits
-these keys into the parts defined in `domain/settings.py` (`Policy`, `AgentSettings`, `Repository`
-for `base_branch`, `Prompts`, `Validation` and `Hooks`) and a separate `Locations` (repo, Samba
-directory, workspaces root) for the adapters (see the `architecture` chapter).
+these keys into the parts below and a separate `Locations` (repo, Samba directory, workspaces root)
+for the adapters (see the `architecture` chapter, ADR 0019). Who reads which key:
+
+| Keys | Read by |
+|---|---|
+| `claude.command`, `claude.model`, `claude.permission_mode`, `claude.args`, `claude.isolate_user_config`, `claude.turn_timeout_s`, `claude.stall_timeout_s`, `planning.model` | `ClaudeSettings` (`ClaudeCliRunner`, and `TerminalSession` for `command` and `model`) |
+| `claude.allow`, `planning.allow`, and `claude.permission_mode` (`bypassPermissions` means unrestricted) | the two `ToolAccess` values, for `ClaudeCliRunner` and the `PromptBuilder` |
+| `validate.command` | `ValidatorSettings`, and `validate_command` on `Config` (the prompts and `work accept`) |
+| `validate.timeout_s`, `validate.output_tail_lines`, `shell` | `ValidatorSettings` |
+| `hooks.after_create`, `hooks.timeout_s`, `shell` | `HookSettings` (`GitVcs`) |
+| `base_branch` | a plain value on `Config` (`PromptBuilder`, `AcceptWork`, `GitVcs`) |
+| `max_turns`, `max_attempts`, `retry_base_s`, `max_retry_backoff_s`, `max_cost_usd_per_task`, `reflect_on_give_up`, `planning.require_plan`, `max_concurrent`, `poll_interval_s` | `Policy` |
+| `prompts.*` and the body | `Prompts` |
+| `samba_dir`, `workspaces_root` | `Locations` |
 
 ```yaml
 ---

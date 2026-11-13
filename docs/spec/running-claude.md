@@ -18,7 +18,7 @@ fails if another module mentions those fields.
   string, the workspace; the adapter reads it as the cwd) and `log_name` (opaque string
   `<task id>/<turn number>`; the adapter writes the stream to `runs/<log_name>.jsonl`). No provider
   or config type: permissions, model, schema, the tasks folder and the runs folder are adapter
-  settings. The planning run is `kind == "plan"`, not a config object (Planning run below).
+  settings (`ClaudeSettings` and the two `ToolAccess` values, handed to `ClaudeCliRunner`). The planning run is `kind == "plan"`, not a config object (Planning run below).
 - **`AgentReport`** (frozen): `outcome` (`done`, `blocked`, `continue`, `planned` or `missing`),
   `summary` (whitespace collapsed), `plan` and `assumptions` (stripped), `questions` (drafts of
   `text` and `context`, malformed ones dropped), `denials` (one text per permission denial, such as

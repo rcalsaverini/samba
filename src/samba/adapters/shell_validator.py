@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
-from samba.domain.settings import Validation
 from samba.domain.validation import ValidationResult
 from samba.adapters.process import run_shell
 
 
+@dataclass(frozen=True)
+class ValidatorSettings:
+    """The `validate.*` keys and `shell` of `WORKFLOW.md`."""
+
+    command: str | None
+    shell: tuple[str, ...]
+    timeout_s: float
+    tail_lines: int
+
+
 class ShellValidator:
-    def __init__(self, validation: Validation, runs_dir: Path) -> None:
-        self.validation = validation
+    def __init__(self, settings: ValidatorSettings, runs_dir: Path) -> None:
+        self.validation = settings
         self.runs_dir = runs_dir
 
     async def run(self, location: str, log_name: str) -> ValidationResult:

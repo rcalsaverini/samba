@@ -39,10 +39,11 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `build_explore(repo)` needs only `claude.command` and `claude.model`. Constructors take their ports, no defaults.
   - `app/task_commands.py`: the six named use cases over `ChangeState` (event strings, labels and
     feedback modes live here, not in the CLI).
-  - `domain/launch.py`: `LaunchSpec` and `explore_launch` (the argv of `samba explore`; the guide
-    and the allow and deny lists are `EXPLORE_*` in `domain/prompts.py`). `app/explore.py`: `StartExplore`,
-    over the `InteractiveSession` port; `adapters/interactive_session.py` (`TerminalSession`) runs
-    it on the terminal. Not an `AgentRunner`, no stream-json.
+  - `ExploreSession` (in `app/ports.py`, beside the `InteractiveSession` port): topic, guide, allowed
+    and denied tools, location. `app/explore.py`: `StartExplore` builds it from the guide and the
+    allow and deny lists (`EXPLORE_*` in `domain/prompts.py`, handed in by `bootstrap`);
+    `adapters/interactive_session.py` (`TerminalSession(command, model)`) builds the `claude` argv
+    and runs it on the terminal (ADR 0019). Not an `AgentRunner`, no stream-json.
   - `adapters/adr_format.py`: ADR files under `docs/adr/`: front matter parsing, summary line, status edits.
     `adapters/adr_files.py` (`FileAdrs`) is the `Adrs` port over it; `app/adr.py` holds the ADR
     use cases (`ListAdrs`, `ShowAdr`, `SetAdrStatus`, `SupersedeAdr`) and `app/queries.py` the
@@ -54,10 +55,13 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `AdrCommands.complete`.
   - `entrypoints/table.py`: the table printer of the CLI (the rows come from `app/queries.py`, which
     also holds the state-prefix matcher and the `task show` renderer).
-  - `domain/settings.py`: the plain settings (`Policy`, `AgentSettings`, `Repository`, `Prompts`,
-    `Validation`, `Hooks`, `Config`), `ConfigError` and the `DEFAULT_*` lists; no location, no
-    pathlib or yaml. `adapters/workflow_file.py`: loads and validates `WORKFLOW.md` (front matter +
-    prompt body), `load_config` returns the `Config` and a `Locations` (real paths, for adapters only).
+  - `domain/settings.py`: what the domain and the use cases read (`Policy`, `Prompts`, `ToolAccess`,
+    `Config`), `ConfigError` and the `DEFAULT_*` lists; no location, no pathlib or yaml, nothing
+    named for a technology (ADR 0019). `adapters/workflow_file.py`: loads and validates
+    `WORKFLOW.md` (front matter + prompt body), `load_config` returns a `Loaded`: the `Config`, the
+    `Locations`, and each adapter's own settings (`ClaudeSettings`, `ValidatorSettings`,
+    `HookSettings`). `adapters/claude_settings.py`: `ClaudeSettings`, read by `ClaudeCliRunner` and
+    `TerminalSession`. `adapters/locations.py`: `Locations` (real paths, for adapters only).
   - `domain/`: the pure core, no I/O (`architecture` chapter). `states.py` (`State`, causes),
     `now.py` (`Now`, the instant as a value), `questions.py` (question records and helpers), `task.py` (the `Task` aggregate),
     `task_id.py` (`TaskId`, slug, prefix resolution),
@@ -78,7 +82,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     `Terminal` port; `app/results.py`: the closed `Result` set (`Done`, `Table`, `Text`, `Written`, `Refused`) and message helpers. Use cases never print: the
     CLI prints their results and maps `kind` to the exit code.
   - `adapters/git_vcs.py` (`GitVcs`, the `Vcs` port: worktrees outside the repo, the after_create
-    hook, the git steps of `work accept`), `adapters/shell_validator.py` (`ShellValidator`, the
+    hook, the git steps of `work accept`, and `briefing`, the workspace rules the protocol
+    splices in as `workspace_briefing`), `adapters/shell_validator.py` (`ShellValidator`, the
     `Validator` port),
     `adapters/terminal.py` (`StdTerminal`, the `Terminal` port: tty, prompts, `$EDITOR`),
     `adapters/file_lock.py` (`FileLock`, the `Lock` port: the `.samba/lock` flock shared by commands
@@ -86,6 +91,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     port, and the `kv` log line format; only `samba run` gets the log, `bootstrap.build_orchestrator(repo)`).
   - `adapters/markdown_tasks.py`: `MarkdownTasks`, the `Tasks` port over the task folders, the
     sidecar JSON and the `## Log`/`## Questions` sections (stale-save merge, hand-move detection).
+    Its `briefing` and `reference` are the words the agent reads about the task file (ADR 0020).
   - `app/tick.py`: `Tick` (observe hand moves, reconcile running workers, clean up workspaces,
     dispatch with dependency rows), `Notes` (held `## Log` lines) and `Running`; starts workers
     through a `spawn` callback.
@@ -112,8 +118,15 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     the domain takes instead of a clock (ADR 0017; `Clock.now()` builds it, once per operation).
     `adapters/system.py`: the system clock and uuid generator. The layers and the dependency rule
     are in the `architecture` chapter.
-  - `adapters/process.py`: subprocess helpers (process groups), used only inside adapters.
-  - `domain/prompts.py`: built-in prompts, the protocol prompt, the outcome schema.
+  - `adapters/process.py`: subprocess helpers (process groups), used only inside adapters. It is a
+    helper module like `locations.py`, `adr_format.py` and `claude_settings.py`: it implements no
+    port, so any adapter may import it. A port-implementing adapter imports no other one
+    (`tests/checks/test_architecture.py`; `workflow_file.py` may import the settings types).
+  - `domain/prompts.py`: built-in prompts, the protocol prompt, the outcome schema. It speaks of
+    "your task", "your plan" and "your workspace" and names no file, folder, heading or branch:
+    the adapters supply those words through `Tasks.briefing`, `Tasks.reference` and
+    `Vcs.briefing`, which `PromptBuilder` renders as `{{ task_briefing }}`, `{{ task.ref }}` and
+    `{{ workspace_briefing }}` (ADR 0020). `tests/checks/test_architecture.py` enforces it.
   - `domain/template.py`: strict `{{ name }}` rendering.
 - `tests/`
   Four levels (ADR 0016), one folder each, plus `checks/` and `fakes/`. The root of `tests/` holds
@@ -158,7 +171,8 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     command binding reaches its use case). Each test's docstring says what
     only this level shows; `checks/test_e2e_budget.py` caps it at 30 test functions.
   - `checks/`: `test_architecture.py` (the dependency rule and the per-folder import rules; reads
-    sources with `ast`, never imports `samba`; append moved domain modules to its `DOMAIN_MODULES`)
+    sources with `ast`, never imports `samba`; append moved domain modules to its `DOMAIN_MODULES`;
+    no domain or app module names a flag the `claude` adapters emit)
     and `test_spec_docs.py` (spec drift), `test_repo_docs_match_the_code.py` (the states chapter
     table and the repository `WORKFLOW.md` body agree with the code), `test_manual_text.py` (the
     manual documents completion; no em-dashes in README and manual), `test_e2e_budget.py`.
@@ -166,7 +180,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     the e2e tests and `integration/test_claude_runner.py`), `fake_agent.py` (fake `AgentRunner`), `fake_session.py`
     (`FakeSession`, the `InteractiveSession` fake), `fake_tasks.py`, `fake_vcs.py`,
     `fake_validator.py`, `fake_journal.py`, `fake_terminal.py` (with `FakeLock`), `fake_clock.py`
-    (`FakeClock`), `fake_adrs.py` (`FakeAdrs`): in-memory fakes of the ports.
+    (`FakeClock`), `fake_ids.py` (`FakeIds`), `fake_adrs.py` (`FakeAdrs`): in-memory fakes of the ports.
 
 ## Checks
 

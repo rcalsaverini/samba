@@ -11,9 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from samba.adapters.workflow_file import Locations, load_config
-from samba.domain.settings import (DEFAULT_ALLOW, DEFAULT_PLANNING_ALLOW, ConfigError, Hooks,
-                                   Policy, Prompts, Repository, Validation)
+from samba.adapters.git_vcs import HookSettings
+from samba.adapters.locations import Locations
+from samba.adapters.shell_validator import ValidatorSettings
+from samba.adapters.workflow_file import load_config
+from samba.domain.settings import (DEFAULT_ALLOW, DEFAULT_PLANNING_ALLOW, ConfigError, Policy,
+                                   Prompts, ToolAccess)
 
 
 def write(repo: Path, front: str, body: str = "Do {{ task.title }}\n") -> None:
@@ -22,7 +25,8 @@ def write(repo: Path, front: str, body: str = "Do {{ task.title }}\n") -> None:
 
 def test_defaults(tmp_path: Path) -> None:
     write(tmp_path, "")
-    cfg, loc = load_config(tmp_path)
+    loaded = load_config(tmp_path)
+    cfg, loc = loaded.config, loaded.locations
     repo = tmp_path.resolve()
     assert cfg.policy == Policy(
         max_turns=10, max_attempts=3, retry_base_s=10, max_retry_backoff_s=300,
@@ -31,21 +35,24 @@ def test_defaults(tmp_path: Path) -> None:
     assert loc == Locations(
         repo=repo, samba_dir=repo / ".samba",
         workspaces_root=(Path("~/.samba/workspaces").expanduser()).resolve())
-    assert cfg.repository == Repository(base_branch="main")
+    assert cfg.base_branch == "main"
+    assert cfg.validate_command is None
     assert cfg.prompts == Prompts(template="Do {{ task.title }}", overrides={})
-    assert cfg.validation == Validation(command=None, timeout_s=900, tail_lines=200,
-                                        shell=["bash", "-c"])
-    assert cfg.hooks == Hooks(after_create=None, timeout_s=300)
-    assert cfg.agent.command == ["claude"]
-    assert cfg.agent.model is None
-    assert cfg.agent.permission_mode == "dontAsk"
-    assert cfg.agent.allow == DEFAULT_ALLOW
-    assert cfg.agent.args == []
-    assert cfg.agent.isolate_user_config is True
-    assert cfg.agent.turn_timeout_s == 3600
-    assert cfg.agent.stall_timeout_s == 300
-    assert cfg.agent.planning_model is None
-    assert cfg.agent.planning_allow == DEFAULT_PLANNING_ALLOW
+    assert loaded.validator == ValidatorSettings(command=None, shell=("bash", "-c"),
+                                                 timeout_s=900, tail_lines=200)
+    assert loaded.hooks == HookSettings(after_create=None, timeout_s=300, shell=("bash", "-c"))
+    claude = loaded.claude
+    assert claude.command == ("claude",)
+    assert claude.model is None
+    assert claude.permission_mode == "dontAsk"
+    assert claude.args == ()
+    assert claude.isolate_user_config is True
+    assert claude.turn_timeout_s == 3600
+    assert claude.stall_timeout_s == 300
+    assert claude.planning_model is None
+    assert cfg.work_tools == ToolAccess(allowed=tuple(DEFAULT_ALLOW), unrestricted=False)
+    assert cfg.planning_tools == ToolAccess(allowed=tuple(DEFAULT_PLANNING_ALLOW),
+                                            unrestricted=False)
     assert cfg.warnings == []
 
 
@@ -86,36 +93,48 @@ planning:
   model: m2
   allow: [Grep]
 """)
-    cfg, loc = load_config(tmp_path)
+    loaded = load_config(tmp_path)
+    cfg, loc = loaded.config, loaded.locations
     repo = tmp_path.resolve()
     assert loc == Locations(repo=repo, samba_dir=repo / "state", workspaces_root=ws.resolve())
-    assert cfg.repository == Repository(base_branch="trunk")
+    assert cfg.base_branch == "trunk"
     assert cfg.policy == Policy(
         max_turns=7, max_attempts=2, retry_base_s=1, max_retry_backoff_s=9,
         max_cost_usd_per_task=1.5, reflect_on_give_up=False, require_plan=True,
         max_concurrent=4, poll_interval_s=3)
-    assert cfg.validation == Validation(command="make test", timeout_s=60, tail_lines=20,
-                                        shell=["sh", "-c"])
-    assert cfg.hooks == Hooks(after_create="echo hi", timeout_s=5)
+    assert cfg.validate_command == "make test"
+    assert loaded.validator == ValidatorSettings(command="make test", shell=("sh", "-c"),
+                                                 timeout_s=60, tail_lines=20)
+    assert loaded.hooks == HookSettings(after_create="echo hi", timeout_s=5, shell=("sh", "-c"))
     assert cfg.prompts.overrides == {"continue": "keep going"}
-    agent = cfg.agent
-    assert (agent.command, agent.model, agent.permission_mode) == (
-        ["my-claude", "--flag"], "m1", "acceptEdits")
-    assert (agent.allow, agent.args, agent.isolate_user_config) == (["Read"], ["--x"], False)
-    assert (agent.turn_timeout_s, agent.stall_timeout_s) == (11, 12)
-    assert (agent.planning_model, agent.planning_allow) == ("m2", ["Grep"])
+    claude = loaded.claude
+    assert (claude.command, claude.model, claude.permission_mode) == (
+        ("my-claude", "--flag"), "m1", "acceptEdits")
+    assert (claude.args, claude.isolate_user_config) == (("--x",), False)
+    assert (claude.turn_timeout_s, claude.stall_timeout_s) == (11, 12)
+    assert claude.planning_model == "m2"
+    assert cfg.work_tools == ToolAccess(allowed=("Read",), unrestricted=False)
+    assert cfg.planning_tools == ToolAccess(allowed=("Grep",), unrestricted=False)
+
+
+def test_bypass_permissions_is_unrestricted_for_work_and_never_for_planning(
+        tmp_path: Path) -> None:
+    write(tmp_path, "claude:\n  permission_mode: bypassPermissions\n")
+    cfg = load_config(tmp_path).config
+    assert cfg.work_tools.unrestricted is True
+    assert cfg.planning_tools.unrestricted is False
 
 
 def test_parts_are_frozen(tmp_path: Path) -> None:
     write(tmp_path, "")
-    cfg, _ = load_config(tmp_path)
+    cfg = load_config(tmp_path).config
     with pytest.raises(dataclasses.FrozenInstanceError):
         cfg.policy.max_turns = 1  # type: ignore[misc]
 
 
 def test_unknown_keys_warn_and_empty_body_fails(tmp_path: Path) -> None:
     write(tmp_path, "bogus: 1\nhooks:\n  nope: 2\n")
-    assert load_config(tmp_path)[0].warnings == [
+    assert load_config(tmp_path).config.warnings == [
         "unknown config key ignored: bogus", "unknown config key ignored: hooks.nope"]
     write(tmp_path, "", body="\n")
     with pytest.raises(ConfigError):

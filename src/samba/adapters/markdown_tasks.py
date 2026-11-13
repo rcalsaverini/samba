@@ -312,6 +312,19 @@ class MarkdownTasks:
         status = self._locate(id)
         return str(self._md(id, status or "work-todo").resolve())
 
+    def briefing(self, id: TaskId, writable: bool) -> str:
+        """The protocol's words for the markdown store (spec: prompts, Task and workspace)."""
+        ref = f"Your task file is {self.location(id)}."
+        if not writable:
+            return f"{ref} You cannot edit files and must not try."
+        return (f"{ref} Among the files in the tasks folder, edit only this one. Your plan is "
+                "its `## Plan` section and your log its `## Log` section. The human's feedback on "
+                "your plan or your work is in `## Feedback`. Samba owns the `## Questions` "
+                "section: never write it yourself.")
+
+    def reference(self, id: TaskId) -> str:
+        return f"your task file at {self.location(id)}"
+
     # ---- port: reading ------------------------------------------------------------------
 
     def _read_side(self, id: str) -> dict[str, object]:

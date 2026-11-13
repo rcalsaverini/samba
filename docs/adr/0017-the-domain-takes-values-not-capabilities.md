@@ -6,6 +6,9 @@ supersedes: []
 
 # 0017: The domain takes values, never capabilities
 
+Wording clarified on 2026-11-13: once per recorded step rather than once per operation, and the
+stream rung folded into the seed rung. The decision is unchanged.
+
 ## Context
 
 ADR 0011 says the domain performs no IO, reads no clock and generates no ids, and that a port is
@@ -34,16 +37,18 @@ this is not a breach of the dependency rule. It has costs that showed up all the
 - The domain takes values, never capabilities: a domain function receives the results of IO as
   arguments and performs none, not even through a port it declares.
 - Time arrives as a value. A frozen `Now` holds the wall time and the formatted forms the domain
-  writes. A use case builds it from the clock port once per operation and passes it down, so every
-  timestamp of one operation is the same instant. `monotonic` is for durations in workers and
+  writes. A use case builds it from the clock port once per recorded step (each transition, each
+  answer, each log entry, each question round) and passes it down, so every timestamp of one step
+  is the same instant. `monotonic` is for durations in workers and
   adapters and is never a domain value.
 - When a rule seems to need a capability during its computation, the boundary between inside and
   outside is drawn in the wrong place, and it is redrawn, trying these in order: pass the values
-  (a fixed number of them, known before the rule runs); pass a seed and keep the rule
-  deterministic; pass a stream the rule pulls from, typed with the standard library; or make the
-  rule a step function or a generator and let the use case run the loop against the port, as
-  `decide_after_turn` and `TurnFlow` already do for the agent. If none of these fits, the operation
-  is not a domain rule but a use case, and only its pure part stays in the domain.
+  (a fixed number of them, known before the rule runs); pass a seed, or a pure generator built
+  from one, and keep the rule deterministic (an iterator that performs I/O when pulled is a
+  capability, not a value); or make the rule a step function or a generator and let the use case
+  run the loop against the port, as `decide_after_turn` and `TurnFlow` already do for the agent.
+  If none of these fits, the operation is not a domain rule but a use case, and only its pure
+  part stays in the domain.
 - Consequently no domain module declares, imports or takes a port. The domain imports the standard
   library and itself. The architecture test enforces this. By the ownership rule of ADR 0011 every
   port then belongs to the use-case layer; where the ports module lives is ADR 0018.
@@ -54,8 +59,8 @@ this is not a breach of the dependency rule. It has costs that showed up all the
 
 - Domain functions are deterministic and replayable, and the scenario files (ADR 0012) can state
   the current time as data instead of configuring a fake.
-- The use cases read each port once per operation and hand the values down. That is a little more
-  plumbing in `Machine`, `AnswerQuestion`, `CreateTask`, `TurnFlow` and `Tick`.
+- The use cases read the clock once per recorded step and hand the value down. That is a little
+  more plumbing in `Machine`, `AnswerQuestion`, `CreateTask`, `TurnFlow` and `Tick`.
 - Behavior does not change: the same timestamps, log lines and files. Only signatures move.
 - ADR 0011 stands and is applied: its "reads no clock" becomes literally true. This ADR does not
   supersede it.

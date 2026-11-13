@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import cast
 
 from fake_agent import FakeAgentRunner
+from fake_ids import FakeIds
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
 from fake_validator import FakeValidator, passing
@@ -21,15 +22,7 @@ from samba.app.turn import TurnFlow
 from samba.domain.agent import AgentReport
 from samba.domain.now import Now
 from samba.domain.prompts import APPROVED_PLAN_RULE
-from samba.domain.settings import (
-    AgentSettings,
-    Config,
-    Hooks,
-    Policy,
-    Prompts,
-    Repository,
-    Validation,
-)
+from samba.domain.settings import Config, Policy, Prompts, ToolAccess
 from samba.domain.states import State
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
@@ -48,11 +41,6 @@ class Clock:
         return Now(0.0, "2026-01-01T00:00:00+00:00", "2026-01-01 00:00")
 
 
-class Ids:
-    def new_session_id(self) -> str:
-        return "s1"
-
-
 def make_config(*, max_attempts: int = 1, reflect: bool = False, validate: str | None = None,
                 require_plan: bool = False, template: str = "Do {{ task.title }}",
                 overrides: dict[str, str] | None = None) -> Config:
@@ -61,13 +49,10 @@ def make_config(*, max_attempts: int = 1, reflect: bool = False, validate: str |
                       max_retry_backoff_s=1.0, max_cost_usd_per_task=None,
                       reflect_on_give_up=reflect, require_plan=require_plan, max_concurrent=1,
                       poll_interval_s=1.0),
-        agent=AgentSettings(command=["claude"], model=None, permission_mode="dontAsk", allow=[],
-                            args=[], isolate_user_config=True, turn_timeout_s=60.0,
-                            stall_timeout_s=60.0),
-        repository=Repository(base_branch="main"),
         prompts=Prompts(template=template, overrides=overrides or {}),
-        validation=Validation(command=validate, timeout_s=60.0, tail_lines=20, shell=["bash", "-c"]),
-        hooks=Hooks(after_create=None, timeout_s=60.0))
+        base_branch="main", validate_command=validate,
+        work_tools=ToolAccess(allowed=(), unrestricted=False),
+        planning_tools=ToolAccess(allowed=(), unrestricted=False))
 
 
 class Rig:
@@ -86,7 +71,7 @@ class Rig:
         self.tasks.create(task)
         machine = Machine(self.tasks, self.clock, self.journal,
                           Guard(self.config.policy.require_plan, self.tasks))
-        turns = TurnFlow(self.agent, Ids(), self.tasks, self.clock, FakeValidator(passing("ok")),
+        turns = TurnFlow(self.agent, FakeIds(), self.tasks, self.clock, FakeValidator(passing("ok")),
                          self.journal)
         self.builder = PromptBuilder(self.config, self.tasks, self.vcs)
         finisher = Finisher(self.config.policy, machine, turns, self.builder, self.tasks, self.vcs,

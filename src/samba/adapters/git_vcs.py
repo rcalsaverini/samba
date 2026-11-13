@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from pathlib import Path
 
-from samba.domain.settings import Hooks
-from samba.app.ports import CommitResult, MergeAttempt, Workspace, WorkspaceError
+from samba.app.ports import CommitResult, MergeAttempt, Preflight, Workspace, WorkspaceError
 from samba.adapters.process import git, run_shell
-from samba.adapters.workflow_file import Locations
+from samba.adapters.locations import Locations
 
 
 def repo_key(repo: Path) -> str:
@@ -17,19 +17,33 @@ def repo_key(repo: Path) -> str:
     return f"{resolved.name}-{digest}"
 
 
+@dataclass(frozen=True)
+class HookSettings:
+    """The `hooks.*` keys and `shell` of `WORKFLOW.md`."""
+
+    after_create: str | None
+    timeout_s: float
+    shell: tuple[str, ...]
+
+
 class GitVcs:
-    def __init__(self, locations: Locations, base_branch: str, hooks: Hooks,
-                 shell: list[str]) -> None:
+    def __init__(self, locations: Locations, base_branch: str, hooks: HookSettings) -> None:
         self.locations = locations
         self.base_branch = base_branch
         self.hooks = hooks
-        self.shell = shell
         self.root = (locations.workspaces_root / repo_key(locations.repo)).resolve()
 
     # ---- naming -------------------------------------------------------------------------
 
     def branch_name(self, task_id: str) -> str:
         return f"samba/{task_id}"
+
+    def briefing(self, task_id: str) -> str:
+        """The protocol's words for a git worktree (spec: prompts, Task and workspace)."""
+        return (f"Work only inside the current directory, on branch `{self.branch_name(task_id)}`. "
+                "You are authorized to commit your work on this branch without asking; commit in "
+                "small, coherent steps. Never push, merge, rebase onto other branches, or delete "
+                "branches.")
 
     def _path(self, task_id: str) -> Path:
         p = (self.root / task_id).resolve()
@@ -66,7 +80,7 @@ class GitVcs:
         if not res.ok:
             raise WorkspaceError(f"git worktree add failed: {res.output.strip()[-500:]}")
         if self.hooks.after_create:
-            hook = await run_shell(self.shell, self.hooks.after_create, path,
+            hook = await run_shell(self.hooks.shell, self.hooks.after_create, path,
                                    self.hooks.timeout_s)
             if not hook.ok:
                 await self.remove_workspace(task_id)
@@ -125,18 +139,13 @@ class GitVcs:
     async def _merge_in_progress(self) -> bool:
         return (await git(self.locations.repo, "rev-parse", "-q", "--verify", "MERGE_HEAD")).ok
 
-    async def preflight(self, branch: str) -> str | None:
+    async def preflight(self, branch: str) -> Preflight:
         repo = self.locations.repo
-        base = self.base_branch
         res = await git(repo, "symbolic-ref", "--short", "-q", "HEAD")
-        cur = res.output.strip() if res.ok else None
-        if cur != base:
-            return f"the main checkout is on {cur or 'a detached HEAD'}, not the base branch {base}"
-        if await self._has_tracked_changes():
-            return "the main checkout has uncommitted changes to tracked files"
-        if not (await git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")).ok:
-            return f"branch {branch} does not exist"
-        return None
+        current = res.output.strip() if res.ok else None
+        tracked = await self._has_tracked_changes()
+        exists = (await git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")).ok
+        return Preflight(current or None, tracked, exists)
 
     async def commit_count(self, branch: str) -> int:
         res = await git(self.locations.repo, "rev-list", "--count",

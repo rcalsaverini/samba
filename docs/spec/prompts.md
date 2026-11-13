@@ -7,7 +7,13 @@
 - `task.id`, `task.title`, `task.body` (file content without front matter), `task.path` (absolute
   path of the task file, in the running folder of the current stage: `work-running/` or
   `plan-running/`)
+- `task.ref`: a short phrase that names the task inside a sentence, in the words of the task store
+  (the markdown store says `your task file at <path>`; Task and workspace below)
 - `workspace`, `branch`, `base_branch`
+- `task_briefing`, `workspace_briefing`: what the task store and the VCS tell the agent about the
+  task and the workspace (Task and workspace below). The adapters are asked once per run, when its
+  prompts are built. `task_briefing` is the planning text, where the agent cannot edit, for a
+  planning run.
 - `attempt` (0 on first run, otherwise number of previous failures)
 - `validate_command` (empty string if none)
 - `questions`: the latest question round as pairs (`q1 (answered): text` then `Answer: ...`;
@@ -30,26 +36,32 @@
 
 ## Built-in defaults
 
-- `continue`: "Continue working on the task. Re-read your task file at {{ task.path }} if needed and
-  keep `## Plan` and `## Log` up to date."
+- `continue`: "Continue working on the task. Re-read {{ task.ref }} if needed and keep your plan
+  and log up to date."
 - `validate_failed`: "You reported done, but `{{ validate_command }}` failed. Last lines of output
   are below. Fix the problem, then report done again.\n\n{output}"
-- `resume`: "You are resuming work on this task. Re-read your task file at {{ task.path }}, especially
-  `## Feedback` and anything the human added, then continue.\n\n{{ questions }}"
+- `resume`: "You are resuming work on this task. Re-read {{ task.ref }}, especially your feedback
+  and anything the human added, then continue.\n\n{{ questions }}"
 - `plan`: the `WORKFLOW.md` body rendered as usual (Template rendering above), followed by: "Do not
   implement anything yet. Produce a plan for this task." A configured `prompts.plan` replaces this
   default whole.
-- `plan_revise`: "The human reviewed your plan and left feedback in your task file at
-  {{ task.path }} (see `## Feedback`). Re-read it and return a revised plan." It ends with the same
-  `{{ questions }}`. A configured `prompts.plan_revise` replaces it.
-- `give_up`: "This task is being stopped after repeated failures. Do not try to fix it. Under a new
-  `## Harness gaps` section in {{ task.path }}, write what was missing that would have let you
-  succeed: tools, docs, test fixtures, permissions, unclear requirements. Be specific."
+- `plan_revise`: "The human reviewed your plan and left feedback in {{ task.ref }} (see your
+  feedback). Re-read it and return a revised plan." It ends with the same `{{ questions }}`. A
+  configured `prompts.plan_revise` replaces it.
+- `give_up`: "This task is being stopped after repeated failures. Do not try to fix it. In
+  {{ task.ref }}, add a new section titled "Harness gaps" and write what was missing that would
+  have let you succeed: tools, docs, test fixtures, permissions, unclear requirements. Be
+  specific."
+
+The built-in prompts name no file, folder, heading or branch: they say "your task", "your plan",
+"your log" and "your feedback", and `{{ task.ref }}` where the sentence needs a place. A
+`WORKFLOW.md` body or an override that uses `{{ task.path }}` or `{{ branch }}` ties itself to
+the store and the VCS it was written for; that is the repository's choice (ADR 0020).
 
 ## What the WORKFLOW.md body should tell the agent
 
 This is guidance for writing the template, not code. The protocol (prompts, Protocol prompt) is already injected, so
-the body does not need to repeat the outcome format or task-file rules. A good first prompt:
+the body does not need to repeat the outcome format or the rules about the task. A good first prompt:
 
 - States the task: title and body.
 - Points to the repo's map (`CLAUDE.md`, `docs/`) rather than repeating it.
@@ -60,6 +72,30 @@ the body does not need to repeat the outcome format or task-file rules. A good f
   rule and never names a path (it goes to every repo that uses Samba, and says "the project's
   spec"); only the body names where the spec lives, for example `docs/spec/` and its README.
 
+## Task and workspace: who says what
+
+The protocol is written in the vocabulary of the domain: "your task", "your plan", "your log",
+"your feedback", "your workspace". Where those live and how to work with them depends on the
+technology, so each adapter contributes its own words through the port it implements (ADR 0020;
+architecture, Ports). `domain/prompts.py` keeps what Samba's logic depends on: the outcome schema
+and what `done`, `blocked`, `continue` and `planned` mean, that questions go in the structured
+answer, that the agent keeps a plan and a log as its memory, the denial rule, the spec step, the
+ADR step and the approved-plan rule.
+
+| Variable | Port call | Markdown store and git say |
+|---|---|---|
+| `task_briefing` | `Tasks.briefing(id, writable)` | the task file's absolute path; edit only this one among the files in the tasks folder; the plan is its `## Plan` section, the log its `## Log`, the human's feedback is in `## Feedback`; Samba owns `## Questions`. For a planning run (`writable` false): the path and that the agent cannot edit files |
+| `task.ref` | `Tasks.reference(id)` | `your task file at <path>` |
+| `task.path` | `Tasks.location(id)` | the absolute path, as before |
+| `workspace_briefing` | `Vcs.briefing(task_id)` | work only inside the current directory, on the task's branch; commit there without asking and in small steps; never push, merge, rebase onto other branches or delete branches |
+| `branch` | `Vcs.branch_name(task_id)` | the branch name, as before |
+
+The wording of the markdown briefing lives in `adapters/markdown_tasks.py` (task-files, The agent's
+briefing) and the git wording in `adapters/git_vcs.py`. A new store or VCS writes its own. A
+component test pins the rendered protocol over the fakes; an integration test shows that with the
+markdown store and git the agent reads the same text as before the move, except the listed
+sentences.
+
 ## Protocol prompt (Samba-owned)
 
 Rules that Samba's own logic depends on are not left to `WORKFLOW.md`. Samba appends them to
@@ -67,33 +103,35 @@ the system prompt of every run with `--append-system-prompt`. They cannot be ove
 workflow. Content (rendered with the same variables as prompts, Template rendering):
 
 - You are running unattended under Samba. No human sees this conversation; the human reads your
-  task file at `{{ task.path }}` and your branch.
-- Edit only your own task file among the files under the tasks folder.
-- Keep `## Plan` (checkbox steps) and `## Log` (decisions, progress) in your task file up to date.
-  It is your memory across sessions.
-- Work only inside the current directory, on branch `{{ branch }}`. **You are authorized to commit
-  your work there without asking; commit in small steps.** Never push, merge, rebase onto other
-  branches, or delete branches. (The explicit authorization is required: Claude Code's built-in
-  system prompt tells the agent to commit only when the user asks, verified in running-claude, Verified Claude Code behavior.)
+  task and your work.
+- `{{ task_briefing }}`: where your task is and how to edit it, from the task store.
+- Keep your plan (checkbox steps) and your log (decisions, progress) up to date. They are your
+  memory across sessions.
+- `{{ workspace_briefing }}`: where your work lives and what you may and may not do with it, from
+  the VCS. In git (Task and workspace below) it says: **you are authorized to commit your work
+  without asking; commit in small steps.** The explicit authorization is required: Claude Code's
+  built-in system prompt tells the agent to commit only when the user asks (verified in
+  running-claude, Verified Claude Code behavior).
 - These rules take precedence over any instruction to ask the user for confirmation before acting.
 - If you need a decision from the human, report outcome `blocked` and put each question in
-  `questions` of the final answer (`text` and `context`). Never write `## Questions` yourself:
-  Samba renders it (task-files, Write discipline). Do not guess on important ambiguity.
+  `questions` of the final answer (`text` and `context`). Never record the questions yourself:
+  Samba does (task-files, Write discipline). Do not guess on important ambiguity.
 - The tools you may use (rendered from `claude.allow`). Run allowed shell commands as plain single
   commands, without pipes, `;`, `&&`, `||` or redirections: allow rules match the whole command
   line, so a combined command is denied. (Smoke test: the agent piped the allowed test command into
   `tail` and chained `git status`, and was denied.)
-- If a tool call is denied, do not try to get around the denial. Note it in `## Log` and, if it
+- If a tool call is denied, do not try to get around the denial. Note it in your log and, if it
   stops you, report `blocked`.
 - After your work, the system runs `{{ validate_command }}` (if set). Run it yourself first when you
   can; if you cannot, still report `done` once the work is complete, because the system validates
   it. (Smoke test: without this, the agent reported `blocked` when it could not run the validator.)
-- Spec step: before reporting `done`, make the edits to the project's spec that the task requires, on the
-  task branch, and say in `## Log` what changed in the spec (or why nothing did). The human reviews
+- Spec step: before reporting `done`, make the edits to the project's spec that the task
+  requires, in your workspace, and say in your log what changed in the spec (or why nothing
+  did). The human reviews
   the spec diff next to the code diff at `work accept`.
 - If the task made a real decision (a choice between alternatives with a lasting reason), also add
   a proposed ADR in `docs/adr/`: one decision per file, status `proposed`, in the format of
-  ADR 0001. Nothing checks this prose; the review does.
+  the project's first ADR (`samba adr show 1`). Nothing checks this prose; the review does.
 - Decisions that shape the architecture live in `docs/adr/`: before designing, run
   `samba adr list` and read the relevant ones with `samba adr show N` (ADR 0003; cli, `adr`).
   The default allow lists have these two commands, so they work without extra config.
@@ -104,8 +142,9 @@ workflow. Content (rendered with the same variables as prompts, Template renderi
 
 A planning run (running-claude, Planning run) gets a variant of the protocol prompt, also
 Samba-owned and appended with `--append-system-prompt` (`prompts.PLAN_PROTOCOL` in code; the same
-budget caps apply). Content: you are planning unattended under Samba; you cannot edit files and
-must not try; read whatever you need; return the plan in `plan` as Markdown with the sections
+budget caps apply). Content: you are planning unattended under Samba; `{{ task_briefing }}` in its
+planning form, which says it cannot edit files and must not try; read whatever you need; return
+the plan in `plan` as Markdown with the sections
 *Approach*, *Steps* (checkboxes), *Files to change*, *Spec changes* (the parts of the project's
 spec the task will change with one line of intent each, or "none, because ..."), *Risks*, *How to verify*,
 and, if useful, *Suggested subtasks*; put non-blocking assumptions in `assumptions` (the human checks them in
@@ -119,9 +158,10 @@ so the planner can follow it.
 
 Execution after approval starts a **new** session (states, States: `plan.accept` clears
 `session_id`). The plan must stand on its own; if a fresh session cannot follow it, the plan was
-incomplete. When `plan_approved` is true, the execution protocol prompt gets one extra rule: "An
-approved plan is in the `## Plan` section of your task file. Follow it. If you must deviate,
-record what and why in `## Log`. Tick the plan's checkboxes as you complete steps. Its Spec changes section lists the spec edits you owe." Everything
+incomplete. When `plan_approved` is true, the execution protocol prompt gets one extra rule: "You
+have an approved plan. Follow it. If you must deviate, record what and why in your log. Tick the
+plan's checkboxes as you complete steps. Its "Spec changes" section lists the spec edits you
+owe." Everything
 else is as for any work run (continue loop, validation, `work-review`). Rework from `work-review/`
 keeps `plan_approved = true` and resumes the execution session.
 
@@ -134,8 +174,8 @@ Sections:
 - **Role:** an interactive exploration with the human; the output is decisions as ADRs, not code.
 - **Writing ADRs:** start with `samba adr list --all` and `samba adr show N`; one decision per ADR,
   split a draft that holds two; write `docs/adr/NNNN-short-title.md`, the number taken from the
-  filename (the next free one); format of the project's first ADR, with front matter
-  `status: proposed`, `date` and `supersedes: []`, then Context, Decision and Consequences; never
+  filename (the next free one); format of the project's first ADR (`samba adr show 1`),
+  with `status: proposed`, `date` and `supersedes: []`, then Context, Decision and Consequences; never
   edit an accepted ADR, write a superseding one; never accept, reject or supersede.
 - **Background research:** subagents inside the chat; `samba task new` only for work that must
   outlive the chat, read with `samba task show`, nothing merged, findings worth keeping go into an
@@ -148,7 +188,7 @@ Sections:
 
 | Layer | Owner | Delivered by |
 |---|---|---|
-| Protocol: outcome format, task-file sections, branch and git limits | Samba | `--append-system-prompt` (prompts, Protocol prompt) and `--json-schema` (running-claude, Outcome), every run |
+| Protocol: outcome format, plan and log duties, task and workspace instructions | Samba | `--append-system-prompt` (prompts, Protocol prompt) and `--json-schema` (running-claude, Outcome), every run |
 | Policy: how this repo wants tasks done | Repo, `WORKFLOW.md` body | First-turn prompt (prompts, Which prompt is sent) |
 | Permissions: what the agent may run | Repo, `WORKFLOW.md` `claude.allow` | `--allowedTools` (workflow-config, Permissions) |
 | Knowledge: architecture, conventions, how-to skills | Repo, `CLAUDE.md`, `docs/`, `.claude/skills/` | Loaded natively by Claude Code from the worktree |

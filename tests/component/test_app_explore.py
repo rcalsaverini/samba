@@ -6,7 +6,7 @@ from fake_session import FakeSession
 
 from samba.app.explore import StartExplore
 from samba.app.results import Explored, Refused
-from samba.domain.prompts import EXPLORE_ALLOW, EXPLORE_GUIDE
+from samba.domain.prompts import EXPLORE_ALLOW, EXPLORE_DENY, EXPLORE_GUIDE
 
 FORBIDDEN = ["plan", "work", "adr accept", "adr reject", "adr supersede", "task discard",
              "task stop", "task retry", "question answer"]
@@ -15,56 +15,28 @@ ADR_0004_ALLOW = ["Bash(samba task new:*)", "Bash(samba task list:*)", "Bash(sam
                   "Bash(samba adr list:*)", "Bash(samba adr show:*)"]
 
 
-def start(session: FakeSession, topic: str | None, model: str | None = None) -> Explored | Refused:
-    return StartExplore(["claude", "--x"], model, "/the/repo", session).run(topic)
+def start(session: FakeSession, topic: str | None) -> Explored | Refused:
+    return StartExplore(EXPLORE_GUIDE, EXPLORE_ALLOW, EXPLORE_DENY, "/the/repo", session).run(topic)
 
 
-def values(argv: tuple[str, ...], flag: str) -> list[str]:
-    rest = argv[argv.index(flag) + 1:]
-    out: list[str] = []
-    for item in rest:
-        if item.startswith("--"):
-            break
-        out.append(item)
-    return out
-
-
-def test_a_topic_is_the_first_prompt_after_the_command_and_cwd_is_the_repo() -> None:
+def test_the_session_names_the_topic_and_the_location() -> None:
     s = FakeSession()
     start(s, "queues")
-    assert s.specs[0].argv[:3] == ("claude", "--x", "queues")
-    assert s.specs[0].cwd == "/the/repo"
+    assert s.sessions[0].topic == "queues"
+    assert s.sessions[0].location == "/the/repo"
 
 
-def test_no_topic_means_no_positional() -> None:
+def test_no_topic_means_none() -> None:
     s = FakeSession()
     start(s, None)
-    assert s.specs[0].argv[:3] == ("claude", "--x", "--append-system-prompt")
-
-
-def test_model_only_when_configured() -> None:
-    a, b = FakeSession(), FakeSession()
-    start(a, None)
-    start(b, None, "opus")
-    assert "--model" not in a.specs[0].argv
-    assert values(b.specs[0].argv, "--model") == ["opus"]
-
-
-def test_the_session_is_interactive_and_not_isolated() -> None:
-    s = FakeSession()
-    start(s, "t")
-    argv = s.specs[0].argv
-    for flag in ("-p", "--permission-mode", "--output-format", "--setting-sources", "--settings",
-                 "--json-schema", "--strict-mcp-config"):
-        assert flag not in argv
+    assert s.sessions[0].topic is None
 
 
 def test_allow_and_deny_lists() -> None:
     s = FakeSession()
     start(s, "t")
-    argv = s.specs[0].argv
-    allow = values(argv, "--allowedTools")
-    deny = values(argv, "--disallowedTools")
+    allow = list(s.sessions[0].allowed)
+    deny = list(s.sessions[0].denied)
     assert allow == list(EXPLORE_ALLOW)
     assert [a for a in allow if a.startswith("Bash(")] == ADR_0004_ALLOW
     assert deny == [f"Bash(samba {c}:*)" for c in FORBIDDEN]
@@ -74,8 +46,7 @@ def test_allow_and_deny_lists() -> None:
 def test_the_guide_is_appended_to_the_system_prompt() -> None:
     s = FakeSession()
     start(s, "t")
-    argv = s.specs[0].argv
-    assert values(argv, "--append-system-prompt") == [EXPLORE_GUIDE]
+    assert s.sessions[0].guide == EXPLORE_GUIDE
     for phrase in ("proposed", "docs/adr", "One decision per ADR", "NNNN",
                    "say which task it is and why"):
         assert phrase in EXPLORE_GUIDE

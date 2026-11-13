@@ -1,4 +1,7 @@
-"""Read and validate WORKFLOW.md (spec: workflow-config). Returns the plain settings and the locations."""
+"""Read and validate WORKFLOW.md (spec: workflow-config).
+
+Builds the domain's `Config` and each adapter's own settings (ADR 0019); `bootstrap` hands them out.
+"""
 
 from __future__ import annotations
 
@@ -9,17 +12,18 @@ from typing import Any, cast
 
 import yaml
 
+from samba.adapters.claude_settings import ClaudeSettings
+from samba.adapters.git_vcs import HookSettings
+from samba.adapters.locations import Locations
+from samba.adapters.shell_validator import ValidatorSettings
 from samba.domain.settings import (
     DEFAULT_ALLOW,
     DEFAULT_PLANNING_ALLOW,
-    AgentSettings,
     Config,
     ConfigError,
-    Hooks,
     Policy,
     Prompts,
-    Repository,
-    Validation,
+    ToolAccess,
 )
 
 WORKFLOW_FILE = "WORKFLOW.md"
@@ -28,12 +32,14 @@ PROMPT_KEYS = ("continue", "validate_failed", "resume", "give_up", "plan", "plan
 
 
 @dataclass(frozen=True)
-class Locations:
-    """Where things live, as real paths: only the adapters that touch the disk receive it."""
+class Loaded:
+    """Everything `WORKFLOW.md` yields: the domain's `Config` and each adapter's settings."""
 
-    repo: Path
-    samba_dir: Path
-    workspaces_root: Path
+    config: Config
+    locations: Locations
+    claude: ClaudeSettings
+    validator: ValidatorSettings
+    hooks: HookSettings
 
 
 def split_front_matter(text: str) -> tuple[dict[str, Any], str]:
@@ -144,7 +150,7 @@ def _expand(path: str, base: Path) -> Path:
     return p.resolve()
 
 
-def load_config(repo: Path) -> tuple[Config, Locations]:
+def load_config(repo: Path) -> Loaded:
     repo = repo.resolve()
     workflow = repo / WORKFLOW_FILE
     try:
@@ -185,18 +191,20 @@ def load_config(repo: Path) -> tuple[Config, Locations]:
         if value:
             prompts[key] = value
 
-    agent = AgentSettings(
-        command=command,
+    claude_settings = ClaudeSettings(
+        command=tuple(command),
         model=claude.string("model", None),
+        planning_model=planning_r.string("model", None),
         permission_mode=permission_mode,
-        allow=claude.string_list("allow", DEFAULT_ALLOW),
-        args=claude.string_list("args", []),
+        args=tuple(claude.string_list("args", [])),
         isolate_user_config=claude.boolean("isolate_user_config", True),
         turn_timeout_s=claude.number("turn_timeout_s", 3600),
         stall_timeout_s=claude.number("stall_timeout_s", 300),
-        planning_model=planning_r.string("model", None),
-        planning_allow=planning_r.string_list("allow", DEFAULT_PLANNING_ALLOW),
     )
+    work_tools = ToolAccess(allowed=tuple(claude.string_list("allow", DEFAULT_ALLOW)),
+                            unrestricted=permission_mode == "bypassPermissions")
+    planning_tools = ToolAccess(
+        allowed=tuple(planning_r.string_list("allow", DEFAULT_PLANNING_ALLOW)), unrestricted=False)
     policy = Policy(
         max_turns=r.integer("max_turns", 10),
         max_attempts=r.integer("max_attempts", 3),
@@ -208,24 +216,25 @@ def load_config(repo: Path) -> tuple[Config, Locations]:
         max_concurrent=r.integer("max_concurrent", 2),
         poll_interval_s=r.number("poll_interval_s", 10),
     )
-    repository = Repository(base_branch=r.string("base_branch", "main") or "main")
-    validation = Validation(
+    validator = ValidatorSettings(
         command=validate.string("command", None),
+        shell=tuple(shell),
         timeout_s=validate.number("timeout_s", 900),
         tail_lines=validate.integer("output_tail_lines", 200),
-        shell=shell,
     )
+    hook_settings = HookSettings(after_create=hooks.string("after_create", None),
+                                 timeout_s=hooks.number("timeout_s", 300), shell=tuple(shell))
     config = Config(
         policy=policy,
-        agent=agent,
-        repository=repository,
         prompts=Prompts(template=body.strip(), overrides=prompts),
-        validation=validation,
-        hooks=Hooks(after_create=hooks.string("after_create", None),
-                    timeout_s=hooks.number("timeout_s", 300)),
+        base_branch=r.string("base_branch", "main") or "main",
+        validate_command=validator.command,
+        work_tools=work_tools,
+        planning_tools=planning_tools,
     )
     for reader in (r, hooks, validate, claude, prompts_r, planning_r):
         config.warnings.extend(f"unknown config key ignored: {k}" for k in reader.unknown())
     if not config.prompts.template:
         raise ConfigError("WORKFLOW.md has an empty prompt body")
-    return config, Locations(repo=repo, samba_dir=samba_dir, workspaces_root=workspaces_root)
+    return Loaded(config, Locations(repo=repo, samba_dir=samba_dir, workspaces_root=workspaces_root),
+                  claude_settings, validator, hook_settings)

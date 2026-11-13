@@ -9,9 +9,21 @@ from samba.app.resolve import find_task
 from samba.app.results import LOCK_BUSY, Done, Refused, Text, refused
 from samba.domain.task_id import TaskId
 from samba.domain.validation import accept_tail
-from samba.app.ports import Lock, Tasks, Terminal, Validator, Vcs
+from samba.app.ports import Lock, Preflight, Tasks, Terminal, Validator, Vcs
 
 EVENT = "work.accept"
+
+
+def preflight_problem(facts: Preflight, branch: str, base: str) -> str | None:
+    """The first reason `work accept` must not start, or None."""
+    if facts.current_branch != base:
+        return (f"the main checkout is on {facts.current_branch or 'a detached HEAD'}, "
+                f"not the base branch {base}")
+    if facts.tracked_changes:
+        return "the main checkout has uncommitted changes to tracked files"
+    if not facts.branch_exists:
+        return f"branch {branch} does not exist"
+    return None
 
 
 class AcceptWork:
@@ -34,7 +46,7 @@ class AcceptWork:
             return refused(legal.message)
         assert isinstance(legal, Legal)
         if not no_merge:
-            problem = await self.vcs.preflight(branch)
+            problem = preflight_problem(await self.vcs.preflight(branch), branch, self.base)
             if problem:
                 return refused(f"{problem}; nothing changed")
         return None

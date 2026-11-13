@@ -49,7 +49,7 @@ def retry_hint(cause: str | None) -> str | None:
         return ("hint: raise the budget cap in WORKFLOW.md first (max_turns, max_attempts or "
                 "max_cost_usd_per_task), or the task will go straight back to stuck")
     if cause in ("dependency_discarded", "dependency_cycle"):
-        return ("hint: edit depends_on in the task file first, or the dependency check will "
+        return ("hint: edit depends_on in the task first, or the dependency check will "
                 "send it back to stuck")
     return None
 

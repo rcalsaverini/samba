@@ -49,6 +49,18 @@ Free-form description written by the human: goal, context, acceptance criteria.
   `## Questions` sections are not migrated: such a task has no records, and the human moves it out
   of `question/` by hand.
 
+## The agent's briefing
+
+The protocol the agent reads says "your task", "your plan" and "your log" and names no file
+(prompts, Task and workspace). What makes those words concrete for this store is written by the
+adapter, in `MarkdownTasks.briefing(id, writable)` and `MarkdownTasks.reference(id)`: the
+absolute path of the task file, that the agent edits only this file among the files in the tasks
+folder, that its plan is the `## Plan` section and its log the `## Log` section, that the human's
+feedback is in `## Feedback`, and that `## Questions` belongs to Samba. For a planning run
+(`writable` false) it says only where the task file is and that the agent cannot edit files. The
+reference is the phrase `your task file at <path>`. That wording lives only in
+`adapters/markdown_tasks.py`; change it there if the sections change.
+
 ## Write discipline
 
 - The agent may edit its own task file while it runs.

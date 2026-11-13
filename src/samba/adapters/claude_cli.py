@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
-from samba.domain.settings import AgentSettings
+from samba.adapters.claude_settings import ClaudeSettings
+from samba.domain.settings import ToolAccess
 from samba.domain.agent import (
     AgentReport,
     AgentRequest,
@@ -42,7 +43,8 @@ def ancestor_memory_files(cwd: Path) -> list[str]:
     return [str(parent / name) for parent in cwd.resolve().parents for name in MEMORY_FILE_NAMES]
 
 
-def build_argv(cfg: AgentSettings, req: AgentRequest, tasks_dir: Path, cwd: Path) -> list[str]:
+def build_argv(cfg: ClaudeSettings, access: ToolAccess, req: AgentRequest, tasks_dir: Path,
+               cwd: Path) -> list[str]:
     # The prompt comes right after -p: several flags below are variadic and would swallow a
     # positional argument placed after them.
     argv = [*cfg.command, "-p", req.prompt, "--output-format", "stream-json", "--verbose"]
@@ -52,9 +54,8 @@ def build_argv(cfg: AgentSettings, req: AgentRequest, tasks_dir: Path, cwd: Path
     plan = req.kind == "plan"
     argv += ["--json-schema", PLAN_OUTCOME_SCHEMA_JSON if plan else OUTCOME_SCHEMA_JSON]
     argv += ["--permission-mode", "dontAsk" if plan else cfg.permission_mode]
-    allow = cfg.planning_allow if plan else cfg.allow
-    if allow:
-        argv += ["--allowedTools", *allow]
+    if access.allowed:
+        argv += ["--allowedTools", *access.allowed]
     model = (cfg.planning_model or cfg.model) if plan else cfg.model
     if model:
         argv += ["--model", model]
@@ -180,10 +181,13 @@ def _to_report(res: _RunResult) -> AgentReport:
 class ClaudeCliRunner:
     """Runs `claude -p` per request. Stream logs go to `<runs_dir>/<request.log_name>.jsonl`."""
 
-    def __init__(self, cfg: AgentSettings, tasks_dir: Path,
-                 runs_dir: Path, check_dir: Path, journal: Journal) -> None:
+    def __init__(self, settings: ClaudeSettings, work_tools: ToolAccess,
+                 planning_tools: ToolAccess, tasks_dir: Path, runs_dir: Path, check_dir: Path,
+                 journal: Journal) -> None:
         self.journal = journal
-        self.cfg = cfg
+        self.cfg = settings
+        self.work_tools = work_tools
+        self.planning_tools = planning_tools
         self.tasks_dir = tasks_dir
         self.runs_dir = runs_dir
         self.check_dir = check_dir
@@ -192,7 +196,8 @@ class ClaudeCliRunner:
     async def run(self, request: AgentRequest) -> AgentReport:
         cwd = Path(request.location)
         stream_log = self.runs_dir / f"{request.log_name}.jsonl"
-        argv = build_argv(self.cfg, request, self.tasks_dir, cwd)
+        access = self.planning_tools if request.kind == "plan" else self.work_tools
+        argv = build_argv(self.cfg, access, request, self.tasks_dir, cwd)
         res = await _run_claude(self.cfg, argv, cwd, stream_log)
         task = request.log_name.split("/", 1)[0]
         if res.init and not self._logged_init:
@@ -219,7 +224,7 @@ class ClaudeCliRunner:
         return Readiness(False, res.output.strip()[:500])
 
 
-async def _run_claude(cfg: AgentSettings, argv: list[str], cwd: Path, stream_log: Path) -> _RunResult:
+async def _run_claude(cfg: ClaudeSettings, argv: list[str], cwd: Path, stream_log: Path) -> _RunResult:
     """Run one Claude process. Cancelling the coroutine kills the process group."""
     res = _RunResult()
     started = time.monotonic()

@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from samba.domain.agent import AgentReport, AgentRequest, Readiness
-from samba.domain.launch import LaunchSpec
 from samba.domain.now import Now
 from samba.domain.states import State
 from samba.domain.task import ObservedMove, Task
@@ -94,6 +93,18 @@ class Tasks(Protocol):
         """Opaque: where the agent finds its task (the `task.path` prompt variable)."""
         ...
 
+    def briefing(self, id: TaskId, writable: bool) -> str:
+        """What the agent is told about its task: how to find it, whether and how to edit it,
+        what belongs to Samba, and how its plan, log and feedback are written in this store. The
+        store's own wording for its technology, spliced into the protocol as `task_briefing`.
+        `writable` is false for a planning run (ADR 0020)."""
+        ...
+
+    def reference(self, id: TaskId) -> str:
+        """A short phrase that names the task inside a sentence, in the store's own wording
+        (the `task.ref` prompt variable; ADR 0020)."""
+        ...
+
 
 @dataclass(frozen=True)
 class EditResult:
@@ -172,6 +183,14 @@ class CommitResult:
     detail: str = ""
 
 
+@dataclass(frozen=True)
+class Preflight:
+    """What the main checkout looks like before `work accept`; the use case decides on it."""
+    current_branch: str | None  # None on a detached HEAD
+    tracked_changes: bool  # tracked files have uncommitted changes
+    branch_exists: bool
+
+
 class Vcs(Protocol):
     """The repository: per-task workspaces and the merge steps of `work accept` (spec: workspaces,
     cli). Locations are opaque text. Every method is async."""
@@ -182,6 +201,12 @@ class Vcs(Protocol):
 
     def workspace_location(self, task_id: str) -> str:
         """Where the task's workspace is (or would be)."""
+        ...
+
+    def briefing(self, task_id: str) -> str:
+        """What the agent is told about its workspace: where the work lives, that it may commit
+        there without asking, and what it must never do. The VCS's own wording for its
+        technology, spliced into the protocol as `workspace_briefing` (ADR 0020)."""
         ...
 
     async def ensure_workspace(self, task_id: str) -> Workspace:
@@ -201,8 +226,8 @@ class Vcs(Protocol):
         """A message when the repository root or the base branch is wrong, else None."""
         ...
 
-    async def preflight(self, branch: str) -> str | None:
-        """A message for the first failed check of `work accept`, or None."""
+    async def preflight(self, branch: str) -> Preflight:
+        """The facts `work accept` decides on; the decision and its wording are the use case's."""
         ...
 
     async def commit_count(self, branch: str) -> int:
@@ -302,10 +327,23 @@ class LaunchError(Exception):
     """An interactive program could not be started (for example `claude` is not installed)."""
 
 
-class InteractiveSession(Protocol):
-    """A program run attached to the person's terminal (spec: architecture, Ports; cli, explore)."""
+@dataclass(frozen=True)
+class ExploreSession:
+    """What `samba explore` asks for, in Samba's terms: the adapter decides how to start it
+    (ADR 0019). `location` is opaque text, the working directory."""
 
-    def run(self, spec: LaunchSpec) -> int:
+    topic: str | None
+    guide: str
+    allowed: tuple[str, ...]
+    denied: tuple[str, ...]
+    location: str
+
+
+class InteractiveSession(Protocol):
+    """An exploration session attached to the person's terminal (spec: architecture, Ports; cli,
+    explore)."""
+
+    def run(self, session: ExploreSession) -> int:
         """Run it until it exits and return its exit code. Raises `LaunchError(message)` when it
         cannot be started."""
         ...

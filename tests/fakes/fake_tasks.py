@@ -45,6 +45,12 @@ class FakeTasks:
     def location(self, id: TaskId) -> str:
         return f"fake://{id}"
 
+    def briefing(self, id: TaskId, writable: bool) -> str:
+        return f"BRIEFING({id}, {'writable' if writable else 'read-only'})"
+
+    def reference(self, id: TaskId) -> str:
+        return f"the fake task {id}"
+
     def get(self, id: TaskId) -> Task | None:
         t = self.records.get(id)
         return self._out(t) if t is not None else None

@@ -37,6 +37,11 @@ and the agent should be allowed to run the exact same command. Exit code
 `output_tail_lines` lines are fed back on failure. A timeout counts as a validation failure, not a
 worker failure. `work accept` runs the same command again on the merged result (cli).
 
+The agent may run the validation command itself (ADR 0008: it is in the allow list), but while
+working it is asked to run only the fast test levels and to leave the full run, end-to-end level
+included, to Samba (`CLAUDE.md`, Checks). The permission stands; the practice avoids paying for
+the slow run twice.
+
 ## Removal
 
 `git worktree remove --force <path>` when the task reaches `done/` or is deleted. The branch is kept.

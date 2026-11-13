@@ -1,6 +1,6 @@
 """`Tick`: the decisions of one poll of the orchestrator (spec: orchestrator).
 
-Observe hand moves, reconcile the running workers with the task files, clean up workspaces and
+Observe hand moves, reconcile the running workers with the tasks, clean up workspaces and
 dispatch the next tasks. Starting a worker is the orchestrator's business: `Tick` calls `spawn`.
 """
 
@@ -133,7 +133,7 @@ class Tick:
                 entry.stop_reason = "moved"
                 entry.task.cancel()
                 self.journal.info("stopping", task=task_id,
-                                  reason=f"task file left {entry.folder}/",
+                                  reason=f"task left {entry.folder}/",
                                   now=status or "deleted")
 
     async def cleanup_workspaces(self) -> None:

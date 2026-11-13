@@ -6,7 +6,9 @@ Reads source files with `ast`; never imports samba.
 from __future__ import annotations
 
 import ast
+import io
 import re
+import tokenize
 from pathlib import Path
 
 TESTS = Path(__file__).resolve().parents[1]
@@ -18,7 +20,7 @@ DOMAIN_MODULES = ["domain/template.py", "domain/prompts.py", "domain/__init__.py
                   "domain/now.py", "domain/states.py", "domain/questions.py",
                   "domain/transitions.py", "domain/deps.py", "domain/agent.py",
                   "domain/policy.py", "domain/task.py", "domain/task_id.py",
-                  "domain/validation.py", "domain/launch.py", "domain/settings.py"]
+                  "domain/validation.py", "domain/settings.py"]
 
 # Use cases: may log and await, but import no adapter and call no clock or uuid directly.
 APP_MODULES = ["app/__init__.py", "app/turn.py", "app/machine.py", "app/results.py",
@@ -144,7 +146,14 @@ def test_scenario_runner_imports_no_adapter_and_no_store() -> None:
 
 
 def code_without_comments(path: Path) -> str:
-    return "\n".join(line.split("#", 1)[0] for line in path.read_text().splitlines())
+    """The source with its comments cut out. A `#` inside a string stays (the prompts have
+    Markdown headings in them), so the tokenizer finds the comments, not a split on `#`."""
+    lines = path.read_text().splitlines()
+    for tok in tokenize.generate_tokens(io.StringIO(path.read_text()).readline):
+        if tok.type == tokenize.COMMENT:
+            row, col = tok.start
+            lines[row - 1] = lines[row - 1][:col]
+    return "\n".join(lines)
 
 
 CLAUDE_JSON = re.compile(r"(?<!no_)structured_output|permission_denials|total_cost_usd|samba\.claude\b"
@@ -161,12 +170,61 @@ def test_only_the_claude_adapter_reads_claude_json() -> None:
     assert not (SRC / "claude.py").exists(), "claude.py moved to adapters/claude_cli.py"
 
 
-STORAGE_WORDS = re.compile(r"Path|mtime|sidecar|front matter")
+EMITTING_ADAPTERS = ["adapters/claude_cli.py", "adapters/interactive_session.py"]
+
+
+def string_flags(path: Path) -> set[str]:
+    """The `-p` and `--` string literals of a module: the flags it emits."""
+    return {n.value for n in ast.walk(ast.parse(path.read_text()))
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)
+            and re.fullmatch(r"-p|--[A-Za-z][\w-]*", n.value)}
+
+
+def emitted_flags() -> set[str]:
+    return {f for rel in EMITTING_ADAPTERS for f in string_flags(SRC / rel)}
+
+
+def flags_in_code(path: Path, flags: set[str]) -> list[str]:
+    code = code_without_comments(path)
+    return sorted(f for f in flags if re.search(rf"(?<![\w-]){re.escape(f)}(?![\w-])", code))
+
+
+def test_no_domain_or_app_module_names_a_flag_the_adapters_emit() -> None:
+    flags = emitted_flags()
+    assert {"-p", "--allowedTools", "--append-system-prompt"} <= flags, flags
+    for rel in [*DOMAIN_MODULES, *APP_MODULES]:
+        assert flags_in_code(SRC / rel, flags) == [], f"{rel} builds the agent's command line"
+
+
+def test_the_flag_check_catches_an_emitted_flag_and_ignores_others(tmp_path: Path) -> None:
+    emitter = tmp_path / "emit.py"
+    emitter.write_text('argv = ["--allowedTools", "--model", "x", "-p"]\n')
+    assert string_flags(emitter) == {"--allowedTools", "--model", "-p"}
+    bad = tmp_path / "bad.py"
+    bad.write_text('x = "--allowedTools"  # --model in a comment\ny = "samba adr list --help"\n'
+                   'z = ["-p", "x"]\nw = "a-p-b"\n')
+    assert flags_in_code(bad, string_flags(emitter)) == ["--allowedTools", "-p"]
+
+
+# What the domain and the use cases must not say (principle 4, ADR 0011): the words of a store.
+STORAGE_WORDS = re.compile(r"Path|mtime|sidecar|front matter|task file|tasks folder")
+# What the text the domain tells the agent must not say either (ADR 0020): `Task.branch` and
+# the use cases that speak of branches are legitimate, a sentence of the protocol is not.
+PROMPT_WORDS = re.compile(r"\b(?:branch|worktree)\b", re.IGNORECASE)
+
+
+def string_literals(path: Path) -> list[str]:
+    """The text of every string literal of a module, docstrings included."""
+    return [n.value for n in ast.walk(ast.parse(path.read_text()))
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+
+
+def prompt_word_hits(path: Path) -> list[str]:
+    return [m for text in string_literals(path) for m in PROMPT_WORDS.findall(text)]
 
 
 def test_domain_and_app_code_has_no_storage_vocabulary() -> None:
-    # domain/prompts.py talks to the agent about its task file's front matter: exempt.
-    for rel in [r for r in [*DOMAIN_MODULES, *APP_MODULES] if r != "domain/prompts.py"]:
+    for rel in [*DOMAIN_MODULES, *APP_MODULES]:
         hits = STORAGE_WORDS.findall(code_without_comments(SRC / rel))
         assert not hits, f"{rel} mentions storage details: {hits}"
 
@@ -175,6 +233,33 @@ def test_the_storage_check_catches_path_and_sidecar(tmp_path: Path) -> None:
     bad = tmp_path / "bad.py"
     bad.write_text("x = Path('a')  # fine here\ny = 'sidecar'\n# mtime in a comment is fine\n")
     assert STORAGE_WORDS.findall(code_without_comments(bad)) == ["Path", "sidecar"]
+
+
+def test_the_storage_check_catches_the_task_file_and_the_tasks_folder(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("A = 'Your task file is {{ task.path }}.'\n"
+                   "B = '## Plan: edit only the files in the tasks folder'  # task file: fine\n"
+                   "# the tasks folder in a comment is fine\n")
+    assert STORAGE_WORDS.findall(code_without_comments(bad)) == ["task file", "tasks folder"]
+
+
+def test_the_protocol_texts_of_the_domain_name_no_branch_and_no_worktree() -> None:
+    hits = prompt_word_hits(SRC / "domain" / "prompts.py")
+    assert not hits, f"domain/prompts.py speaks of the workspace's technology: {hits}"
+
+
+def test_the_prompt_check_catches_branch_and_worktree_in_strings_only(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("A = 'Work on branch `x`.'\nB = ('a git '\n     'Worktree')\n"
+                   "C = 'branching and branchless are other words'\n"
+                   "branch = 'ok'\n\n\ndef worktree() -> None:\n    ...\n")
+    assert prompt_word_hits(bad) == ["branch", "Worktree"]
+
+
+def test_the_prompt_check_spares_the_domain_task_and_the_use_cases() -> None:
+    for rel in ("domain/task.py", "app/accept_work.py", "app/ports.py"):
+        assert "branch" in (SRC / rel).read_text(), rel  # they legitimately say it
+        assert STORAGE_WORDS.findall(code_without_comments(SRC / rel)) == [], rel
 
 
 def test_the_old_task_store_is_gone_and_the_adapter_is_used() -> None:
@@ -265,6 +350,25 @@ def test_the_pathlib_and_yaml_check_catches_both(tmp_path: Path) -> None:
     bad = tmp_path / "bad.py"
     bad.write_text("import yaml\nfrom pathlib import Path\n")
     assert path_or_yaml_imports(bad) == ["yaml", "pathlib"]
+
+
+AGENT_WORDS = re.compile(r"\b(?:claude|permission_mode|isolate_user_config|turn_timeout"
+                         r"|stall_timeout|after_create|shell|command)\b", re.IGNORECASE)
+
+
+def agent_words(path: Path) -> list[str]:
+    return AGENT_WORDS.findall(code_without_comments(path))
+
+
+def test_the_core_settings_name_no_technology() -> None:
+    assert agent_words(SRC / "domain" / "settings.py") == []
+
+
+def test_the_settings_check_catches_agent_vocabulary(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("class A:\n    command: str\n    permission_mode: str  # shell in a comment\n"
+                   "    after_create: str\n    x = 'Claude'\n")
+    assert agent_words(bad) == ["command", "permission_mode", "after_create", "Claude"]
 
 
 def test_the_core_settings_carry_no_location() -> None:
@@ -536,3 +640,59 @@ def test_the_layout_checks_catch_a_stray_test_and_a_duplicate_name(tmp_path: Pat
     assert level_problems(tmp_path) == ["test_x.py: not in a level folder",
                                         "fakes/test_f.py: a test among the fakes"]
     assert duplicate_names(tmp_path) == ["test_same.py"]
+
+
+# Helper modules implement no port: any adapter may import them (ADR 0019).
+HELPER_ADAPTERS = {"process", "locations", "adr_format", "claude_settings"}
+SETTINGS_ADAPTERS = {"claude_settings", "shell_validator", "git_vcs"}
+LOADER = "workflow_file"
+
+
+def adapter_module(name: str) -> str | None:
+    """`claude_cli` for `samba.adapters.claude_cli` (or a name under it); None for another module."""
+    parts = name.split(".")
+    return parts[2] if len(parts) >= 3 and parts[:2] == ["samba", "adapters"] else None
+
+
+def adapter_imports_by_module(path: Path) -> list[str]:
+    """Like `adapter_imports`, but `from samba.adapters import x` is named `samba.adapters.x`."""
+    names: list[str] = []
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module == "samba.adapters":
+            names.extend(f"samba.adapters.{a.name}" for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            names.append(node.module)
+        elif isinstance(node, ast.Import):
+            names.extend(a.name for a in node.names)
+    return [n for n in names if is_adapter(n)]
+
+
+def adapter_to_adapter_violations(path: Path) -> list[str]:
+    """Adapter imports that a port-implementing adapter or the loader may not have (ADR 0019)."""
+    own = path.stem
+    allowed = HELPER_ADAPTERS | ({own} | SETTINGS_ADAPTERS if own == LOADER else {own})
+    return [n for n in adapter_imports_by_module(path) if (adapter_module(n) or "") not in allowed]
+
+
+def test_an_adapter_imports_no_other_port_adapter() -> None:
+    for path in sorted((SRC / "adapters").rglob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        rel = path.relative_to(SRC).as_posix()
+        assert adapter_to_adapter_violations(path) == [], f"{rel} imports another adapter"
+
+
+def test_the_adapter_check_catches_an_adapter_importing_an_adapter(tmp_path: Path) -> None:
+    bad = tmp_path / "fake_adapter.py"
+    bad.write_text("from samba.adapters.git_vcs import GitVcs\n"
+                   "from samba.adapters.locations import Locations\n"
+                   "from samba.adapters.process import run_cmd\n"
+                   "from samba.adapters import adr_format, markdown_tasks\n"
+                   "from samba.adapters.workflow_file import Loaded\n")
+    assert adapter_to_adapter_violations(bad) == ["samba.adapters.git_vcs",
+                                                  "samba.adapters.markdown_tasks",
+                                                  "samba.adapters.workflow_file"]
+    loader = tmp_path / "workflow_file.py"
+    loader.write_text("from samba.adapters.git_vcs import HookSettings\n"
+                      "from samba.adapters.claude_cli import ClaudeCliRunner\n")
+    assert adapter_to_adapter_violations(loader) == ["samba.adapters.claude_cli"]

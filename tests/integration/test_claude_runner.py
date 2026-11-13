@@ -21,7 +21,8 @@ from fake_journal import FakeJournal
 from samba.adapters.claude_cli import ClaudeCliRunner
 from samba.domain.agent import AgentReport, AgentRequest, RequestKind
 from samba.domain.prompts import OUTCOME_SCHEMA_JSON, PLAN_OUTCOME_SCHEMA_JSON
-from samba.domain.settings import DEFAULT_PLANNING_ALLOW, AgentSettings
+from samba.adapters.claude_settings import ClaudeSettings
+from samba.domain.settings import DEFAULT_PLANNING_ALLOW, ToolAccess
 
 FAKE_CLAUDE = Path(__file__).resolve().parents[1] / "fakes" / "fake_claude.py"
 
@@ -37,13 +38,16 @@ class Rig:
         self.plan.write_text("{}")
         monkeypatch.setenv("FAKE_CLAUDE_PLAN", str(self.plan))
         monkeypatch.delenv("FAKE_CLAUDE_LOGGED_OUT", raising=False)
-        base = AgentSettings(command=[sys.executable, str(FAKE_CLAUDE)], model="sonnet",
-                             permission_mode="acceptEdits", allow=["Edit", "Bash(git add:*)"],
-                             args=["--extra-flag"], isolate_user_config=True, turn_timeout_s=60,
-                             stall_timeout_s=60, planning_model="opus")
+        base = ClaudeSettings(command=(sys.executable, str(FAKE_CLAUDE)), model="sonnet",
+                              planning_model="opus", permission_mode="acceptEdits",
+                              args=("--extra-flag",), isolate_user_config=True,
+                              turn_timeout_s=60, stall_timeout_s=60)
         self.cfg = replace(base, **settings)  # type: ignore[arg-type]
         self.journal = FakeJournal()
-        self.runner = ClaudeCliRunner(self.cfg, self.tasks_dir, tmp / "runs", tmp, self.journal)
+        work = ToolAccess(allowed=("Edit", "Bash(git add:*)"), unrestricted=False)
+        planning = ToolAccess(allowed=tuple(DEFAULT_PLANNING_ALLOW), unrestricted=False)
+        self.runner = ClaudeCliRunner(self.cfg, work, planning, self.tasks_dir, tmp / "runs", tmp,
+                                      self.journal)
 
     def steps(self, *steps: dict[str, object]) -> None:
         self.plan.write_text(json.dumps({"t1": list(steps)}))

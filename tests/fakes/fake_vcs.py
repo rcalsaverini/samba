@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from samba.app.ports import CommitResult, MergeAttempt, Workspace, WorkspaceError
+from samba.app.ports import CommitResult, MergeAttempt, Preflight, Workspace, WorkspaceError
 
 
 class FakeVcs:
-    def __init__(self, *, merge: MergeAttempt | None = None, problem: str | None = None,
+    def __init__(self, *, merge: MergeAttempt | None = None, facts: Preflight | None = None,
                  commits: int = 2, commit: CommitResult | None = None,
                  repo_problem: str | None = None, ensure_error: str | None = None,
                  remove_error: str | None = None) -> None:
         self.merge = merge or MergeAttempt("pending", "", "pre0001")
-        self.problem = problem
+        self.facts = facts or Preflight("main", False, True)
         self.commits = commits
         self.commit = commit or CommitResult(True, "abc1234")
         self.repo_problem = repo_problem
@@ -25,6 +25,9 @@ class FakeVcs:
 
     def workspace_location(self, task_id: str) -> str:
         return f"/ws/{task_id}"
+
+    def briefing(self, task_id: str) -> str:
+        return f"WORKSPACE({task_id})"
 
     def checkout_location(self) -> str:
         return "/repo"
@@ -52,9 +55,9 @@ class FakeVcs:
     async def exclude_samba_dir(self) -> None:
         self.calls.append(("exclude_samba_dir",))
 
-    async def preflight(self, branch: str) -> str | None:
+    async def preflight(self, branch: str) -> Preflight:
         self.calls.append(("preflight", branch))
-        return self.problem
+        return self.facts
 
     async def commit_count(self, branch: str) -> int:
         return self.commits

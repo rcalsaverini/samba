@@ -33,8 +33,9 @@ from samba.app.machine import Machine
 from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask
 from samba.app.task_commands import (AcceptPlan, DiscardTask, RejectPlan, RejectWork, RetryTask,
                                      StopTask)
-from samba.adapters.workflow_file import load_config
+from samba.adapters.workflow_file import Loaded, load_config
 from samba.app.ports import Journal
+from samba.domain.prompts import EXPLORE_ALLOW, EXPLORE_DENY, EXPLORE_GUIDE
 from samba.domain.settings import Config
 from samba.entrypoints.orchestrator import Orchestrator
 
@@ -73,6 +74,7 @@ class Commands:
 class _Parts:
     """The adapters and settings the builders share."""
 
+    loaded: Loaded
     config: Config
     sym: Path
     repo: Path
@@ -85,15 +87,16 @@ class _Parts:
 
 
 def _parts(repo: Path) -> _Parts:
-    config, locations = load_config(repo)
+    loaded = load_config(repo)
+    config, locations = loaded.config, loaded.locations
     sym = locations.samba_dir
     clock = SystemClock()
     return _Parts(
-        config=config, sym=sym, repo=locations.repo, clock=clock,
+        loaded=loaded, config=config, sym=sym, repo=locations.repo, clock=clock,
         tasks=MarkdownTasks(sym / "tasks", sym / "state", clock),
         terminal=StdTerminal(), lock=FileLock(sym),
-        vcs=GitVcs(locations, config.repository.base_branch, config.hooks, config.validation.shell),
-        validator=ShellValidator(config.validation, sym / "runs"))
+        vcs=GitVcs(locations, config.base_branch, loaded.hooks),
+        validator=ShellValidator(loaded.validator, sym / "runs"))
 
 
 def build(repo: Path) -> Commands:
@@ -115,7 +118,7 @@ def build(repo: Path) -> Commands:
         show_question=ShowQuestion(p.tasks),
         answer_question=AnswerQuestion(p.tasks, machine, p.terminal, p.lock, p.clock),
         accept_work=AcceptWork(p.tasks, machine, p.terminal, p.lock, p.vcs, p.validator,
-                               p.config.repository.base_branch, p.config.validation.command),
+                               p.config.base_branch, p.config.validate_command),
         create_task=CreateTask(p.tasks, p.terminal, p.clock),
         complete_tasks=CompleteTaskIds(p.tasks),
         complete_questions=CompleteQuestions(p.tasks),
@@ -127,8 +130,8 @@ def build_orchestrator(repo: Path) -> Orchestrator:
     stderr. It is not a use case and is not part of `Commands`."""
     p = _parts(repo)
     journal: Journal = LogJournal(p.sym)
-    agent = ClaudeCliRunner(p.config.agent, (p.sym / "tasks").resolve(), p.sym / "runs", p.repo,
-                            journal)
+    agent = ClaudeCliRunner(p.loaded.claude, p.config.work_tools, p.config.planning_tools,
+                            (p.sym / "tasks").resolve(), p.sym / "runs", p.repo, journal)
     return Orchestrator(p.config, p.clock, UuidGenerator(), agent, p.tasks, p.vcs, p.validator,
                         p.lock, journal)
 
@@ -136,9 +139,10 @@ def build_orchestrator(repo: Path) -> Orchestrator:
 def build_explore(repo: Path) -> StartExplore:
     """`samba explore` needs only `claude.command` and `claude.model` from `WORKFLOW.md` (raises
     `ConfigError`): no lock, no journal, nothing under `.samba/`."""
-    config, locations = load_config(repo)
-    return StartExplore(config.agent.command, config.agent.model, str(locations.repo),
-                        TerminalSession())
+    loaded = load_config(repo)
+    return StartExplore(EXPLORE_GUIDE, tuple(EXPLORE_ALLOW), tuple(EXPLORE_DENY),
+                        str(loaded.locations.repo),
+                        TerminalSession(loaded.claude.command, loaded.claude.model))
 
 
 def build_adr(repo: Path) -> AdrCommands:

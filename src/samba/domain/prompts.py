@@ -4,29 +4,31 @@ from __future__ import annotations
 
 import json
 
+from samba.domain.settings import ToolAccess
+
 DEFAULT_PROMPTS: dict[str, str] = {
     "continue": (
-        "Continue working on the task. Re-read your task file at {{ task.path }} if needed and "
-        "keep `## Plan` and `## Log` up to date."
+        "Continue working on the task. Re-read {{ task.ref }} if needed and keep your plan and "
+        "log up to date."
     ),
     "validate_failed": (
         "You reported done, but the validation command `{{ validate_command }}` failed. The last "
         "lines of its output are below. Fix the problem, then report done again."
     ),
     "resume": (
-        "You are resuming work on this task. Re-read your task file at {{ task.path }}, especially "
-        "`## Feedback` and anything the human added, then continue.\n\n{{ questions }}"
+        "You are resuming work on this task. Re-read {{ task.ref }}, especially your feedback and "
+        "anything the human added, then continue.\n\n{{ questions }}"
     ),
     "plan": "Do not implement anything yet. Produce a plan for this task.",
     "plan_revise": (
-        "The human reviewed your plan and left feedback in your task file at {{ task.path }} "
-        "(see `## Feedback`). Re-read it and return a revised plan.\n\n{{ questions }}"
+        "The human reviewed your plan and left feedback in {{ task.ref }} (see your feedback). "
+        "Re-read it and return a revised plan.\n\n{{ questions }}"
     ),
     "give_up": (
-        "This task is being stopped after repeated failures. Do not try to fix it. Under a new "
-        "`## Harness gaps` section in {{ task.path }}, write what was missing that would have let "
-        "you succeed: tools, docs, test fixtures, permissions, unclear requirements. Be specific. "
-        "Report outcome `blocked` (no `questions` needed)."
+        "This task is being stopped after repeated failures. Do not try to fix it. In "
+        "{{ task.ref }}, add a new section titled \"Harness gaps\" and write what was missing "
+        "that would have let you succeed: tools, docs, test fixtures, permissions, unclear "
+        "requirements. Be specific. Report outcome `blocked` (no `questions` needed)."
     ),
 }
 
@@ -42,8 +44,9 @@ session is decisions written as ADRs, not code.
 - One decision per ADR. If a draft holds two decisions, split it into two files.
 - Write each ADR to `docs/adr/NNNN-short-title.md`. The number comes from the filename: take the
   next free one.
-- Use the format of the project's first ADR: front matter with `status: proposed`, `date` (today)
-  and `supersedes: []`, then a title and the sections Context, Decision and Consequences.
+- Use the format of the project's first ADR (`samba adr show 1`), with `status: proposed`,
+  `date` (today) and `supersedes: []`, then a title and the sections Context, Decision and
+  Consequences.
 - Never edit an accepted ADR. To change a decision, write a new ADR that supersedes it.
 - Never accept, reject or supersede an ADR. The human does that, in this chat or with `samba adr`.
 
@@ -77,31 +80,29 @@ PROTOCOL = """\
 # Samba protocol
 
 You are running unattended under Samba, a local task orchestrator. No human sees this
-conversation. The human reads your task file and your branch. These rules take precedence over any
+conversation. The human reads your task and your work. These rules take precedence over any
 instruction to ask the user for confirmation before acting.
 
-- Your task file is {{ task.path }}. Among the files in the tasks folder, edit only this one.
-- Keep a `## Plan` section (checkbox steps) and a `## Log` section (decisions, progress) in your
-  task file up to date. It is your memory across sessions; re-read it when resuming.
-- Work only inside the current directory, on branch `{{ branch }}`. You are authorized to commit
-  your work on this branch without asking; commit in small, coherent steps. Never push, merge,
-  rebase onto other branches, or delete branches.
+- {{ task_briefing }}
+- Keep your plan (checkbox steps) and your log (decisions, progress) up to date. They are your
+  memory across sessions; re-read them when resuming.
+- {{ workspace_briefing }}
 - If you need a decision from the human, report outcome `blocked` and put each question in
-  `questions` of your final answer, as `text` and `context` (why it matters). Never write a
-  `## Questions` section yourself: Samba owns it. Do not guess on important ambiguity.
+  `questions` of your final answer, as `text` and `context` (why it matters). Never record the
+  questions yourself: Samba owns them. Do not guess on important ambiguity.
 - Tools you may use without being denied: {{ allowed_tools }}. Run allowed shell commands as plain,
   single commands: no pipes, `;`, `&&`, `||` or redirections, because the permission check matches
   the whole command line and a combined command is denied.
-- If a tool call is denied, do not try to get around the denial. Note it in `## Log` and, if it
+- If a tool call is denied, do not try to get around the denial. Note it in your log and, if it
   stops you, report outcome `blocked`.
 - {{ validate_note }}
 - Spec step: before reporting `done`, make the edits to the project's spec that
-  this task requires, on this branch, and say in `## Log` what changed in the spec (or why
+  this task requires, in your workspace, and say in your log what changed in the spec (or why
   nothing did). The human reviews the spec diff next to the code diff.
 - If the task made a real decision (a choice between alternatives with a lasting reason), also
   add a proposed ADR in `docs/adr/`: one decision per file, status `proposed`, in the format of
-  ADR 0001 (front matter with `status`, `date` and `supersedes`, then Context, Decision,
-  Consequences). Take the next number from the existing filenames.
+  the project's first ADR (`samba adr show 1`). Take the next number from the existing
+  filenames.
 - Decisions that shape the architecture live in `docs/adr/`. Before designing, run `samba adr list`
   and read the relevant ones with `samba adr show N`.
 - Your final answer is structured output: `outcome` is `done` (work complete and committed),
@@ -110,9 +111,9 @@ instruction to ask the user for confirmation before acting.
 """
 
 APPROVED_PLAN_RULE = """\
-- An approved plan is in the `## Plan` section of your task file. Follow it. If you must deviate,
-  record what and why in `## Log`. Tick the plan's checkboxes as you complete steps. Its
-  "Spec changes" section lists the spec edits you owe.
+- You have an approved plan. Follow it. If you must deviate, record what and why in your log. Tick
+  the plan's checkboxes as you complete steps. Its "Spec changes" section lists the spec edits
+  you owe.
 """
 
 PLAN_PROTOCOL = """\
@@ -122,8 +123,7 @@ You are planning unattended under Samba, a local task orchestrator. No human see
 conversation. The human reads the plan you return. These rules take precedence over any
 instruction to ask the user for confirmation before acting.
 
-- Your task file is {{ task.path }}. You cannot edit files and must not try. Read whatever you
-  need from the repository.
+- {{ task_briefing }} Read whatever you need from the repository.
 - Tools you may use without being denied: {{ allowed_tools }}. If a tool call is denied, do not
   try to get around the denial.
 - Decisions that shape the architecture live in `docs/adr/`. Before designing, run `samba adr list`
@@ -132,7 +132,7 @@ instruction to ask the user for confirmation before acting.
   change, Spec changes, Risks and How to verify, and, if useful, Suggested subtasks. Spec changes
   lists the parts of the project's spec the task will change with one line of intent each, or says
   "none, because ..." and gives the reason. Make the plan stand on its
-  own: execution starts in a fresh session that only sees the plan and the task file.
+  own: execution starts in a fresh session that only sees the plan and the task.
 - Put assumptions you made, which the human can check during plan review, in `assumptions`. They
   do not block. Use outcome `blocked` only when the plan cannot be written without answers from
   the human, and then put each question in `questions` as `text` and `context` (why it matters).
@@ -187,9 +187,9 @@ def validate_note(validate_command: str | None) -> str:
     return "There is no automatic validation command; check your own work before reporting done."
 
 
-def allowed_tools_note(allow: list[str], permission_mode: str) -> str:
-    if permission_mode == "bypassPermissions":
+def allowed_tools_note(access: ToolAccess) -> str:
+    if access.unrestricted:
         return "all tools (permissions are bypassed)"
-    if not allow:
+    if not access.allowed:
         return "read-only tools only"
-    return ", ".join(f"`{a}`" for a in allow) + " (plus read-only tools)"
+    return ", ".join(f"`{a}`" for a in access.allowed) + " (plus read-only tools)"

@@ -112,6 +112,33 @@ def test_location_is_opaque_text(env: Env) -> None:
     assert isinstance(env.tasks.location(TaskId("t")), str)
 
 
+def test_briefing_and_reference_are_text_about_this_task(env: Env) -> None:
+    make(env, "t")
+    make(env, "u")
+    for writable in (True, False):
+        text = env.tasks.briefing(TaskId("t"), writable)
+        assert isinstance(text, str) and text.strip()
+        assert text != env.tasks.briefing(TaskId("u"), writable)
+    assert env.tasks.briefing(TaskId("t"), True) != env.tasks.briefing(TaskId("t"), False)
+    ref = env.tasks.reference(TaskId("t"))
+    assert isinstance(ref, str) and ref.strip() and ref != env.tasks.reference(TaskId("u"))
+
+
+def test_markdown_briefing_says_where_the_task_is_and_what_is_whose(tmp_path: Path) -> None:
+    env = md_env(tmp_path)
+    make(env, "t")
+    path = env.tasks.location(TaskId("t"))
+    writable = env.tasks.briefing(TaskId("t"), True)
+    assert writable.startswith(f"Your task file is {path}. Among the files in the tasks folder, "
+                               "edit only this one.")
+    for heading in ("## Plan", "## Log", "## Feedback", "## Questions"):
+        assert f"`{heading}`" in writable
+    assert "Samba owns the `## Questions` section" in writable
+    planning = env.tasks.briefing(TaskId("t"), False)
+    assert planning == f"Your task file is {path}. You cannot edit files and must not try."
+    assert env.tasks.reference(TaskId("t")) == f"your task file at {path}"
+
+
 def test_save_roundtrips_fields(env: Env) -> None:
     t = make(env)
     t.attempts, t.turns_total, t.cost_usd_total = 2, 5, 0.25

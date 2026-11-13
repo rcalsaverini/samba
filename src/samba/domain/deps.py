@@ -18,7 +18,7 @@ from samba.domain.task_id import TaskId
 class DepStatus:
     kind: Literal["ready", "waiting", "discarded", "cycle"]
     waiting: tuple[str, ...] = ()  # ids not yet in `done` (includes unknown ids)
-    unknown: tuple[str, ...] = ()  # ids with no task file anywhere
+    unknown: tuple[str, ...] = ()  # ids with no task anywhere
 
 
 @dataclass(frozen=True)

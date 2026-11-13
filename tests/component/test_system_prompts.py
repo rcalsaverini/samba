@@ -9,7 +9,7 @@ from fake_vcs import FakeVcs
 from test_app_run_task import Clock, make_config
 
 from samba.app.prompt_builder import PromptBuilder
-from samba.domain.settings import DEFAULT_ALLOW, DEFAULT_PLANNING_ALLOW, Config
+from samba.domain.settings import DEFAULT_ALLOW, DEFAULT_PLANNING_ALLOW, Config, ToolAccess
 from samba.domain.states import State
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
@@ -18,10 +18,10 @@ ADR_WRITES = ("adr accept", "adr reject", "adr supersede")
 
 
 def default_config() -> Config:
-    config = make_config()
-    agent = replace(config.agent, allow=list(DEFAULT_ALLOW),
-                    planning_allow=list(DEFAULT_PLANNING_ALLOW))
-    return replace(config, agent=agent)
+    return replace(make_config(),
+                   work_tools=ToolAccess(allowed=tuple(DEFAULT_ALLOW), unrestricted=False),
+                   planning_tools=ToolAccess(allowed=tuple(DEFAULT_PLANNING_ALLOW),
+                                             unrestricted=False))
 
 
 def system_prompt(status: State, config: Config | None = None) -> str:

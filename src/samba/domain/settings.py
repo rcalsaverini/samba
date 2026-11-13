@@ -1,4 +1,8 @@
-"""The settings the core reads: plain data, no location, no file format (spec: architecture)."""
+"""What the domain and the use cases read: plain data (spec: architecture).
+
+No location, no file format, and nothing named for a technology: each adapter declares its own
+settings next to itself (ADR 0019).
+"""
 
 from __future__ import annotations
 
@@ -39,26 +43,11 @@ class Policy:
 
 
 @dataclass(frozen=True)
-class AgentSettings:
-    """How the `claude` CLI is run, for work (`claude.*`) and for planning (`planning.*`)."""
+class ToolAccess:
+    """What the agent may do in one stage: the tool rules it is allowed, or everything."""
 
-    command: list[str]
-    model: str | None
-    permission_mode: str
-    allow: list[str]
-    args: list[str]
-    isolate_user_config: bool
-    turn_timeout_s: float
-    stall_timeout_s: float
-    planning_model: str | None = None
-    planning_allow: list[str] = field(default_factory=lambda: list(DEFAULT_PLANNING_ALLOW))
-
-
-@dataclass(frozen=True)
-class Repository:
-    """The branch that work is merged into."""
-
-    base_branch: str
+    allowed: tuple[str, ...]
+    unrestricted: bool
 
 
 @dataclass(frozen=True)
@@ -70,27 +59,13 @@ class Prompts:
 
 
 @dataclass(frozen=True)
-class Validation:
-    command: str | None
-    timeout_s: float
-    tail_lines: int
-    shell: list[str]
-
-
-@dataclass(frozen=True)
-class Hooks:
-    after_create: str | None
-    timeout_s: float
-
-
-@dataclass(frozen=True)
 class Config:
     """The composite of the parts above; each consumer takes only the part it needs."""
 
     policy: Policy
-    agent: AgentSettings
-    repository: Repository
     prompts: Prompts
-    validation: Validation
-    hooks: Hooks
+    base_branch: str
+    validate_command: str | None
+    work_tools: ToolAccess
+    planning_tools: ToolAccess
     warnings: list[str] = field(default_factory=lambda: [])

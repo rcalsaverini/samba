@@ -18,6 +18,7 @@ from fake_tasks import FakeTasks
 from fake_terminal import FakeLock, FakeTerminal
 from fake_validator import FakeValidator, failing, passing
 from fake_vcs import FakeVcs
+from samba.app.ports import Preflight
 from test_app_use_cases import make, messages
 from fake_clock import FakeClock
 
@@ -104,10 +105,10 @@ def test_accept_refusals_before_any_change() -> None:
     res = accept(accept_uc(tasks, FakeVcs()), tid, yes=True)
     assert isinstance(res, Refused) and "work.accept not allowed" in messages(res)
     tasks, tid = make("work-review")
-    pre = accept(accept_uc(tasks, FakeVcs(problem="the main checkout has uncommitted changes")),
+    pre = accept(accept_uc(tasks, FakeVcs(facts=Preflight("main", True, True))),
                  tid, yes=True)
     assert isinstance(pre, Refused) and pre.kind == "refused"
-    assert messages(pre) == "samba: the main checkout has uncommitted changes; nothing changed"
+    assert messages(pre) == "samba: the main checkout has uncommitted changes to tracked files; nothing changed"
     gone = accept(accept_uc(tasks, FakeVcs()), "nope", yes=True)
     assert gone == Refused("usage", ("samba: unknown task 'nope'",))
     busy = accept(accept_uc(tasks, FakeVcs(), lock=FakeLock(held=False)), tid, yes=True)

@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import os
 import signal
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -52,7 +53,7 @@ async def run_cmd(argv: list[str], cwd: Path, timeout: float | None = None) -> C
         await kill_group(proc)
 
 
-async def run_shell(shell: list[str], script: str, cwd: Path,
+async def run_shell(shell: Sequence[str], script: str, cwd: Path,
                     timeout: float | None = None) -> CmdResult:
     return await run_cmd([*shell, script], cwd, timeout)
 

@@ -15,7 +15,8 @@ from fake_tasks import FakeTasks
 from fake_terminal import FakeLock, FakeTerminal
 from fake_validator import FakeValidator, passing
 from fake_vcs import FakeVcs
-from test_app_run_task import Clock, Ids, make_config
+from fake_ids import FakeIds
+from test_app_run_task import Clock, make_config
 
 from samba.app.change_state import ChangeState
 from samba.app.guard import Guard
@@ -55,7 +56,7 @@ class Rig:
         self.clock, self.tasks, self.journal = Clock(), FakeTasks(), FakeJournal()
         self.vcs, self.lock = FakeVcs(), FakeLock()
         self.agent = agent or HangingAgent()
-        self.orch = Orchestrator(self.config, self.clock, Ids(), self.agent, self.tasks, self.vcs,
+        self.orch = Orchestrator(self.config, self.clock, FakeIds(), self.agent, self.tasks, self.vcs,
                                  FakeValidator(passing("ok")), self.lock, self.journal)
         machine = Machine(self.tasks, self.clock, self.journal,
                           Guard(self.config.policy.require_plan, self.tasks))

@@ -222,8 +222,9 @@ in the repo, for the human to explore a question with the agent and write ADRs. 
 be a command or only a skill (the open point of ADR 0002) is settled here: it is a command, because
 it passes the allow list explicitly and is testable with the fake claude.
 
-- The `StartExplore` use case builds a `LaunchSpec` (`domain/launch.py`, pure) and hands it to the
-  `InteractiveSession` port. argv: `claude.command`, then `TOPIC` if given (the first prompt),
+- The `StartExplore` use case builds an `ExploreSession` (topic, guide, allowed and denied tools,
+  location; `app/ports.py`) and hands it to the `InteractiveSession` port, and `TerminalSession`
+  builds the argv (ADR 0019): `claude.command`, then `TOPIC` if given (the first prompt),
   `--append-system-prompt <guide>`, `--allowedTools <allow...>`, `--disallowedTools <deny...>`
   and `--model M` when `claude.model` is set. cwd is the repo. Nothing else: no `-p`, no
   `--permission-mode`, no `--setting-sources` or `--settings`. The session is not isolated from the
