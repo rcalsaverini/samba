@@ -136,7 +136,10 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `integration/`: one adapter against the real thing (`test_config.py`, `test_tasks_port.py`,
     `test_adapters_vcs_validator_journal.py`, `test_markdown_task_files.py` (the file layout),
     `test_lock_port.py` (contract on `FakeLock` and `FileLock`, real contention, commands under
-    the lock), `test_terminal_adapter.py` (a real pseudo terminal, `$EDITOR`)). Where a fake has
+    the lock), `test_terminal_adapter.py` (a real pseudo terminal, `$EDITOR`),
+    `test_claude_runner.py` (`ClaudeCliRunner` against `fakes/fake_claude.py`: argv, isolation,
+    stream parsing, kills on stall, timeout and cancel), `test_adr_store.py` (contract on
+    `FakeAdrs` and `FileAdrs`, then the files)). Where a fake has
     behavior of its own (tasks, lock, ADRs) the port contract runs against both fake and adapter
     through one parametrized fixture; scripted fakes are not paired. Imports neither
     `samba.entrypoints` nor `samba.bootstrap`. Few.

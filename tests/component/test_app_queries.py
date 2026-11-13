@@ -50,8 +50,10 @@ def test_adr_accept_and_reject_write_the_file_or_refuse_with_code_1() -> None:
     store = adrs()
     assert SetAdrStatus(store).run("accept", "2") == Written(("docs/adr/0002-x.md",))
     assert store.calls == [("set_status", 2, "accept", "accepted")]
-    assert SetAdrStatus(store).run("reject", "2") == Written(("docs/adr/0002-x.md",))
-    assert store.calls[-1] == ("set_status", 2, "reject", "rejected")
+    assert refusal(SetAdrStatus(store).run("reject", "2")).kind == "refused"  # now accepted
+    fresh = adrs()
+    assert SetAdrStatus(fresh).run("reject", "2") == Written(("docs/adr/0002-x.md",))
+    assert fresh.calls[-1] == ("set_status", 2, "reject", "rejected")
     wrong = refusal(SetAdrStatus(store).run("accept", "1"))
     assert wrong.kind == "refused" and "not allowed" in wrong.messages[0]
     assert refusal(SetAdrStatus(store).run("accept", "7")).kind == "usage"

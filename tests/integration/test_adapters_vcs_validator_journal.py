@@ -280,3 +280,17 @@ def test_null_journal_writes_nothing(tmp_path: Path) -> None:
     journal.info("x")
     journal.exception("y")
     assert list(tmp_path.iterdir()) == [] and logging.getLogger("samba").handlers == []
+
+
+def test_an_untracked_file_does_not_block_the_accept_preflight(repo: Path, tmp_path: Path) -> None:
+    vcs = make_vcs(repo, tmp_path)
+    make_branch(repo, "samba/t1", "b.txt", "work\n")
+    (repo / "notes.txt").write_text("a scratch file nobody added\n")
+    assert run(vcs.preflight("samba/t1")) is None
+
+
+def test_a_workspace_lies_outside_the_repository(repo: Path, tmp_path: Path) -> None:
+    vcs = make_vcs(repo, tmp_path)
+    ws = Path(run(vcs.ensure_workspace("t1")).location).resolve()
+    assert not ws.is_relative_to(repo)
+    assert git(ws, "rev-parse", "--show-toplevel") == str(ws)

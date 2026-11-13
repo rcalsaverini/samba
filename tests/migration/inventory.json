@@ -6,9 +6,11 @@
     "behavior": "adr accept/reject change only the status line of a proposed ADR, print its path, never commit",
     "why": "file edit in FileAdrs",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
-    "reason": ""
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adr_store.py::test_accept_and_reject_rewrite_only_the_status_line"
+    ],
+    "reason": "FileAdrs never runs git, so nothing is committed."
   },
   {
     "id": "test_adr.py::test_adr_without_front_matter_is_an_error",
@@ -17,8 +19,10 @@
     "behavior": "an ADR file without front matter makes accept, show and list fail (exit 1) naming front matter",
     "why": "parsing in adapters/adr_format",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adr_store.py::test_a_file_without_front_matter_is_an_error_naming_it"
+    ],
     "reason": ""
   },
   {
@@ -97,9 +101,11 @@
     "behavior": "adr list without docs/adr or WORKFLOW.md prints only the header",
     "why": "missing dir in FileAdrs; no-WORKFLOW part is e2e",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
-    "reason": ""
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adr_store.py::test_no_adr_folder_is_an_empty_list"
+    ],
+    "reason": "Running without WORKFLOW.md is the end-to-end half."
   },
   {
     "id": "test_adr.py::test_show_number_forms_and_any_status",
@@ -108,8 +114,11 @@
     "behavior": "adr show accepts 3, 03, 0003 and prints the file verbatim for any status",
     "why": "number parsing and file text in FileAdrs",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adr_store.py::test_number_forms_name_the_same_adr",
+      "tests/integration/test_adr_store.py::test_show_returns_the_file_verbatim_for_any_status"
+    ],
     "reason": ""
   },
   {
@@ -119,8 +128,10 @@
     "behavior": "the summary is the first sentence of the Decision section, joining wrapped bullets, or the first bullet without a period",
     "why": "parsing lives in adapters/adr_format",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adr_store.py::test_the_summary_is_the_first_sentence_of_the_decision"
+    ],
     "reason": ""
   },
   {
@@ -130,8 +141,11 @@
     "behavior": "an ADR cannot supersede itself (also via another number form): usage error, nothing changes",
     "why": "check lives in adapters/adr_format",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adr_store.py::test_illegal_supersedes_are_refused_and_change_nothing",
+      "tests/integration/test_adr_store.py::test_number_forms_name_the_same_adr"
+    ],
     "reason": ""
   },
   {
@@ -141,8 +155,11 @@
     "behavior": "supersede marks the old ADR superseded and appends it to the new one's supersedes list, no commit",
     "why": "front matter edits in FileAdrs",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adr_store.py::test_supersede_marks_the_old_one",
+      "tests/integration/test_adr_store.py::test_supersede_lists_the_old_number_in_the_new_files_front_matter"
+    ],
     "reason": ""
   },
   {
@@ -171,8 +188,11 @@
     "behavior": "accept/reject of a non-proposed ADR and illegal supersede pairs are refused (exit 1), files untouched",
     "why": "status rules enforced in FileAdrs",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adr_store.py::test_accept_changes_a_proposed_adr_and_refuses_any_other",
+      "tests/integration/test_adr_store.py::test_illegal_supersedes_are_refused_and_change_nothing"
+    ],
     "reason": ""
   },
   {
@@ -185,8 +205,11 @@
       "tests/integration/test_adapters_vcs_validator_journal.py::test_failing_after_create_hook_removes_the_worktree",
       "tests/component/test_app_run_task.py::test_a_workspace_failure_retries_then_gives_up"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_failing_after_create_hook_removes_the_worktree",
+      "tests/component/test_app_run_task.py::test_a_workspace_failure_retries_then_gives_up"
+    ],
     "reason": ""
   },
   {
@@ -199,8 +222,11 @@
       "tests/integration/test_adapters_vcs_validator_journal.py::test_the_after_create_hook_runs_in_the_new_workspace",
       "tests/integration/test_adapters_vcs_validator_journal.py::test_workspace_create_reuse_and_remove"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_the_after_create_hook_runs_in_the_new_workspace",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_workspace_create_reuse_and_remove"
+    ],
     "reason": ""
   },
   {
@@ -210,8 +236,11 @@
     "behavior": "claude runs with cwd set to the task worktree, which lies outside the repository",
     "why": "real worktree location and process cwd",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_a_workspace_lies_outside_the_repository",
+      "tests/integration/test_claude_runner.py::test_a_work_turn_gets_the_full_argv_and_runs_in_its_worktree"
+    ],
     "reason": ""
   },
   {
@@ -274,8 +303,12 @@
     "behavior": "claude argv: -p, stream-json, verbose, permission mode, model, allowedTools, isolation, add-dir tasks, outcome json schema, system prompt naming branch, task file, validate command and allowed commands, no budget flag without a cap",
     "why": "argv built by claude_cli against fake claude",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_claude_runner.py::test_a_work_turn_gets_the_full_argv_and_runs_in_its_worktree",
+      "tests/integration/test_claude_runner.py::test_a_resumed_turn_names_the_session_with_resume",
+      "tests/integration/test_claude_runner.py::test_isolation_passes_the_settings_flags_and_excludes_ancestor_memory_files"
+    ],
     "reason": ""
   },
   {
@@ -408,8 +441,10 @@
     "behavior": "a stream result with is_error counts as a failed attempt even with exit 0",
     "why": "stream-json parsing lives only in claude_cli",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_claude_runner.py::test_an_error_result_is_a_failure_even_with_exit_zero"
+    ],
     "reason": ""
   },
   {
@@ -419,8 +454,10 @@
     "behavior": "isolate_user_config false drops --setting-sources, --strict-mcp-config and --settings",
     "why": "argv built in claude_cli",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_claude_runner.py::test_isolation_can_be_turned_off"
+    ],
     "reason": ""
   },
   {
@@ -430,8 +467,10 @@
     "behavior": "isolation passes claudeMdExcludes for every ancestor CLAUDE.md up to / but not the worktree's own memory files",
     "why": "argv built in claude_cli from real paths",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_claude_runner.py::test_isolation_passes_the_settings_flags_and_excludes_ancestor_memory_files"
+    ],
     "reason": ""
   },
   {
@@ -526,8 +565,10 @@
     "behavior": "malformed stream-json lines are skipped and the turn still completes",
     "why": "stream parsing in claude_cli",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_claude_runner.py::test_malformed_lines_are_skipped_and_the_turn_completes"
+    ],
     "reason": ""
   },
   {
@@ -586,8 +627,11 @@
     "behavior": "permission denials reported by claude are written to the task log with the tool name",
     "why": "parsing permission_denials is claude_cli only; logging half shown by turn_flow scenario",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_claude_runner.py::test_permission_denials_are_reported_by_tool",
+      "tests/component/test_scenarios.py::test_turn_flow[turn_flow.json::work run blocked without a question synthesizes one]"
+    ],
     "reason": ""
   },
   {
@@ -743,8 +787,11 @@
       "tests/component/test_app_startup.py::test_the_samba_dir_is_excluded",
       "tests/integration/test_adapters_vcs_validator_journal.py::test_exclude_samba_dir_is_idempotent"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_startup.py::test_the_samba_dir_is_excluded",
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_exclude_samba_dir_is_idempotent"
+    ],
     "reason": ""
   },
   {
@@ -819,8 +866,12 @@
     "behavior": "an agent with no output past stall_timeout_s is killed and the attempt retried",
     "why": "real process timing and kill",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_claude_runner.py::test_an_agent_silent_past_the_stall_timeout_is_killed",
+      "tests/component/test_app_run_task.py::test_a_workspace_failure_retries_then_gives_up",
+      "tests/component/test_scenarios.py::test_retry_policy"
+    ],
     "reason": ""
   },
   {
@@ -920,8 +971,10 @@
     "behavior": "an agent past turn_timeout_s is killed and the failure says timeout",
     "why": "real process timing and kill",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_claude_runner.py::test_an_agent_past_the_turn_timeout_is_killed"
+    ],
     "reason": ""
   },
   {
@@ -1978,8 +2031,10 @@
     "existing": [
       "tests/component/test_app_explore.py::test_a_launch_error_is_a_refusal"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_explore.py::test_a_launch_error_is_a_refusal"
+    ],
     "reason": ""
   },
   {
@@ -2374,8 +2429,10 @@
     "behavior": "the planner argv uses planning.allow exactly and dontAsk, ignoring claude.allow and claude.permission_mode",
     "why": "argv built only in claude_cli",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_claude_runner.py::test_a_planning_turn_is_read_only_with_the_planning_allow_list_and_model"
+    ],
     "reason": ""
   },
   {
@@ -2493,8 +2550,12 @@
       "tests/component/test_app_run_task.py::test_a_plan_run_ends_in_plan_review",
       "tests/component/test_scenarios.py::test_turn_flow"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/component/test_app_run_task.py::test_a_plan_run_ends_in_plan_review",
+      "tests/component/test_scenarios.py::test_turn_flow",
+      "tests/integration/test_claude_runner.py::test_a_planning_turn_is_read_only_with_the_planning_allow_list_and_model"
+    ],
     "reason": ""
   },
   {
@@ -2553,8 +2614,10 @@
     "behavior": "without planning.model the planner uses claude.model",
     "why": "model choice made in claude_cli argv",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_claude_runner.py::test_without_a_planning_model_planning_uses_the_claude_model"
+    ],
     "reason": ""
   },
   {
@@ -2564,8 +2627,11 @@
     "behavior": "planning.model is passed to the planner and claude.model to the worker",
     "why": "model choice made in claude_cli argv",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_claude_runner.py::test_a_planning_turn_is_read_only_with_the_planning_allow_list_and_model",
+      "tests/integration/test_claude_runner.py::test_a_work_turn_gets_the_full_argv_and_runs_in_its_worktree"
+    ],
     "reason": ""
   },
   {
@@ -3315,8 +3381,10 @@
     "existing": [
       "tests/integration/test_adapters_vcs_validator_journal.py::test_preflight_checks"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_preflight_checks"
+    ],
     "reason": ""
   },
   {
@@ -3329,8 +3397,11 @@
       "tests/integration/test_adapters_vcs_validator_journal.py::test_preflight_checks",
       "tests/component/test_app_accept_create.py::test_accept_refusals_before_any_change"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_preflight_checks",
+      "tests/component/test_app_accept_create.py::test_accept_refusals_before_any_change"
+    ],
     "reason": ""
   },
   {
@@ -3343,8 +3414,11 @@
       "tests/integration/test_adapters_vcs_validator_journal.py::test_preflight_checks",
       "tests/component/test_app_accept_create.py::test_accept_refusals_before_any_change"
     ],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_preflight_checks",
+      "tests/component/test_app_accept_create.py::test_accept_refusals_before_any_change"
+    ],
     "reason": ""
   },
   {
@@ -3417,8 +3491,10 @@
     "behavior": "an untracked file in the main checkout does not block work accept",
     "why": "git status check only real git shows",
     "existing": [],
-    "status": "todo",
-    "covered_by": [],
+    "status": "covered",
+    "covered_by": [
+      "tests/integration/test_adapters_vcs_validator_journal.py::test_an_untracked_file_does_not_block_the_accept_preflight"
+    ],
     "reason": ""
   },
   {
