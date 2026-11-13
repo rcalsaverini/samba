@@ -38,7 +38,7 @@ class Store:
         self.machine = Machine(self.tasks, CLOCK, FakeJournal())
 
     def add(self, status: State = "plan-review", **fields: object) -> Task:
-        task = Task.new(T1, "Feature", "Do the thing.", 3, (), status, CLOCK)
+        task = Task.new(T1, "Feature", "Do the thing.", 3, (), status, CLOCK.now())
         for key, value in fields.items():
             setattr(task, key, value)
         self.tasks.create(task)
@@ -105,7 +105,7 @@ def test_feedback_goes_after_human_prose_already_in_the_section(store: Store) ->
 
 def test_a_heading_inside_an_answer_is_demoted_in_the_task_file(store: Store) -> None:
     store.add("question", blocked_cause="question", last_stage="work",
-              questions=add_questions((), "work", [("Which db?", "")], CLOCK))
+              questions=add_questions((), "work", [("Which db?", "")], CLOCK.now()))
     answer = AnswerQuestion(store.tasks, store.machine, FakeTerminal(), FakeLock(), CLOCK)
     assert isinstance(answer.run("t1", "postgres\n## Why\nit is there", False), Done)
     text = store.text()

@@ -9,7 +9,7 @@ from samba.app.resolve import find_task
 from samba.app.results import LOCK_BUSY, Done, Refused, Text, refused
 from samba.domain.task_id import TaskId
 from samba.domain.validation import accept_tail
-from samba.domain.ports import Lock, Tasks, Terminal, Validator, Vcs
+from samba.app.ports import Lock, Tasks, Terminal, Validator, Vcs
 
 EVENT = "work.accept"
 

@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
+from samba.domain.now import Now
 from samba.domain.states import (
     CAUSE_BUDGET,
     CAUSE_DEPENDENCY_CYCLE,
@@ -25,7 +26,6 @@ from samba.domain.states import (
     State,
 )
 from samba.domain.task import TODO_STATES, Task
-from samba.domain.ports import Clock
 
 Actor = Literal["samba", "human"]
 
@@ -118,66 +118,66 @@ TRANSITIONS: tuple[Transition, ...] = (
 # ---- effects --------------------------------------------------------------------------------
 
 Ctx = dict[str, object]
-Effect = Callable[[Task, Ctx, Clock], None]
+Effect = Callable[[Task, Ctx, Now], None]
 
 
 def _cause(value: BlockedCause | None) -> Effect:
-    def apply(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+    def apply(task: Task, _ctx: Ctx, _now: Now) -> None:
         task.blocked_cause = value
     return apply
 
 
 def _outcome(value: LastOutcome) -> Effect:
-    def apply(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+    def apply(task: Task, _ctx: Ctx, _now: Now) -> None:
         task.last_outcome = value
     return apply
 
 
 def _stage(value: Stage) -> Effect:
-    def apply(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+    def apply(task: Task, _ctx: Ctx, _now: Now) -> None:
         task.last_stage = value
     return apply
 
 
-def _attempts_zero(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+def _attempts_zero(task: Task, _ctx: Ctx, _now: Now) -> None:
     task.attempts = 0
 
 
-def _attempts_inc(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+def _attempts_inc(task: Task, _ctx: Ctx, _now: Now) -> None:
     task.attempts += 1
 
 
-def _not_before_none(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+def _not_before_none(task: Task, _ctx: Ctx, _now: Now) -> None:
     task.not_before = None
 
 
-def _last_error_none(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+def _last_error_none(task: Task, _ctx: Ctx, _now: Now) -> None:
     task.last_error = None
 
 
-def _plan_approved(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+def _plan_approved(task: Task, _ctx: Ctx, _now: Now) -> None:
     task.plan_approved = True
 
 
-def _session_none(task: Task, _ctx: Ctx, _clock: Clock) -> None:
+def _session_none(task: Task, _ctx: Ctx, _now: Now) -> None:
     task.session_id = None
 
 
-def _error_from_ctx(task: Task, ctx: Ctx, _clock: Clock) -> None:
+def _error_from_ctx(task: Task, ctx: Ctx, _now: Now) -> None:
     task.last_error = str(ctx.get("error", ""))
 
 
-def _retry_delay(task: Task, ctx: Ctx, clock: Clock) -> None:
-    task.not_before = clock.time() + float(str(ctx.get("delay", 0)))
+def _retry_delay(task: Task, ctx: Ctx, now: Now) -> None:
+    task.not_before = now.time + float(str(ctx.get("delay", 0)))
 
 
-def _first_dispatch(task: Task, _ctx: Ctx, clock: Clock) -> None:
+def _first_dispatch(task: Task, _ctx: Ctx, now: Now) -> None:
     if task.first_dispatched_at is None:
-        task.first_dispatched_at = clock.time()
+        task.first_dispatched_at = now.time
 
 
-def _dismiss_open(task: Task, _ctx: Ctx, clock: Clock) -> None:
-    task.dismiss_open(clock)
+def _dismiss_open(task: Task, _ctx: Ctx, now: Now) -> None:
+    task.dismiss_open(now)
 
 
 EFFECTS: dict[str, Effect] = {
@@ -221,13 +221,13 @@ EVENTS: frozenset[str] = frozenset(r.event for r in TRANSITIONS)
 
 # ---- log lines ------------------------------------------------------------------------------
 
-def log_line(message: str, clock: Clock) -> str:
-    return f"- {clock.log_stamp()} samba: {message}"
+def log_line(message: str, now: Now) -> str:
+    return f"- {now.log_stamp} samba: {message}"
 
 
-def entry_line(row: Transition, message: str, clock: Clock) -> str:
+def entry_line(row: Transition, message: str, now: Now) -> str:
     text = f"{row.event}: {row.src} -> {row.dst}"
-    return log_line(f"{text}: {message}" if message else text, clock)
+    return log_line(f"{text}: {message}" if message else text, now)
 
 
 # ---- guards and row selection ---------------------------------------------------------------
@@ -271,15 +271,15 @@ def human_events(src: State, task: Task) -> list[Transition]:
     return rows
 
 
-def apply_row(row: Transition, task: Task, ctx: Ctx, clock: Clock) -> bool:
+def apply_row(row: Transition, task: Task, ctx: Ctx, now: Now) -> bool:
     """Apply the row's effects and the destination status. True if the question records changed.
     A todo destination stamps `queued_at`, the dispatch order key."""
     before = task.questions
     for name in row.effects:
-        EFFECTS[name](task, ctx, clock)
+        EFFECTS[name](task, ctx, now)
     task.status = row.dst
     if row.dst in TODO_STATES:
-        task.queued_at = clock.time()
+        task.queued_at = now.time
     return task.questions is not before
 
 

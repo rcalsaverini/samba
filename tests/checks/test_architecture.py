@@ -15,7 +15,7 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "samba"
 # Modules that belong to the pure domain, relative to src/samba. Later tasks of the refactor
 # chain append to this list as they move modules in.
 DOMAIN_MODULES = ["domain/template.py", "domain/prompts.py", "domain/__init__.py",
-                  "domain/ports.py", "domain/states.py", "domain/questions.py",
+                  "domain/now.py", "domain/states.py", "domain/questions.py",
                   "domain/transitions.py", "domain/deps.py", "domain/agent.py",
                   "domain/policy.py", "domain/task.py", "domain/task_id.py",
                   "domain/validation.py", "domain/launch.py", "domain/settings.py"]
@@ -26,7 +26,7 @@ APP_MODULES = ["app/__init__.py", "app/turn.py", "app/machine.py", "app/results.
                "app/resolve.py", "app/accept_work.py", "app/create_task.py",
                "app/adr.py", "app/queries.py", "app/tick.py", "app/explore.py", "app/guard.py",
                "app/startup.py", "app/prompt_builder.py", "app/finish.py", "app/run_task.py",
-               "app/task_commands.py", "app/completion.py"]
+               "app/task_commands.py", "app/completion.py", "app/ports.py"]
 
 FORBIDDEN = {"os", "time", "datetime", "uuid", "subprocess", "asyncio", "logging", "pathlib"}
 
@@ -79,6 +79,63 @@ def test_the_check_catches_an_adapter_and_io_import(tmp_path: Path) -> None:
     bad.write_text("from samba.adapters.system import SystemClock\nimport datetime\n"
                    "from samba import adapters\n")
     assert violations(bad) == ["samba.adapters.system", "datetime", "samba.adapters"]
+
+
+def is_app(name: str) -> bool:
+    return name == "samba.app" or name.startswith("samba.app.")
+
+
+def domain_app_imports(path: Path) -> list[str]:
+    """Imports of the use-case layer in a domain module (ADR 0017: the domain takes values)."""
+    return [n for n in imported_modules(path) if is_app(n)]
+
+
+def test_domain_modules_import_nothing_from_app() -> None:
+    for rel in DOMAIN_MODULES:
+        assert domain_app_imports(SRC / rel) == [], f"{rel} imports samba.app"
+
+
+def test_the_check_catches_a_domain_import_of_app(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("from samba.app.ports import Clock\nimport samba.app\n"
+                   "from samba.domain.now import Now\n")
+    assert domain_app_imports(bad) == ["samba.app.ports", "samba.app"]
+
+
+def adapter_app_violations(path: Path) -> list[str]:
+    """An adapter's imports from `samba.app`: `samba.app.ports` and nothing else (ADR 0018)."""
+    return [n for n in imported_modules(path) if is_app(n) and n != "samba.app.ports"]
+
+
+def test_adapters_import_only_the_ports_from_app() -> None:
+    for path in sorted((SRC / "adapters").rglob("*.py")):
+        rel = path.relative_to(SRC).as_posix()
+        assert adapter_app_violations(path) == [], f"{rel} imports a use case"
+
+
+def test_the_check_catches_an_adapter_importing_a_use_case(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("from samba.app.machine import Machine\nfrom samba.app.ports import Tasks\n"
+                   "import samba.app\n")
+    assert adapter_app_violations(bad) == ["samba.app.machine", "samba.app"]
+
+
+def stale_ports_imports(root: Path) -> list[str]:
+    return [p.as_posix() for p in sorted(root.rglob("*.py"))
+            if "samba.domain.ports" in imported_modules(p)]
+
+
+def test_domain_ports_is_gone_and_imported_nowhere() -> None:
+    assert not (SRC / "domain" / "ports.py").exists(), "the ports live in app/ports.py"
+    assert (SRC / "app" / "ports.py").is_file()
+    assert stale_ports_imports(SRC) == []
+    assert stale_ports_imports(TESTS) == []
+
+
+def test_the_check_catches_an_import_of_the_old_ports(tmp_path: Path) -> None:
+    (tmp_path / "bad.py").write_text("from samba.domain.ports import Clock\n")
+    (tmp_path / "ok.py").write_text("from samba.app.ports import Clock\n")
+    assert stale_ports_imports(tmp_path) == [(tmp_path / "bad.py").as_posix()]
 
 
 def test_scenario_runner_imports_no_adapter_and_no_store() -> None:

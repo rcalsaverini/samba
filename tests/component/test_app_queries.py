@@ -9,7 +9,7 @@ from samba.app.results import Refused, Table, Text, Written
 from samba.domain.states import State
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-from samba.domain.ports import AdrError, AdrInfo
+from samba.app.ports import AdrError, AdrInfo
 
 from fake_adrs import FakeAdrs
 from fake_tasks import FakeTasks
@@ -71,7 +71,7 @@ def test_adr_supersede_lists_both_files() -> None:
 def store(*specs: tuple[str, State]) -> FakeTasks:
     tasks = FakeTasks()
     for tid, status in specs:
-        tasks.create(Task.new(TaskId(tid), tid.upper(), "", 3, (), status, FakeClock()))
+        tasks.create(Task.new(TaskId(tid), tid.upper(), "", 3, (), status, FakeClock().now()))
     return tasks
 
 
@@ -106,7 +106,7 @@ def test_task_show_renders_lines_and_refuses_unknown() -> None:
 
 def test_question_list_and_show() -> None:
     tasks = store(("a", "question"))
-    tasks.records[TaskId("a")].add_questions("plan", [("why?\nreally", "ctx")], FakeClock())
+    tasks.records[TaskId("a")].add_questions("plan", [("why?\nreally", "ctx")], FakeClock().now())
     listed = ListQuestions(tasks).run()
     assert listed.flex == 4 and listed.rows[0] == ("TASK", "QID", "STAGE", "ASKED", "QUESTION")
     row = listed.rows[1]
@@ -129,7 +129,7 @@ def test_question_show_errors() -> None:
 
 def test_show_commands_resolve_prefixes() -> None:
     tasks = store(("ab-1", "question"), ("ab-2", "work-todo"), ("c", "work-todo"))
-    tasks.records[TaskId("ab-1")].add_questions("plan", [("why?", "")], FakeClock())
+    tasks.records[TaskId("ab-1")].add_questions("plan", [("why?", "")], FakeClock().now())
     shown = ShowTask(tasks, FakeClock()).run("ab-1")
     assert isinstance(shown, Text) and shown.text.startswith("id: ab-1\n")
     by_prefix = ShowTask(tasks, FakeClock()).run("c")

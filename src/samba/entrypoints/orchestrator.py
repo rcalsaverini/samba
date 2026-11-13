@@ -18,7 +18,7 @@ from samba.app.run_task import RunTask
 from samba.app.startup import Startup
 from samba.app.tick import Notes, Running, Tick
 from samba.app.turn import TurnFlow
-from samba.domain.ports import (
+from samba.app.ports import (
     AgentRunner,
     Clock,
     IdGenerator,

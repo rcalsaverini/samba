@@ -20,7 +20,7 @@ from samba.app.answer_question import AnswerQuestion
 from samba.app.change_state import ChangeState
 from samba.app.machine import Machine
 from samba.app.results import Done
-from samba.domain.ports import Lock
+from samba.app.ports import Lock
 from samba.domain.questions import add_questions
 from samba.domain.states import State
 from samba.domain.task import Task
@@ -105,7 +105,7 @@ class Repo:
                                   self.lock)
 
     def add(self, tid: str, status: State, **fields: object) -> None:
-        task = Task.new(TaskId(tid), tid, "", 3, (), status, CLOCK)
+        task = Task.new(TaskId(tid), tid, "", 3, (), status, CLOCK.now())
         for key, value in fields.items():
             setattr(task, key, value)
         self.tasks.create(task)
@@ -158,7 +158,7 @@ def test_a_command_is_samba_own_move_and_never_a_hand_move(tmp_path: Path, statu
 def test_an_answer_is_samba_own_move_too(tmp_path: Path) -> None:
     repo = Repo(tmp_path)
     repo.add("t1", "question", last_stage="work", blocked_cause="question",
-             questions=add_questions((), "work", [("Which db?", "")], CLOCK))
+             questions=add_questions((), "work", [("Which db?", "")], CLOCK.now()))
     assert repo.tasks.observe_moves() == []
     answer = AnswerQuestion(repo.tasks, repo.machine, FakeTerminal(), repo.lock, CLOCK)
     assert isinstance(answer.run("t1", "postgres", False), Done)

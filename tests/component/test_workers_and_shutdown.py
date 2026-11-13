@@ -62,7 +62,7 @@ class Rig:
         self.change = ChangeState(self.tasks, machine, FakeTerminal(interactive=False), self.lock)
 
     def add(self, tid: str, status: State = "work-todo", deps: tuple[str, ...] = ()) -> None:
-        task = Task.new(TaskId(tid), tid, "", 3, tuple(TaskId(d) for d in deps), status, self.clock)
+        task = Task.new(TaskId(tid), tid, "", 3, tuple(TaskId(d) for d in deps), status, self.clock.now())
         task.queued_at = 0.0
         self.tasks.create(task)
 

@@ -1,7 +1,7 @@
 """The `Task` aggregate: everything the core knows about one task (spec: states, Task aggregate).
 
-A plain mutable record. The `Tasks` port (`samba.domain.ports`) loads and saves it; where and how it is
-stored is the adapter's business. Pure: the clock is a parameter.
+A plain mutable record. The `Tasks` port (`samba.app.ports`) loads and saves it; where and how it is
+stored is the adapter's business. Pure: the instant is a `Now` parameter.
 """
 
 from __future__ import annotations
@@ -9,10 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from samba.domain import questions as qs
+from samba.domain.now import Now
 from samba.domain.questions import Question
 from samba.domain.states import BlockedCause, LastOutcome, Stage, State
 from samba.domain.task_id import TaskId
-from samba.domain.ports import Clock
 
 TODO_STATES: tuple[State, ...] = ("plan-todo", "work-todo")
 
@@ -64,9 +64,9 @@ class Task:
 
     @staticmethod
     def new(id: TaskId, title: str, body: str, priority: int | None,
-            depends_on: tuple[TaskId, ...], status: State, clock: Clock) -> Task:
+            depends_on: tuple[TaskId, ...], status: State, now: Now) -> Task:
         return Task(id=id, title=title, body=body, priority=priority, depends_on=depends_on,
-                    status=status, queued_at=clock.time())
+                    status=status, queued_at=now.time)
 
     def add_log(self, line: str) -> None:
         self.log = self.log + (line,)
@@ -77,11 +77,11 @@ class Task:
         self.feedback = self.feedback + (FeedbackRound(n, text),)
         return n
 
-    def add_questions(self, stage: Stage, items: list[tuple[str, str]], clock: Clock) -> None:
-        self.questions = qs.add_questions(self.questions, stage, items, clock)
+    def add_questions(self, stage: Stage, items: list[tuple[str, str]], now: Now) -> None:
+        self.questions = qs.add_questions(self.questions, stage, items, now)
 
-    def answer_question(self, qid: str, text: str, clock: Clock) -> None:
-        self.questions = qs.answer_question(self.questions, qid, text, clock)
+    def answer_question(self, qid: str, text: str, now: Now) -> None:
+        self.questions = qs.answer_question(self.questions, qid, text, now)
 
-    def dismiss_open(self, clock: Clock) -> None:
-        self.questions = qs.dismiss_open(self.questions, clock)
+    def dismiss_open(self, now: Now) -> None:
+        self.questions = qs.dismiss_open(self.questions, now)

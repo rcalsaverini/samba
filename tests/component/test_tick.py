@@ -55,7 +55,7 @@ class Rig:
             deps: tuple[str, ...] = (), queued_at: float | None = None,
             not_before: float | None = None) -> Task:
         task = Task.new(TaskId(tid), tid, "", priority, tuple(TaskId(d) for d in deps), status,
-                        self.clock)
+                        self.clock.now())
         task.queued_at = queued_at if queued_at is not None else 0.0
         task.not_before = not_before
         self.tasks.create(task)

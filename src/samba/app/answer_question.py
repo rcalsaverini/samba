@@ -10,7 +10,7 @@ from samba.app.results import LOCK_BUSY, Done, Refused, refused, usage
 from samba.domain.questions import Question, open_questions, round_questions
 from samba.domain.task_id import TaskId
 from samba.domain.transitions import log_line
-from samba.domain.ports import Clock, Lock, Tasks, Terminal
+from samba.app.ports import Clock, Lock, Tasks, Terminal
 
 EVENT = "question.answer"
 
@@ -88,8 +88,9 @@ class AnswerQuestion:
                 return q
             task = tasks.get(task_id)
             assert task is not None  # _check just found it, under the same lock
-            task.answer_question(q.id, answer, self.clock)
-            task.add_log(log_line(f"{EVENT}: {task_id}/{q.id} answered", self.clock))
+            now = self.clock.now()
+            task.answer_question(q.id, answer, now)
+            task.add_log(log_line(f"{EVENT}: {task_id}/{q.id} answered", now))
             tasks.save(task)
             left = open_questions(round_questions(task.questions))
             if not left and not self.machine.fire(task_id, EVENT):

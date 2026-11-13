@@ -15,7 +15,7 @@ import functools
 from samba.app.machine import Machine
 from samba.app.run_task import RunTask
 from samba.app.tick import Notes, Running, running_folder
-from samba.domain.ports import Clock, Journal, Tasks, Vcs, WorkspaceError
+from samba.app.ports import Clock, Journal, Tasks, Vcs, WorkspaceError
 from samba.domain.states import State
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId

@@ -8,9 +8,9 @@ lives.
 
 | Layer | Location | Holds |
 |---|---|---|
-| Domain | `src/samba/domain/` | Pure rules and data: states, question records, the transition table, dependency evaluation. No I/O. (This includes `domain/template.py` and `domain/prompts.py`.) |
+| Domain | `src/samba/domain/` | Pure rules and data: states, question records, the transition table, dependency evaluation. No I/O. It takes values, never capabilities: time arrives as a `Now` value (`domain/now.py`, ADR 0017). (This includes `domain/template.py` and `domain/prompts.py`.) |
 | Use cases | `src/samba/app/` | The operations of the orchestrator and the commands, written against ports. |
-| Ports | `src/samba/domain/ports.py` | Protocols for everything the core needs from the outside world. They sit at the domain level: the domain's `Task` depends on the clock port. |
+| Ports | `src/samba/app/ports.py` | Protocols for everything the use cases need from the outside world, with their value types and errors. They live with the use cases that call them (ADR 0018); the domain does not import them. |
 | Adapters | `src/samba/adapters/` | Implementations of the ports: system clock, files, git, the `claude` runner, the terminal. |
 | Entry points | `src/samba/entrypoints/` | What starts Samba: `cli.py` (parse, one call, render), `table.py` (the table printer of the CLI) and `workers.py` (the asyncio workers) and `orchestrator.py` (the wiring and the poll loop; see Orchestrator parts). They call `bootstrap`, the use cases and the ports, never an adapter. |
 
@@ -21,10 +21,11 @@ import every layer.
 ## Dependency rule
 
 Dependencies point inward only: entry points depend on `bootstrap`, the use cases, the domain and
-the ports; adapters depend on ports and the domain, use cases depend on the
-domain and ports, the domain depends on nothing outside itself. No inner layer (`domain`, `app`,
-`adapters`) imports `bootstrap` or `entrypoints`. The ports are Protocols that live
-in the domain package (`domain/ports.py`), so this holds for them too. A domain module imports none of
+the ports; adapters depend on the ports (`app/ports.py`, and no other module of `app/`) and the
+domain, use cases depend on the domain and ports, the domain depends on nothing outside itself and
+in particular imports nothing from `app/`. No inner layer (`domain`, `app`,
+`adapters`) imports `bootstrap` or `entrypoints`. The ports are Protocols in `app/ports.py`, which
+imports the domain types they are written over and is imported by nothing in the domain. A domain module imports none of
 `os`, `time`, `datetime`, `uuid`, `subprocess`, `asyncio`, `logging`, `pathlib`, and no adapter.
 The composition root, `bootstrap.py`, is the only place that builds adapters and hands them to use
 cases. This refines the last sentence of ADR 0011: the composition root is `bootstrap.py`, called
@@ -68,9 +69,13 @@ as parse, call, render.
 
 ## Ports
 
+Every port is in `app/ports.py`, with its value types and errors (`StoreError`, `TaskExists`,
+`EditResult`, `Workspace`, `WorkspaceError`, `MergeAttempt`, `CommitResult`, `AdrError`, `AdrInfo`,
+`LaunchError`).
+
 | Port | Methods | Adapter |
 |---|---|---|
-| `Clock` | `time()` wall seconds, `monotonic()`, `iso_seconds()` local ISO 8601 to the second, `log_stamp()` local `YYYY-MM-DD HH:MM` | `SystemClock` in `adapters/system.py` |
+| `Clock` | `time()` wall seconds, `monotonic()` for durations (never persisted, so not in `Now`), `now() -> Now` (`domain/now.py`: `time`, `iso_seconds` local ISO 8601 to the second, `log_stamp` local `YYYY-MM-DD HH:MM`, preformatted by the adapter) | `SystemClock` in `adapters/system.py` |
 | `IdGenerator` | `new_session_id()` | `UuidGenerator` in `adapters/system.py` |
 | `AgentRunner` | `run(AgentRequest) -> AgentReport`, `ready() -> Readiness` | `ClaudeCliRunner` in `adapters/claude_cli.py` |
 | `Terminal` | `is_interactive()`, `ask(prompt)` (raises `EOFError` at end of input), `read_block(prompt)`, `warn(line)` (one line to stderr mid-dialogue), `edit(initial) -> EditResult` (the text, or an error message) | `StdTerminal` in `adapters/terminal.py` |
@@ -126,12 +131,15 @@ same port.
 `agent`, passed in by the composition root, like the clock. The fake runner for tests is
 `tests/fakes/fake_agent.py`.
 
-The clock is threaded through `Machine`, the transition effects (`not_before`,
-`first_dispatched_at`, `queued_at`), the question helpers (`add_questions`, `answer_question`,
-`dismiss_open`), `log_line`, `MarkdownTasks` and the orchestrator. Timestamps written to task
-files and sidecars are formatted by the clock (`iso_seconds`, `log_stamp`), because the domain may
-not import `datetime`. The clock is always a required parameter, in the domain and in the
-constructors of `MarkdownTasks` and `Orchestrator`; only the composition root builds `SystemClock`.
+The use cases read the clock once per operation and pass the resulting `Now` down (ADR 0017):
+`Machine.fire` and `Machine.observe` read it once for the row effects (`not_before`,
+`first_dispatched_at`, `queued_at`) and the log line, so a step that answers one question and
+dismisses the rest stamps both with one instant. The domain takes the `Now`, never a clock: `Task.new`,
+the question helpers (`add_questions`, `answer_question`, `dismiss_open`), the effects, `apply_row`,
+`log_line` and `entry_line`. The adapter preformats the texts written to task files and sidecars
+(`iso_seconds`, `log_stamp`), because the domain may not import `datetime`. Workers keep
+`clock.monotonic()` for durations. The clock is always a required parameter, in the constructors of
+the use cases, `MarkdownTasks` and `Orchestrator`; only the composition root builds `SystemClock`.
 
 ## Where each concern lives
 
@@ -203,8 +211,11 @@ over the `Orchestrator`.
 
 `tests/checks/test_architecture.py` reads sources with `ast` and never imports `samba`. It checks that:
 
-- the domain modules (`DOMAIN_MODULES`, which also holds `domain/ports.py`, `domain/template.py` and
-  `domain/prompts.py`) import no I/O module and no adapter;
+- the domain modules (`DOMAIN_MODULES`, which also holds `domain/now.py`, `domain/template.py` and
+  `domain/prompts.py`) import no I/O module, no adapter and nothing from `samba.app`;
+- an adapter imports from `samba.app` only `samba.app.ports`;
+- `src/samba/domain/ports.py` does not exist and `samba.domain.ports` is imported nowhere (the ports
+  are in `app/ports.py`, which is in `APP_MODULES`);
 - every use case module (`APP_MODULES`) imports no adapter and none of `os`, `subprocess`,
   `pathlib`, `logging`, `asyncio` (use cases await ports and never touch the loop; `Running.task`
   in `app/tick.py` is a `Cancellable` Protocol, which an asyncio task satisfies);

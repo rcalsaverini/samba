@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from samba.app.machine import Machine
-from samba.domain.ports import AgentRunner, Journal, StoreError, Tasks, Vcs
+from samba.app.ports import AgentRunner, Journal, StoreError, Tasks, Vcs
 from samba.domain.states import running_of, todo_of
 
 

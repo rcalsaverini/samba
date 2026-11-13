@@ -13,7 +13,7 @@ from samba.app.task_commands import (AcceptPlan, DiscardTask, RejectPlan, Reject
 from samba.domain.states import State
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-from samba.domain.ports import EditResult
+from samba.app.ports import EditResult
 
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
@@ -24,7 +24,7 @@ from fake_clock import FakeClock
 def make(status: State, tid: str = "t1") -> tuple[FakeTasks, TaskId]:
     tasks = FakeTasks()
     task_id = TaskId(tid)
-    tasks.create(Task.new(task_id, "T", "", 3, (), status, FakeClock()))
+    tasks.create(Task.new(task_id, "T", "", 3, (), status, FakeClock().now()))
     return tasks, task_id
 
 
@@ -208,7 +208,7 @@ def test_confirm_policy() -> None:
 def asking(*texts: str) -> tuple[FakeTasks, TaskId]:
     tasks, tid = make("question")
     task = tasks.records[tid]
-    task.add_questions("plan", [(t, "") for t in texts], FakeClock())
+    task.add_questions("plan", [(t, "") for t in texts], FakeClock().now())
     return tasks, tid
 
 
@@ -227,6 +227,19 @@ def test_single_open_question_is_answered_and_the_task_resumes() -> None:
     assert rec.status == "plan-todo"
     assert rec.questions[0].answer == "because"
     assert any("question.answer: t1/" in line and "answered" in line for line in rec.log)
+
+
+def test_a_use_case_reads_the_clock_once_per_operation() -> None:
+    """ADR 0017: `Machine.fire` reads the instant once for the row effects and the log line."""
+    tasks, tid = make("work-review")
+    clock = FakeClock()
+    assert Machine(tasks, clock, FakeJournal()).fire(tid, "work.reject", message="m")
+    assert clock.reads == 1
+    tasks, tid = asking("why?")
+    clock = FakeClock()
+    AnswerQuestion(tasks, Machine(tasks, clock, FakeJournal()), FakeTerminal(), FakeLock(),
+                   clock).run(tid, "because", False)
+    assert clock.reads == 2  # one for the answer and its log line, one for the move
 
 
 def test_several_open_questions_need_a_qid_and_the_task_waits_for_the_rest() -> None:
@@ -284,8 +297,8 @@ def test_answer_lock_busy(held: bool) -> None:
 
 def two_tasks(status: State) -> tuple[FakeTasks, TaskId]:
     tasks, tid = make(status, "alpha-1")
-    tasks.create(Task.new(TaskId("alpha-2"), "T", "", 3, (), status, FakeClock()))
-    tasks.create(Task.new(TaskId("beta"), "T", "", 3, (), status, FakeClock()))
+    tasks.create(Task.new(TaskId("alpha-2"), "T", "", 3, (), status, FakeClock().now()))
+    tasks.create(Task.new(TaskId("beta"), "T", "", 3, (), status, FakeClock().now()))
     return tasks, tid
 
 

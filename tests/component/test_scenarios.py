@@ -41,7 +41,7 @@ from samba.domain.settings import (
     Validation,
 )
 from samba.entrypoints.orchestrator import Orchestrator
-from samba.domain.ports import MergeAttempt
+from samba.app.ports import MergeAttempt
 from samba.domain.agent import AgentReport, Failure, QuestionDraft
 from samba.domain.deps import TaskRef, evaluate
 from samba.domain.policy import (
@@ -160,7 +160,7 @@ def test_transition(sc: Scenario) -> None:
     before = task_of(given["state"], given.get("task"))
     after = task_of(given["state"], given.get("task"))
     apply_row(row, after, cast(dict[str, object], sc.get("ctx", {})),
-              FakeClock(sc.get("clock_time", 0.0)))
+              FakeClock(sc.get("clock_time", 0.0)).now())
     assert after.status == row.dst
     assert changed_fields(before, after) == expected_fields(expect["task"])
 
@@ -388,7 +388,7 @@ async def play(sc: Scenario) -> tuple[FakeTasks, FakeVcs, FakeValidator, FakeJou
     accept = AcceptWork(tasks, machine, terminal, lock, vcs, validator, "main",
                         config.validation.command)
     tid = TaskId("t1")
-    tasks.create(Task.new(tid, "feature", "", 3, (), cast(State, sc["status"]), clock))
+    tasks.create(Task.new(tid, "feature", "", 3, (), cast(State, sc["status"]), clock.now()))
     await orch.startup()
     for step in cast(list[dict[str, Any]], sc["steps"]):
         match step["do"]:

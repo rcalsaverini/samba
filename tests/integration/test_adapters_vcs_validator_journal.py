@@ -18,7 +18,7 @@ from samba.adapters.git_vcs import GitVcs
 from samba.adapters.log_journal import LogJournal, NullJournal
 from samba.adapters.shell_validator import ShellValidator
 from samba.adapters.workflow_file import Locations
-from samba.domain.ports import WorkspaceError
+from samba.app.ports import WorkspaceError
 from samba.domain.settings import Hooks, Validation
 
 SH = ["sh", "-c"]

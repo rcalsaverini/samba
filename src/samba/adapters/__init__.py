@@ -1,1 +1,1 @@
-"""Adapters: implementations of the ports in `samba.domain.ports` (spec: architecture)."""
+"""Adapters: implementations of the ports in `samba.app.ports` (spec: architecture)."""

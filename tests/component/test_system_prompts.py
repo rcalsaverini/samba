@@ -26,7 +26,7 @@ def default_config() -> Config:
 
 def system_prompt(status: State, config: Config | None = None) -> str:
     tasks = FakeTasks()
-    task = Task.new(TaskId("t1"), "feature", "", None, (), status, Clock())
+    task = Task.new(TaskId("t1"), "feature", "", None, (), status, Clock().now())
     tasks.create(task)
     builder = PromptBuilder(config or default_config(), tasks, FakeVcs())
     stage = "plan" if status.startswith("plan") else "work"

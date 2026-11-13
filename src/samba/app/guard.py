@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from samba.domain.deps import deps_snapshot, evaluate
-from samba.domain.ports import Tasks
+from samba.app.ports import Tasks
 from samba.domain.task import Task
 
 

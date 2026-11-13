@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from samba.domain.ports import CommitResult, MergeAttempt, Workspace, WorkspaceError
+from samba.app.ports import CommitResult, MergeAttempt, Workspace, WorkspaceError
 
 
 class FakeVcs:

@@ -14,7 +14,7 @@ from samba.app.answer_question import AnswerQuestion
 from samba.app.machine import Machine
 from samba.app.queries import ListQuestions, ShowQuestion
 from samba.app.results import Done, Refused, Table, Text
-from samba.domain.ports import EditResult
+from samba.app.ports import EditResult
 from samba.domain.questions import Question, add_questions, answer_question
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
@@ -25,7 +25,7 @@ T1 = TaskId("t1")
 
 def store_with(questions: tuple[Question, ...] | None) -> FakeTasks:
     tasks = FakeTasks()
-    task = Task.new(T1, "t1", "", 3, (), "question", CLOCK)
+    task = Task.new(T1, "t1", "", 3, (), "question", CLOCK.now())
     task.blocked_cause = "question"
     task.last_stage = "work"
     if questions is not None:
@@ -35,10 +35,11 @@ def store_with(questions: tuple[Question, ...] | None) -> FakeTasks:
 
 
 def two_rounds() -> FakeTasks:
-    first = add_questions((), "work", [("Which db?", "storage"), ("Which port?", "net")], CLOCK)
-    first = answer_question(first, "q1", "postgres", CLOCK)
-    first = answer_question(first, "q2", "5432", CLOCK)
-    both = add_questions(first, "work", [("Which schema?", "a second block")], CLOCK)
+    now = CLOCK.now()
+    first = add_questions((), "work", [("Which db?", "storage"), ("Which port?", "net")], now)
+    first = answer_question(first, "q1", "postgres", now)
+    first = answer_question(first, "q2", "5432", now)
+    both = add_questions(first, "work", [("Which schema?", "a second block")], now)
     return store_with(both)
 
 
@@ -87,7 +88,7 @@ def test_an_old_question_task_still_runs_after_a_hand_move() -> None:
 
 
 def test_answering_is_recorded_and_resumes_the_task() -> None:
-    tasks = store_with(add_questions((), "work", [("Which db?", "")], CLOCK))
+    tasks = store_with(add_questions((), "work", [("Which db?", "")], CLOCK.now()))
     answer = AnswerQuestion(tasks, Machine(tasks, CLOCK, FakeJournal()), FakeTerminal(),
                             FakeLock(), CLOCK)
     assert isinstance(answer.run("t1", "postgres", False), Done)
@@ -96,7 +97,7 @@ def test_answering_is_recorded_and_resumes_the_task() -> None:
 
 
 def test_the_editor_shows_the_question_and_its_context_as_comments() -> None:
-    tasks = store_with(add_questions((), "work", [("Which db?", "the cache layer")], CLOCK))
+    tasks = store_with(add_questions((), "work", [("Which db?", "the cache layer")], CLOCK.now()))
     terminal = FakeTerminal(edits=[EditResult(text="# ignored\npostgres\n")])
     answer = AnswerQuestion(tasks, Machine(tasks, CLOCK, FakeJournal()), terminal, FakeLock(), CLOCK)
     assert isinstance(answer.run("t1", None, True), Done)

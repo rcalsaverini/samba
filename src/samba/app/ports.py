@@ -1,22 +1,22 @@
-"""Ports: the interfaces the core needs from the outside world (spec: architecture).
+"""Ports: the interfaces the use cases need from the outside world (spec: architecture, ADR 0018).
 
-Protocols only. Adapters in `samba.adapters` implement them; nothing here may import them.
+Protocols, with the value types and errors written over them. Adapters in `samba.adapters`
+implement them and import nothing else from `samba.app`; the domain imports none of this.
 """
 
 from __future__ import annotations
 
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import Literal, Protocol
 
 from samba.domain.agent import AgentReport, AgentRequest, Readiness
 from samba.domain.launch import LaunchSpec
+from samba.domain.now import Now
+from samba.domain.states import State
+from samba.domain.task import ObservedMove, Task
+from samba.domain.task_id import TaskId
 from samba.domain.validation import ValidationResult
-
-if TYPE_CHECKING:  # the domain's Task imports Clock from here
-    from samba.domain.states import State
-    from samba.domain.task import ObservedMove, Task
-    from samba.domain.task_id import TaskId
 
 
 class StoreError(Exception):
@@ -33,15 +33,13 @@ class Clock(Protocol):
         ...
 
     def monotonic(self) -> float:
-        """Monotonic time in seconds, for durations and deadlines."""
+        """Monotonic time in seconds, for durations and deadlines. Never persisted, so it is
+        not part of `Now`."""
         ...
 
-    def iso_seconds(self) -> str:
-        """`time()` as local-offset ISO 8601 text, to the second (question timestamps)."""
-        ...
-
-    def log_stamp(self) -> str:
-        """`time()` as local `YYYY-MM-DD HH:MM` text (`## Log` lines)."""
+    def now(self) -> Now:
+        """The current instant as a value, with its texts preformatted. A use case reads it
+        once per operation and passes it down to the domain (ADR 0017)."""
         ...
 
 

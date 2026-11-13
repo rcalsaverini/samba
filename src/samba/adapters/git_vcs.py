@@ -6,7 +6,7 @@ import hashlib
 from pathlib import Path
 
 from samba.domain.settings import Hooks
-from samba.domain.ports import CommitResult, MergeAttempt, Workspace, WorkspaceError
+from samba.app.ports import CommitResult, MergeAttempt, Workspace, WorkspaceError
 from samba.adapters.process import git, run_shell
 from samba.adapters.workflow_file import Locations
 

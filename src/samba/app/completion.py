@@ -4,7 +4,7 @@ verb can act on come from the transition table, not from a list here."""
 
 from __future__ import annotations
 
-from samba.domain.ports import Adrs, Tasks
+from samba.app.ports import Adrs, Tasks
 from samba.domain.questions import open_questions
 from samba.domain.states import STATES, State
 from samba.domain.transitions import find_row

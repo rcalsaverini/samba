@@ -19,6 +19,7 @@ from samba.app.prompt_builder import PromptBuilder
 from samba.app.run_task import RunTask
 from samba.app.turn import TurnFlow
 from samba.domain.agent import AgentReport
+from samba.domain.now import Now
 from samba.domain.prompts import APPROVED_PLAN_RULE
 from samba.domain.settings import (
     AgentSettings,
@@ -43,11 +44,8 @@ class Clock:
     def monotonic(self) -> float:
         return 0.0
 
-    def iso_seconds(self) -> str:
-        return "2026-01-01T00:00:00+00:00"
-
-    def log_stamp(self) -> str:
-        return "2026-01-01 00:00"
+    def now(self) -> Now:
+        return Now(0.0, "2026-01-01T00:00:00+00:00", "2026-01-01 00:00")
 
 
 class Ids:
@@ -81,7 +79,7 @@ class Rig:
         self.vcs = vcs or FakeVcs()
         self.journal = FakeJournal()
         self.agent = FakeAgentRunner(reports)
-        task = Task.new(TID, "feature", "", None, (), status, self.clock)
+        task = Task.new(TID, "feature", "", None, (), status, self.clock.now())
         task.last_stage = "plan" if status.startswith("plan") else "work"
         for key, value in fields.items():
             setattr(task, key, value)
@@ -195,7 +193,7 @@ def test_nothing_is_sent_without_a_session_or_with_the_flag_off() -> None:
 
 def builder(config: Config | None = None) -> tuple[PromptBuilder, Task]:
     tasks = FakeTasks()
-    task = Task.new(TID, "feature", "body", None, (), "work-running", Clock())
+    task = Task.new(TID, "feature", "body", None, (), "work-running", Clock().now())
     tasks.create(task)
     return PromptBuilder(config or make_config(), tasks, FakeVcs()), task
 
@@ -255,12 +253,12 @@ def test_an_approved_plan_adds_its_rule_to_the_system_prompt() -> None:
 
 def test_guard_plan_required_and_deps_met() -> None:
     tasks = FakeTasks()
-    task = Task.new(TID, "t", "", None, (), cast(State, "work-todo"), Clock())
+    task = Task.new(TID, "t", "", None, (), cast(State, "work-todo"), Clock().now())
     tasks.create(task)
     assert Guard(True, tasks)("plan_required", task)
     assert not Guard(False, tasks)("plan_required", task)
     assert not Guard(True, tasks)("plan_required", replace(task, plan_approved=True))
     assert Guard(False, tasks)("deps_met", task)
-    blocked = Task.new(TaskId("t2"), "t", "", None, (TaskId("missing"),), "work-todo", Clock())
+    blocked = Task.new(TaskId("t2"), "t", "", None, (TaskId("missing"),), "work-todo", Clock().now())
     assert not Guard(False, tasks)("deps_met", blocked)
     assert not Guard(True, tasks)("unknown", task)
