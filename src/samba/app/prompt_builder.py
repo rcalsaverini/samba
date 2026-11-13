@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from samba.app.turn import TurnSetup
-from samba.domain.ports import Tasks, Vcs
+from samba.app.ports import Tasks, Vcs
 from samba.domain.prompts import (
     APPROVED_PLAN_RULE,
     DEFAULT_PROMPTS,

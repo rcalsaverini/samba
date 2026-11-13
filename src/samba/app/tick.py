@@ -16,7 +16,7 @@ from samba.domain.states import Stage, State, running_of
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
 from samba.domain.transitions import human_row, log_line
-from samba.domain.ports import Clock, Journal, Lock, Tasks, Vcs, WorkspaceError
+from samba.app.ports import Clock, Journal, Lock, Tasks, Vcs, WorkspaceError
 
 StopReason = Literal["moved", "shutdown"]
 
@@ -124,7 +124,7 @@ class Tick:
                 continue
             self.journal.warning("illegal_move", task=move.task_id, src=move.src, dst=move.dst)
             self.notes.add(move.task_id, log_line(
-                f"illegal move: {move.src} -> {move.dst}, moved back to {move.src}", self.clock))
+                f"illegal move: {move.src} -> {move.dst}, moved back to {move.src}", self.clock.now()))
 
     def reconcile(self) -> None:
         for task_id, entry in list(self.running.items()):

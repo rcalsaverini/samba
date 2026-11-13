@@ -9,7 +9,7 @@ import pytest
 from fake_adrs import FakeAdrs
 
 from samba.adapters.adr_files import FileAdrs
-from samba.domain.ports import AdrError, AdrInfo, Adrs
+from samba.app.ports import AdrError, AdrInfo, Adrs
 
 STATUSES = {1: "accepted", 2: "proposed", 3: "rejected", 4: "proposed"}
 

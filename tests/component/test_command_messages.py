@@ -25,7 +25,7 @@ def rig(*tasks: tuple[str, State, dict[str, object]],
         terminal: FakeTerminal | None = None) -> tuple[FakeTasks, ChangeState, FakeTerminal]:
     store = FakeTasks()
     for tid, status, fields in tasks:
-        task = Task.new(TaskId(tid), tid, "", 3, (), status, CLOCK)
+        task = Task.new(TaskId(tid), tid, "", 3, (), status, CLOCK.now())
         for key, value in fields.items():
             setattr(task, key, value)
         store.create(task)

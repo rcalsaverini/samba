@@ -34,7 +34,7 @@ from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask
 from samba.app.task_commands import (AcceptPlan, DiscardTask, RejectPlan, RejectWork, RetryTask,
                                      StopTask)
 from samba.adapters.workflow_file import load_config
-from samba.domain.ports import Journal
+from samba.app.ports import Journal
 from samba.domain.settings import Config
 from samba.entrypoints.orchestrator import Orchestrator
 

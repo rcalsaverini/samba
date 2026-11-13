@@ -6,6 +6,7 @@ import asyncio
 
 import pytest
 from fake_agent import FakeAgentRunner
+from fake_clock import FakeClock
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
 from fake_vcs import FakeVcs
@@ -14,26 +15,10 @@ from samba.app.guard import Guard
 from samba.app.machine import Machine
 from samba.app.startup import Startup, StartupError
 from samba.domain.agent import Readiness
-from samba.domain.ports import StoreError
+from samba.app.ports import StoreError
 from samba.domain.states import State
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-
-FAKE_ISO = "2026-01-01T00:00:00+00:00"
-
-
-class Clock:
-    def time(self) -> float:
-        return 0.0
-
-    def monotonic(self) -> float:
-        return 0.0
-
-    def iso_seconds(self) -> str:
-        return FAKE_ISO
-
-    def log_stamp(self) -> str:
-        return "2026-01-01 00:00"
 
 
 class BrokenTasks(FakeTasks):
@@ -47,13 +32,13 @@ class Rig:
         self.tasks = tasks or FakeTasks()
         self.vcs = vcs or FakeVcs()
         self.journal = FakeJournal()
-        self.clock = Clock()
+        self.clock = FakeClock()
         machine = Machine(self.tasks, self.clock, self.journal, Guard(False, self.tasks))
         self.startup = Startup(warnings or [], self.tasks, self.vcs, FakeAgentRunner([], readiness),
                                machine, self.journal)
 
     def add(self, task_id: str, status: State) -> None:
-        self.tasks.create(Task.new(TaskId(task_id), task_id, "", None, (), status, self.clock))
+        self.tasks.create(Task.new(TaskId(task_id), task_id, "", None, (), status, self.clock.now()))
 
 
 def test_a_store_error_becomes_a_startup_error() -> None:

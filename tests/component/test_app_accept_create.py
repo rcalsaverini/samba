@@ -11,7 +11,7 @@ from samba.app.machine import Machine
 from samba.app.results import Done, Refused, Text
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-from samba.domain.ports import CommitResult, MergeAttempt
+from samba.app.ports import CommitResult, MergeAttempt
 
 from fake_journal import FakeJournal
 from fake_tasks import FakeTasks
@@ -122,7 +122,7 @@ def test_accept_refusals_before_any_change() -> None:
 def test_accept_resolves_a_unique_prefix_and_refuses_ambiguous_or_unknown() -> None:
     tasks, _ = make("work-review", "alpha-1")
     for other in ("alpha-2", "beta"):
-        tasks.create(Task.new(TaskId(other), "T", "", 3, (), "work-review", FakeClock()))
+        tasks.create(Task.new(TaskId(other), "T", "", 3, (), "work-review", FakeClock().now()))
     vcs = FakeVcs()
     amb = accept(accept_uc(tasks, vcs), "alpha", yes=True)
     assert amb == Refused("usage", (

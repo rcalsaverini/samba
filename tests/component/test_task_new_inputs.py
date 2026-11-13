@@ -17,7 +17,7 @@ CLOCK = FakeClock(100.0)
 def store(*ids: str) -> FakeTasks:
     tasks = FakeTasks()
     for tid in ids:
-        tasks.create(Task.new(TaskId(tid), tid, "", 3, (), "work-todo", CLOCK))
+        tasks.create(Task.new(TaskId(tid), tid, "", 3, (), "work-todo", CLOCK.now()))
     return tasks
 
 

@@ -59,7 +59,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     pathlib or yaml. `adapters/workflow_file.py`: loads and validates `WORKFLOW.md` (front matter +
     prompt body), `load_config` returns the `Config` and a `Locations` (real paths, for adapters only).
   - `domain/`: the pure core, no I/O (`architecture` chapter). `states.py` (`State`, causes),
-    `questions.py` (question records and helpers), `task.py` (the `Task` aggregate),
+    `now.py` (`Now`, the instant as a value), `questions.py` (question records and helpers), `task.py` (the `Task` aggregate),
     `task_id.py` (`TaskId`, slug, prefix resolution),
     `transitions.py` (the transition table as plain data, effects, `find_row`, `human_row`,
     `human_events`, the markdown renderer; `samba dev transitions` prints it and the states chapter
@@ -106,9 +106,12 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `adapters/claude_cli.py`: `ClaudeCliRunner`, the only reader of Claude's stream-json: builds
     the argv, runs `claude`, maps the output into an `AgentReport`. `domain/agent.py`:
     `AgentRequest`, `AgentReport`, `Readiness`.
-  - `domain/ports.py`: the ports (Protocols `Clock`, `IdGenerator`, `AgentRunner`, `Tasks` and the
-    rest; at the domain level because `Task` uses the clock port); `adapters/system.py`: the system
-    clock and uuid generator. The layers and the dependency rule are in the `architecture` chapter.
+  - `app/ports.py`: every port (Protocols `Clock`, `IdGenerator`, `AgentRunner`, `Tasks` and the
+    rest) with its value types and errors, next to the use cases that call them (ADR 0018);
+    adapters import nothing else from `app/`. `domain/now.py`: `Now`, the instant as a value that
+    the domain takes instead of a clock (ADR 0017; `Clock.now()` builds it, once per operation).
+    `adapters/system.py`: the system clock and uuid generator. The layers and the dependency rule
+    are in the `architecture` chapter.
   - `adapters/process.py`: subprocess helpers (process groups), used only inside adapters.
   - `domain/prompts.py`: built-in prompts, the protocol prompt, the outcome schema.
   - `domain/template.py`: strict `{{ name }}` rendering.

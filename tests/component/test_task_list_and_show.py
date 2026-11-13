@@ -21,7 +21,7 @@ CLOCK = FakeClock(1000.0)
 def add(tasks: FakeTasks, tid: str, status: State = "work-todo", deps: tuple[str, ...] = (),
         **fields: object) -> Task:
     task = Task.new(TaskId(tid), f"Title of {tid}", "", 3, tuple(TaskId(d) for d in deps),
-                    status, CLOCK)
+                    status, CLOCK.now())
     for key, value in fields.items():
         setattr(task, key, value)
     tasks.create(task)
@@ -116,7 +116,7 @@ def test_show_lists_exactly_the_human_events_the_table_allows(status: State) -> 
 def test_show_of_a_question_task_names_the_cause_and_where_the_answer_resumes() -> None:
     tasks = FakeTasks()
     add(tasks, "t1", "question", blocked_cause="question", last_stage="work",
-        questions=add_questions((), "work", [("Which db?", ""), ("Which port?", "")], CLOCK))
+        questions=add_questions((), "work", [("Which db?", ""), ("Which port?", "")], CLOCK.now()))
     lines = show(tasks, "t1")
     assert "blocked_cause: question" in lines
     assert "  question.answer -> work-todo" in lines
@@ -140,7 +140,7 @@ def question_rows() -> Table:
     tasks = FakeTasks()
     add(tasks, "t1", "question", blocked_cause="question",
         questions=add_questions((), "work", [("Which database should the cache use, given the "
-                                              "constraints listed in the spec chapter?", "")], CLOCK))
+                                              "constraints listed in the spec chapter?", "")], CLOCK.now()))
     return ListQuestions(tasks).run()
 
 

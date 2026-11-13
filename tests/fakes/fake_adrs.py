@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from samba.domain.ports import AdrError, AdrInfo
+from samba.app.ports import AdrError, AdrInfo
 
 
 class FakeAdrs:

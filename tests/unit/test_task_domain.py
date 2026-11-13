@@ -16,25 +16,13 @@ from samba.domain.questions import (
     round_pairs,
     round_questions,
 )
+from samba.domain.now import Now
 from samba.domain.task import Task
 from samba.domain.task_id import AmbiguousTask, InvalidTaskId, TaskId, UnknownTask, resolve
 
 
-class Clk:
-    def time(self) -> float:
-        return 1000.0
-
-    def monotonic(self) -> float:
-        return 1.0
-
-    def iso_seconds(self) -> str:
-        return "2026-01-01T00:00:00+00:00"
-
-    def log_stamp(self) -> str:
-        return "2026-01-01 00:00"
-
-
-CLK = Clk()
+NOW = Now(1000.0, "2026-01-01T00:00:00+00:00", "2026-01-01 00:00")
+LATER = Now(2000.0, "2026-01-01T00:16:40+00:00", "2026-01-01 00:16")
 
 
 @pytest.mark.parametrize("text", ["a", "A-b_c.d", "x" * 80, "..a", "a.."])
@@ -84,10 +72,11 @@ def test_resolve_ambiguous_and_unknown() -> None:
 
 
 def test_add_questions_numbers_and_rounds() -> None:
-    qs = add_questions((), "plan", [("a?", "ctx"), ("b?", "")], CLK)
+    qs = add_questions((), "plan", [("a?", "ctx"), ("b?", "")], NOW)
     assert [(q.id, q.round, q.status, q.stage) for q in qs] == [
         ("q1", 1, "open", "plan"), ("q2", 1, "open", "plan")]
-    qs2 = add_questions(qs, "work", [("c?", "")], CLK)
+    assert {q.asked_at for q in qs} == {NOW.iso_seconds}
+    qs2 = add_questions(qs, "work", [("c?", "")], NOW)
     assert qs2[-1].id == "q3" and qs2[-1].round == 2
     assert qs == qs2[:2]  # new tuple, the old one is untouched
     assert latest_round(qs2) == 2
@@ -95,20 +84,27 @@ def test_add_questions_numbers_and_rounds() -> None:
 
 
 def test_answer_and_dismiss_return_new_tuples() -> None:
-    qs = add_questions((), "plan", [("a?", ""), ("b?", "")], CLK)
-    answered = answer_question(qs, "q1", "yes", CLK)
+    qs = add_questions((), "plan", [("a?", ""), ("b?", "")], NOW)
+    answered = answer_question(qs, "q1", "yes", NOW)
     assert answered[0].status == "answered" and answered[0].answer == "yes"
     assert qs[0].status == "open"
     assert [q.id for q in open_questions(answered)] == ["q2"]
-    dismissed = dismiss_open(answered, CLK)
+    dismissed = dismiss_open(answered, NOW)
     assert [q.status for q in dismissed] == ["answered", "dismissed"]
-    assert dismiss_open(dismissed, CLK) is dismissed
-    assert answer_question(qs, "q9", "x", CLK) == qs
+    assert dismiss_open(dismissed, NOW) is dismissed
+    assert answer_question(qs, "q9", "x", NOW) == qs
+
+
+def test_one_now_stamps_the_answer_and_the_dismissals_alike() -> None:
+    qs = add_questions((), "plan", [("a?", ""), ("b?", "")], NOW)
+    done = dismiss_open(answer_question(qs, "q1", "yes", LATER), LATER)
+    assert [q.answered_at for q in done] == [LATER.iso_seconds, LATER.iso_seconds]
+    assert {q.asked_at for q in done} == {NOW.iso_seconds}
 
 
 def test_round_pairs() -> None:
-    qs = add_questions((), "plan", [("a?", ""), ("b?", "")], CLK)
-    qs = dismiss_open(answer_question(qs, "q1", "yes", CLK), CLK)
+    qs = add_questions((), "plan", [("a?", ""), ("b?", "")], NOW)
+    qs = dismiss_open(answer_question(qs, "q1", "yes", NOW), NOW)
     assert round_pairs(qs) == ("q1 (answered): a?\nAnswer: yes\n\n"
                                "q2 (dismissed): b?\nThe human dismissed this question without answering.")
 
@@ -120,29 +116,29 @@ def test_question_is_frozen() -> None:
 
 
 def test_merge_questions_by_id() -> None:
-    snap = add_questions((), "plan", [("a?", ""), ("b?", "")], CLK)
-    mine = answer_question(snap, "q1", "mine", CLK)
-    stored = answer_question(snap, "q2", "theirs", CLK)
+    snap = add_questions((), "plan", [("a?", ""), ("b?", "")], NOW)
+    mine = answer_question(snap, "q1", "mine", NOW)
+    stored = answer_question(snap, "q2", "theirs", NOW)
     merged = merge_questions(snap, mine, stored)
     assert [(q.id, q.answer) for q in merged] == [("q1", "mine"), ("q2", "theirs")]
-    both = answer_question(snap, "q1", "theirs", CLK)  # both changed q1: the stored one wins
+    both = answer_question(snap, "q1", "theirs", NOW)  # both changed q1: the stored one wins
     assert merge_questions(snap, mine, both)[0].answer == "theirs"
-    added = add_questions(mine, "work", [("c?", "")], CLK)
+    added = add_questions(mine, "work", [("c?", "")], NOW)
     assert [q.id for q in merge_questions(snap, added, stored)] == ["q1", "q2", "q3"]
 
 
 def test_task_methods() -> None:
-    t = Task.new(TaskId("t"), "T", "body", 3, (), "plan-todo", CLK)
+    t = Task.new(TaskId("t"), "T", "body", 3, (), "plan-todo", NOW)
     assert t.queued_at == 1000.0 and t.status == "plan-todo"
     t.add_log("one")
     t.add_log("two")
     assert t.log == ("one", "two")
     assert t.add_feedback("a") == 1 and t.add_feedback("b") == 2
-    t.add_questions("plan", [("q?", "")], CLK)
-    t.answer_question("q1", "yes", CLK)
+    t.add_questions("plan", [("q?", "")], NOW)
+    t.answer_question("q1", "yes", NOW)
     assert t.questions[0].status == "answered"
-    t.add_questions("plan", [("r?", "")], CLK)
-    t.dismiss_open(CLK)
+    t.add_questions("plan", [("r?", "")], NOW)
+    t.dismiss_open(NOW)
     assert t.questions[1].status == "dismissed"
 
 

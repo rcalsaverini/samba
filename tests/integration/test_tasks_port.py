@@ -12,10 +12,11 @@ import pytest
 from fake_tasks import FakeTasks
 
 from samba.adapters.markdown_tasks import MarkdownTasks
+from samba.app.ports import StoreError, TaskExists, Tasks
+from samba.domain.now import Now
 from samba.domain.states import STATES, State
 from samba.domain.task import ObservedMove, Task
 from samba.domain.task_id import TaskId
-from samba.domain.ports import StoreError, TaskExists, Tasks
 
 
 class Clk:
@@ -25,14 +26,12 @@ class Clk:
     def monotonic(self) -> float:
         return 1.0
 
-    def iso_seconds(self) -> str:
-        return "2026-01-01T00:00:00+00:00"
-
-    def log_stamp(self) -> str:
-        return "2026-01-01 00:00"
+    def now(self) -> Now:
+        return Now(1000.0, "2026-01-01T00:00:00+00:00", "2026-01-01 00:00")
 
 
 CLK = Clk()
+NOW = CLK.now()
 
 
 class Env:
@@ -76,7 +75,7 @@ def env(request: pytest.FixtureRequest, tmp_path: Path) -> Env:
 
 
 def make(env: Env, name: str = "t", status: State = "work-todo", body: str = "do it") -> Task:
-    env.tasks.create(Task.new(TaskId(name), "Title " + name, body, 2, (), status, CLK))
+    env.tasks.create(Task.new(TaskId(name), "Title " + name, body, 2, (), status, NOW))
     got = env.tasks.get(TaskId(name))
     assert got is not None
     return got
@@ -100,11 +99,11 @@ def test_create_get_list(env: Env) -> None:
     assert env.tasks.ids() == ["a", "b"]
     assert env.tasks.ids("plan-todo") == ["a"]
     with pytest.raises(TaskExists):
-        env.tasks.create(Task.new(TaskId("a"), "x", "", None, (), "stuck", CLK))
+        env.tasks.create(Task.new(TaskId("a"), "x", "", None, (), "stuck", NOW))
 
 
 def test_create_keeps_dependencies(env: Env) -> None:
-    env.tasks.create(Task.new(TaskId("c"), "C", "", 1, (TaskId("a"), TaskId("b")), "work-todo", CLK))
+    env.tasks.create(Task.new(TaskId("c"), "C", "", 1, (TaskId("a"), TaskId("b")), "work-todo", NOW))
     assert fetch(env, "c").depends_on == ("a", "b")
 
 
@@ -120,7 +119,7 @@ def test_save_roundtrips_fields(env: Env) -> None:
     t.session_id, t.branch, t.workspace = "s1", "samba/t", "/ws/t"
     t.add_log("a line")
     t.add_feedback("please change")
-    t.add_questions("work", [("why?", "because")], CLK)
+    t.add_questions("work", [("why?", "because")], NOW)
     assert env.tasks.save(t)
     got = fetch(env)
     assert (got.attempts, got.turns_total, got.cost_usd_total) == (2, 5, 0.25)
@@ -228,12 +227,12 @@ def test_save_refreshes_the_aggregate_from_the_merge(env: Env) -> None:
 
 def test_concurrent_question_answers_merge(env: Env) -> None:
     t = make(env, status="question")
-    t.add_questions("plan", [("a?", ""), ("b?", "")], CLK)
+    t.add_questions("plan", [("a?", ""), ("b?", "")], NOW)
     env.tasks.save(t)
     worker, human = fetch(env), fetch(env)
-    human.answer_question("q2", "human answer", CLK)
+    human.answer_question("q2", "human answer", NOW)
     env.tasks.save(human)
-    worker.answer_question("q1", "worker answer", CLK)
+    worker.answer_question("q1", "worker answer", NOW)
     env.tasks.save(worker)
     got = {q.id: (q.status, q.answer) for q in fetch(env).questions}
     assert got == {"q1": ("answered", "worker answer"), "q2": ("answered", "human answer")}
@@ -242,12 +241,12 @@ def test_concurrent_question_answers_merge(env: Env) -> None:
 
 def test_question_answered_on_both_sides_keeps_the_stored_answer(env: Env) -> None:
     t = make(env, status="question")
-    t.add_questions("plan", [("a?", "")], CLK)
+    t.add_questions("plan", [("a?", "")], NOW)
     env.tasks.save(t)
     worker, human = fetch(env), fetch(env)
-    human.answer_question("q1", "human", CLK)
+    human.answer_question("q1", "human", NOW)
     env.tasks.save(human)
-    worker.dismiss_open(CLK)
+    worker.dismiss_open(NOW)
     env.tasks.save(worker)
     assert [(q.status, q.answer) for q in fetch(env).questions] == [("answered", "human")]
 
@@ -314,13 +313,13 @@ def test_markdown_counter_save_does_not_touch_the_task_file(tmp_path: Path) -> N
 
 def test_markdown_file_layout_matches_the_old_writers(tmp_path: Path) -> None:
     e = md_env(tmp_path)
-    e.tasks.create(Task.new(TaskId("x"), "My title", "Some body", 5, (TaskId("y"),), "plan-todo", CLK))
+    e.tasks.create(Task.new(TaskId("x"), "My title", "Some body", 5, (TaskId("y"),), "plan-todo", NOW))
     assert (tmp_path / "tasks" / "plan-todo" / "x.md").read_text() == (
         '---\npriority: 5\ndepends_on: ["y"]\n---\n# My title\n\nSome body\n')
     t = fetch(e, "x")
     t.status = "plan-running"
     t.add_log("2026-01-01 00:00 samba: dispatch_plan: plan-todo -> plan-running")
-    t.add_questions("plan", [("Which?", "ctx")], CLK)
+    t.add_questions("plan", [("Which?", "ctx")], NOW)
     e.tasks.save(t)
     assert (tmp_path / "tasks" / "plan-running" / "x.md").read_text() == (
         '---\npriority: 5\ndepends_on: ["y"]\n---\n# My title\n\nSome body\n\n'

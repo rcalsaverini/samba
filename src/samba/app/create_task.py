@@ -7,7 +7,7 @@ from samba.app.resolve import ResolveError, resolve_deps
 from samba.app.results import Done, Refused, refused, usage
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
-from samba.domain.ports import Clock, Tasks, Terminal
+from samba.app.ports import Clock, Tasks, Terminal
 
 DEPENDS_PROMPT = "Depends on (ids or prefixes, comma separated, empty for none): "
 
@@ -57,5 +57,5 @@ class CreateTask:
         while tasks.get(task_id) is not None:
             task_id, n = TaskId(f"{base}-{n}"), n + 1
         tasks.create(Task.new(task_id, title, body or "", priority, tuple(dep_ids),
-                              "work-todo" if skip_plan else "plan-todo", self.clock))
+                              "work-todo" if skip_plan else "plan-todo", self.clock.now()))
         return Done(tasks.location(task_id))

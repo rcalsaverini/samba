@@ -17,7 +17,7 @@ from samba.app.results import LOCK_BUSY, Done, Refused, refused, usage
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
 from samba.domain.transitions import human_events
-from samba.domain.ports import Lock, Tasks, Terminal
+from samba.app.ports import Lock, Tasks, Terminal
 
 
 @dataclass(frozen=True)

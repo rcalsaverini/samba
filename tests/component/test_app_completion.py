@@ -17,7 +17,7 @@ from fake_clock import FakeClock
 def store(*specs: tuple[str, State]) -> FakeTasks:
     tasks = FakeTasks()
     for tid, status in specs:
-        tasks.create(Task.new(TaskId(tid), f"Title {tid}", "", 3, (), status, FakeClock()))
+        tasks.create(Task.new(TaskId(tid), f"Title {tid}", "", 3, (), status, FakeClock().now()))
     return tasks
 
 
@@ -47,7 +47,7 @@ def test_source_states_come_from_the_transition_table() -> None:
     assert source_states("nope") == ()
     for state in STATES:
         events = {r.event for r in human_events(state, Task.new(
-            TaskId("x"), "X", "", 3, (), state, FakeClock()))}
+            TaskId("x"), "X", "", 3, (), state, FakeClock().now()))}
         assert ("task.discard" in events) == (state in source_states("task.discard"))
 
 
@@ -61,13 +61,13 @@ def test_prefix_filter_and_help_text() -> None:
 
 def test_questions_offer_only_open_ones_as_task_slash_qid() -> None:
     tasks = FakeTasks()
-    task = Task.new(TaskId("qa"), "QA", "", 3, (), "question", FakeClock())
+    task = Task.new(TaskId("qa"), "QA", "", 3, (), "question", FakeClock().now())
     task.questions = (
         Question("q1", 1, "work", "open", "Which\ndatabase?"),
         Question("q2", 1, "work", "answered", "Old?", answer="yes"),
         Question("q3", 1, "work", "open", "x" * 100))
     tasks.create(task)
-    tasks.create(Task.new(TaskId("zz"), "ZZ", "", 3, (), "work-todo", FakeClock()))
+    tasks.create(Task.new(TaskId("zz"), "ZZ", "", 3, (), "work-todo", FakeClock().now()))
     found = CompleteQuestions(tasks).run("")
     assert [v for v, _ in found] == ["qa/q1", "qa/q3"]
     assert found[0][1] == "Which database?"

@@ -19,7 +19,7 @@ from samba.domain.transitions import (
     find_row,
     stage_guard_ok,
 )
-from samba.domain.ports import Clock, Journal, Tasks
+from samba.app.ports import Clock, Journal, Tasks
 
 GuardFn = Callable[[str, Task], bool]  # (guard name, task) -> holds?
 
@@ -55,8 +55,9 @@ class Machine:
         row = find_row(event, fresh.status, lambda g: self._guard_holds(g, target))
         if row is None:
             return False
-        apply_row(row, target, ctx, self.clock)
-        target.add_log(entry_line(row, message, self.clock))
+        now = self.clock.now()
+        apply_row(row, target, ctx, now)
+        target.add_log(entry_line(row, message, now))
         if not self.tasks.save(target):
             return False
         self.journal.info("transition", task=task_id, transition=row.event, src=row.src,
@@ -67,9 +68,10 @@ class Machine:
         """Apply the human `row` for a move already made by hand and accept the move. Returns the
         `## Log` line, which the caller writes (or defers while an agent runs, spec: task-files,
         Write discipline). `task` is freshly loaded, in the destination status."""
-        apply_row(row, task, {}, self.clock)
+        now = self.clock.now()
+        apply_row(row, task, {}, now)
         self.tasks.save(task)
         self.tasks.accept_move(move)
         self.journal.info("transition", task=move.task_id, transition=row.event, src=row.src,
                           dst=row.dst, actor=row.actor, observed=True)
-        return entry_line(row, "observed hand move", self.clock)
+        return entry_line(row, "observed hand move", now)

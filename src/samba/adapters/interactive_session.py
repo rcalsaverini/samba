@@ -6,7 +6,7 @@ import signal
 import subprocess
 
 from samba.domain.launch import LaunchSpec
-from samba.domain.ports import LaunchError
+from samba.app.ports import LaunchError
 
 
 class TerminalSession:

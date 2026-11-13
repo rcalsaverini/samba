@@ -1,4 +1,4 @@
-"""Question records (spec: states, Questions). Pure: the clock is a parameter.
+"""Question records (spec: states, Questions). Pure: the instant is a `Now` parameter.
 
 `Question` is frozen and the helpers work on tuples and return new tuples.
 """
@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Literal
 
+from samba.domain.now import Now
 from samba.domain.states import Stage
-from samba.domain.ports import Clock
 
 QuestionStatus = Literal["open", "answered", "dismissed"]
 
@@ -46,7 +46,7 @@ def open_questions(questions: tuple[Question, ...]) -> tuple[Question, ...]:
 
 
 def add_questions(questions: tuple[Question, ...], stage: Stage, items: list[tuple[str, str]],
-                  clock: Clock) -> tuple[Question, ...]:
+                  now: Now) -> tuple[Question, ...]:
     """Open records for one blocking event appended: ids continue after the highest ever used,
     the round is one more than the latest."""
     n = max((question_number(q) for q in questions), default=0)
@@ -55,22 +55,22 @@ def add_questions(questions: tuple[Question, ...], stage: Stage, items: list[tup
     for text, context in items:
         n += 1
         new.append(Question(id=f"q{n}", round=rnd, stage=stage, status="open", text=text,
-                            context=context, asked_at=clock.iso_seconds()))
+                            context=context, asked_at=now.iso_seconds))
     return questions + tuple(new)
 
 
 def answer_question(questions: tuple[Question, ...], qid: str, text: str,
-                    clock: Clock) -> tuple[Question, ...]:
+                    now: Now) -> tuple[Question, ...]:
     """The question `qid` answered. An unknown id leaves the tuple as it is."""
-    return tuple(replace(q, status="answered", answer=text, answered_at=clock.iso_seconds())
+    return tuple(replace(q, status="answered", answer=text, answered_at=now.iso_seconds)
                  if q.id == qid else q for q in questions)
 
 
-def dismiss_open(questions: tuple[Question, ...], clock: Clock) -> tuple[Question, ...]:
+def dismiss_open(questions: tuple[Question, ...], now: Now) -> tuple[Question, ...]:
     """Every open question dismissed. The same tuple object if none was open."""
     if not any(q.status == "open" for q in questions):
         return questions
-    return tuple(replace(q, status="dismissed", answered_at=clock.iso_seconds())
+    return tuple(replace(q, status="dismissed", answered_at=now.iso_seconds)
                  if q.status == "open" else q for q in questions)
 
 

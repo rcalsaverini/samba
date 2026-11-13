@@ -9,7 +9,7 @@ from samba.app.prompt_builder import PromptBuilder
 from samba.app.tick import stage_of
 from samba.app.turn import TurnFlow
 from samba.domain.policy import Fail
-from samba.domain.ports import Journal, Tasks, Vcs, WorkspaceError
+from samba.app.ports import Journal, Tasks, Vcs, WorkspaceError
 from samba.domain.task_id import TaskId
 from samba.domain.template import TemplateError
 

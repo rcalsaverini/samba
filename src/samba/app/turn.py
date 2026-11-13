@@ -25,7 +25,7 @@ from samba.domain.states import Stage
 from samba.domain.task import Task
 from samba.domain.transitions import log_line
 from samba.domain.validation import agent_tail
-from samba.domain.ports import AgentRunner, Clock, IdGenerator, Journal, Tasks, Validator
+from samba.app.ports import AgentRunner, Clock, IdGenerator, Journal, Tasks, Validator
 
 
 @dataclass(frozen=True)
@@ -105,9 +105,10 @@ class TurnFlow:
                 res = await self.invoke(task, stage=stage, prompt=prompt, resume=resume,
                                         system_prompt=setup.system_prompt,
                                         location=setup.location, max_cost_usd=setup.max_cost_usd)
-            for denial in res.denials:
-                task.add_log(log_line(f"permission denied: {denial}", self.clock))
             if res.denials:
+                now = self.clock.now()
+                for denial in res.denials:
+                    task.add_log(log_line(f"permission denied: {denial}", now))
                 self.tasks.save(task)
             budget = Budget(setup.max_cost_usd, task.cost_usd_total)
             action = decide_after_turn(res, stage, budget, setup.validate_enabled)
@@ -157,5 +158,5 @@ class TurnFlow:
             if res.denials:
                 context += " Permission denied: " + ", ".join(res.denials) + "."
             items = [(res.summary or "The agent reported blocked without a question", context)]
-        task.add_questions(stage, items, self.clock)
+        task.add_questions(stage, items, self.clock.now())
         self.tasks.save(task)

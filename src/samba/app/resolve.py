@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from samba.app.results import Refused, usage
 from samba.domain.task_id import AmbiguousTask, TaskId, UnknownTask
-from samba.domain.ports import Tasks
+from samba.app.ports import Tasks
 
 
 class ResolveError(Exception):

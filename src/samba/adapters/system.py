@@ -6,6 +6,8 @@ import time
 import uuid
 from datetime import datetime
 
+from samba.domain.now import Now
+
 
 class SystemClock:
     def time(self) -> float:
@@ -14,11 +16,13 @@ class SystemClock:
     def monotonic(self) -> float:
         return time.monotonic()
 
-    def iso_seconds(self) -> str:
-        return datetime.fromtimestamp(self.time()).astimezone().isoformat(timespec="seconds")
-
-    def log_stamp(self) -> str:
-        return datetime.fromtimestamp(self.time()).strftime("%Y-%m-%d %H:%M")
+    def now(self) -> Now:
+        t = self.time()
+        return Now(
+            time=t,
+            iso_seconds=datetime.fromtimestamp(t).astimezone().isoformat(timespec="seconds"),
+            log_stamp=datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M"),
+        )
 
 
 class UuidGenerator:
