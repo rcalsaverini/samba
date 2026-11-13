@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from conftest import Sandbox, git
+from legacy_support import Sandbox, git
 
 IDENT: dict[str, Any] = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
          "GIT_COMMITTER_EMAIL": "t@t"}
@@ -98,7 +98,7 @@ def test_tty_prompt(sb: Sandbox) -> None:
     pty = pytest.importorskip("pty")
     import os
 
-    from conftest import samba_cmd
+    from legacy_support import samba_cmd
     accept_task(sb)
     for answer, merged in ((b"n\n", False), (b"y\n", True)):
         master, slave = pty.openpty()

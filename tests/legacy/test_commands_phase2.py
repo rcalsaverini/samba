@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 import pytest
-from conftest import Sandbox, stop, samba_cmd, wait_for
+from legacy_support import Sandbox, stop, samba_cmd, wait_for
 
 
 def seed(sb: Sandbox, task_id: str, state: str, **side: object) -> Path:

@@ -11,10 +11,10 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   before changing code, and update the spec in the same change when behavior changes.
 - `README.md`: entry point with a short quickstart; links to the manual and the spec.
 - `docs/manual.md`: the user manual (setup, daily loop, troubleshooting), for people using Samba.
-  `tests/test_manual.py` fails when a CLI subcommand is not mentioned in it, so update it when
+  `tests/legacy/test_manual.py` fails when a CLI subcommand is not mentioned in it, so update it when
   you add, rename or remove a command.
 - `src/samba/`: the root holds only `__init__.py`, `__main__.py`, `bootstrap.py` and the packages
-  `domain`, `app`, `adapters` and `entrypoints` (guarded by `tests/test_architecture.py`).
+  `domain`, `app`, `adapters` and `entrypoints` (guarded by `tests/checks/test_architecture.py`).
   - `entrypoints/cli.py`: a Typer app (ADR 0014; no argparse; `typer` is a runtime dependency, with
     shellingham, rich and pydantic; static shell completion via `--install-completion` and
     `--show-completion`, and dynamic completion of task ids, question ids and ADR numbers through
@@ -26,7 +26,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     (`explore_cmd`, an interactive claude session), `dev transitions`. Each command function makes
     one call that passes plain values to one use case, and `render(result)` prints it and maps
     the kind to the exit code (`finish` raises `typer.Exit`). No if/elif on command names;
-    `run` (`run_cmd`), `explore` and `dev transitions` keep their own small paths. `tests/test_cli_surface.py`
+    `run` (`run_cmd`), `explore` and `dev transitions` keep their own small paths. `tests/legacy/test_cli_surface.py`
     covers help shape, usage errors and completion. It imports
     neither `app/resolve.py` nor `domain/task_id.py` nor another entry point.
     The script entry is `samba.entrypoints.cli:main`.
@@ -90,7 +90,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     dispatch with dependency rows), `Notes` (held `## Log` lines) and `Running`; starts workers
     through a `spawn` callback.
   - `entrypoints/orchestrator.py`: the thin `Orchestrator` (about 100 lines, no rule; guarded by
-    `tests/test_architecture.py`): builds the parts below and runs startup, then tick and sleep,
+    `tests/checks/test_architecture.py`): builds the parts below and runs startup, then tick and sleep,
     `Workers.shutdown` in a `finally`, exit when idle (ADR 0015).
   - `entrypoints/workers.py`: `Workers`: `spawn` (the callback of `Tick`), the `running` dict and
     `Notes` shared with `Tick`, the cancelled-worker handling (journal `stopped`, recover on
@@ -113,36 +113,50 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   - `domain/prompts.py`: built-in prompts, the protocol prompt, the outcome schema.
   - `domain/template.py`: strict `{{ name }}` rendering.
 - `tests/`
-  - `test_blackbox.py`: the main suite. It runs the `samba` CLI as a subprocess and asserts only
-    on files and on calls recorded by the fake. **It must never import the `samba` package**:
-    the suite is meant to be reused unchanged against a future rewrite in another language.
-  - `conftest.py`: the `Sandbox` fixture (temp git repo, WORKFLOW.md, tasks, helpers).
-  - `test_manual.py`: drift check for `docs/manual.md`. Runs the CLI's `--help` and reads files,
-    never imports `samba`.
-  - `test_scenarios.py` and `scenarios/*.json`: the scenario runner and its data (ADR 0012,
-    `architecture` chapter, Scenarios), including `lifecycle.json`: the whole life of a task over
-    the orchestrator, the use cases and the fakes. Imports the domain, `app/` and
-    `entrypoints/orchestrator.py`, never an adapter.
-  - `test_app_startup.py`, `test_app_run_task.py`: `Startup`, `RunTask` (with `PromptBuilder`,
-    `Finisher`) and `Guard` over the fakes, no loop of their own.
-  - `test_architecture.py`: guards the dependency rule. Reads sources with `ast`, never imports
-    `samba`; append moved domain modules to its `DOMAIN_MODULES`.
-  - `fake_claude.py`: scripted fake of the `claude` CLI. Standard library only.
-  - `fake_agent.py`: in-memory fake `AgentRunner` (scripted reports), tested in `test_agent_port.py`.
-  - `fake_session.py` (`FakeSession`, the `InteractiveSession` fake; `test_app_explore.py`,
-    `test_explore.py`), `fake_vcs.py`, `fake_validator.py`, `fake_journal.py`, `fake_terminal.py` (with `FakeLock`):
-    in-memory fakes of the `Vcs`, `Validator`, `Journal`, `Terminal` and `Lock` ports.
+  Four levels (ADR 0016), one folder each, plus `checks/`, `fakes/` and the temporary `legacy/`.
+  The root of `tests/` holds no `.py`. Folders have no `__init__.py`, so every test file basename
+  is unique across `tests/` (a new test must not reuse a legacy file name) and the folders
+  `fakes`, `legacy` and `component` are on the pytest `pythonpath` (and pyright `extraPaths`), so
+  fakes and helpers are imported by module name.
+  - `unit/`: pure domain pieces (`test_task_domain.py`, `test_validation_domain.py`). No adapter,
+    no fake.
+  - `component/`: use cases and parts over the in-memory fakes, no adapter: `test_app_*.py`
+    (`Startup`, `RunTask` with `PromptBuilder` and `Finisher`, `Guard`, queries, completion,
+    explore, resolve, use cases), `test_tick.py`, `test_agent_port.py` (the fake agent runner),
+    and `test_scenarios.py` with `scenarios/*.json` (the scenario runner and its data, ADR 0012,
+    `architecture` chapter, Scenarios; it defines the `FakeClock` that `test_tick.py` imports;
+    `lifecycle.json` is the whole life of a task over the orchestrator, the use cases and the fakes).
+  - `integration/`: one adapter against the real thing (`test_config.py`, `test_tasks_port.py`,
+    `test_adapters_vcs_validator_journal.py`). Imports neither `samba.entrypoints` nor
+    `samba.bootstrap`. Few.
+  - `e2e/`: the `samba` CLI as a subprocess, asserting only on files and on calls recorded by the
+    fake claude. **It must never import the `samba` package**: the suite is meant to be reused
+    unchanged against a future rewrite in another language. Few. Empty for now (README only).
+  - `checks/`: `test_architecture.py` (the dependency rule and the per-folder import rules; reads
+    sources with `ast`, never imports `samba`; append moved domain modules to its `DOMAIN_MODULES`)
+    and `test_spec_docs.py` (spec drift).
+  - `fakes/`: `fake_claude.py` (scripted fake of the `claude` CLI, standard library only, shared by
+    legacy and the future e2e tests), `fake_agent.py` (fake `AgentRunner`), `fake_session.py`
+    (`FakeSession`, the `InteractiveSession` fake), `fake_tasks.py`, `fake_vcs.py`,
+    `fake_validator.py`, `fake_journal.py`, `fake_terminal.py` (with `FakeLock`): in-memory fakes
+    of the ports.
+  - `legacy/`: temporary, removed by the end of the test-levels chain (not extended). The old
+    subprocess suite (`test_blackbox.py` and the other CLI tests, including `test_manual.py`, the
+    drift check for `docs/manual.md`), the `Sandbox` helpers in `legacy_support.py` and a thin
+    `conftest.py` that exposes its `sb` fixture. These tests never import `samba` either.
 
 ## Checks
 
 Run these as separate, plain commands (no pipes or `&&`):
 
 - `uv run pyright` (strict mode, must report 0 errors)
-- `uv run pytest -q` (about 25 seconds)
+- `uv run pytest -q tests/unit tests/component` (the fast loop, seconds): run it while working
+- `uv run pytest -q` (the full run, about 4.5 minutes, mostly `tests/legacy`): run it before reporting done
 
 ## Conventions
 
 - Python 3.11+, fully typed; no `Any` leaking into public signatures, use `cast` at JSON/YAML
   boundaries.
-- New behavior gets a black-box test first, in the style of the existing ones.
+- New behavior gets a test first, at the lowest level that can show it (ADR 0016: unit, component,
+  integration, end-to-end); integration and end-to-end tests stay few. `tests/legacy` is not extended.
 - Prose in docs and prompts: no em-dashes.

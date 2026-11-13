@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import subprocess
 
-from conftest import Sandbox, samba_cmd
+from legacy_support import Sandbox, samba_cmd
 
 
 def bare(sb: Sandbox, *words: str, **env: str) -> subprocess.CompletedProcess[str]:

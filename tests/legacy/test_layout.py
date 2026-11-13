@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable
 
 import pytest
-from conftest import Sandbox
+from legacy_support import Sandbox
 
 OLD_FOLDERS = ("plan", "todo", "running", "review", "blocked")
 

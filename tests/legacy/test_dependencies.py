@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 
 import pytest
-from conftest import Sandbox, stop, wait_for
+from legacy_support import Sandbox, stop, wait_for
 
 
 @pytest.mark.parametrize("dep_folder", ["plan-todo", "plan-review", "work-review", "question",

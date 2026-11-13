@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 import pytest
-from conftest import Sandbox, stop, wait_for
+from legacy_support import Sandbox, stop, wait_for
 
 PLAN_RUN = {"plan": "the plan"}
 
