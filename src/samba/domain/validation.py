@@ -40,3 +40,9 @@ def accept_tail(result: ValidationResult) -> str:
         note = f"(timed out after {result.timeout_s:g}s)"
         text = f"{text} {note}".strip()
     return text or "(no output)"
+
+
+NO_VALIDATION_WARNING = ("validate.command is not set: Samba will accept work without running "
+                         "validation")
+"""Shown at every `samba run` startup and on every `work accept` while `validate.command` is
+unset (spec: workflow-config, Validation warning)."""

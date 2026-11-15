@@ -4,7 +4,7 @@ verb can act on come from the transition table, not from a list here."""
 
 from __future__ import annotations
 
-from samba.app.ports import Adrs, Tasks
+from samba.app.ports import Adrs, Packs, Tasks
 from samba.domain.questions import open_questions
 from samba.domain.states import STATES, State
 from samba.domain.transitions import find_row
@@ -80,3 +80,14 @@ class CompleteAdrs:
         return [(f"{a.number:04d}", one_line(a.title)) for a in self._adrs.load_all()
                 if (status is None or a.status == status)
                 and f"{a.number:04d}".startswith(incomplete)]
+
+
+class CompleteMethods:
+    """Names of the method packs (`samba init --method`), filtered by the typed prefix."""
+
+    def __init__(self, packs: Packs) -> None:
+        self._packs = packs
+
+    def run(self, incomplete: str) -> Candidates:
+        return [(name, f"method pack, {len(self._packs.files(name))} files")
+                for name in self._packs.names() if name.startswith(incomplete)]

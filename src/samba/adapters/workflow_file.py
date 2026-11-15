@@ -16,6 +16,7 @@ from samba.adapters.claude_settings import ClaudeSettings
 from samba.adapters.git_vcs import HookSettings
 from samba.adapters.locations import Locations
 from samba.adapters.shell_validator import ValidatorSettings
+from samba.domain.validation import NO_VALIDATION_WARNING
 from samba.domain.settings import (
     DEFAULT_ALLOW,
     DEFAULT_PLANNING_ALLOW,
@@ -234,6 +235,8 @@ def load_config(repo: Path) -> Loaded:
     )
     for reader in (r, hooks, validate, claude, prompts_r, planning_r):
         config.warnings.extend(f"unknown config key ignored: {k}" for k in reader.unknown())
+    if config.validate_command is None:
+        config.warnings.append(NO_VALIDATION_WARNING)
     if not config.prompts.template:
         raise ConfigError("WORKFLOW.md has an empty prompt body")
     return Loaded(config, Locations(repo=repo, samba_dir=samba_dir, workspaces_root=workspaces_root),

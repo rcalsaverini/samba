@@ -32,6 +32,9 @@ uv run samba --help
 
 Run these from the root of the target git repository.
 
+0. New project? Run `samba init` to write a starter `WORKFLOW.md`, `CLAUDE.md`, a spec index and
+   ADR 0 (it never overwrites existing files and never commits), then skip to step 2.
+
 1. Add a `WORKFLOW.md` with the config (YAML front matter) and the prompt for the agent
    (body, with `{{ task.title }}` and `{{ task.body }}`). The one in this repo is a working example:
 
@@ -75,6 +78,7 @@ Run these from the root of the target git repository.
 
 | Command | Purpose |
 | --- | --- |
+| `samba init` | write a starter `WORKFLOW.md`, `CLAUDE.md`, spec index and ADR 0 into a repository |
 | `samba run` | run the orchestrator loop (`--exit-when-idle` to stop when nothing is left) |
 | `samba task new\|list\|show\|retry\|stop\|discard` | create and manage tasks |
 | `samba plan accept\|reject` | review a plan |

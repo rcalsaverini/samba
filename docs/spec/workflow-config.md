@@ -77,6 +77,13 @@ planning:                       # optional planning stage (states, Planning stag
 ---
 ```
 
+**Validation warning.** When `validate.command` is unset, Samba warns with the exact line
+`validate.command is not set: Samba will accept work without running validation`: as a config
+warning at every `samba run` startup (journaled at warning level, like an unknown key) and as a note
+on stderr on every `work accept`. The behavior is otherwise unchanged: with no command, a task that
+reports done goes straight to `work-review` and `work accept` merges without validating.
+`samba init` (packs) writes the commented form of `validate:` when no command is given.
+
 Validation on startup: YAML must be a map; integers positive; `claude.command` non-empty;
 `base_branch` exists; `workspaces_root` is outside the repo. Unknown keys are ignored with a
 warning.

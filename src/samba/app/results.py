@@ -40,9 +40,11 @@ class Text:
 
 @dataclass(frozen=True)
 class Written:
-    """Files an ADR command changed, one per line on stdout."""
+    """Files a command created or changed, one per line on stdout. `notes` (complete lines) go
+    to stderr."""
 
     files: tuple[str, ...]
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

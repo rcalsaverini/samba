@@ -2,6 +2,8 @@
 
 The Samba specification is split into the chapters below, one file per topic. Chapters are referenced by name (for example "states, The Tasks port"), not by number. Read the chapter that matches what you are changing.
 
+For how this version of Samba is built (layers, ports, adapters), see `../implementation/README.md`.
+
 - [overview.md](overview.md): read first, for what Samba is and the v0 non-goals.
 - [layout.md](layout.md): read when touching the repo layout, the `.samba/` folder or where files live on disk.
 - [task-files.md](task-files.md): read when touching task file identity, format (including `depends_on`), sections, write discipline or how a planning result is written.
@@ -13,7 +15,6 @@ The Samba specification is split into the chapters below, one file per topic. Ch
 - [running-claude.md](running-claude.md): read when touching how `claude` is invoked, the stream, the outcome schemas, the planning run, config isolation or the verified Claude Code behavior.
 - [observability.md](observability.md): read when touching logs and what an operator can see.
 - [cli.md](cli.md): read when adding or changing a CLI command or its output.
+- [packs.md](packs.md): read when touching `samba init`, the method packs it writes (the `base` pack), the overlay and never-overwrite rules, or the `@@DATE@@` and `@@VALIDATE@@` markers.
 - [principles.md](principles.md): read when deciding where a piece belongs (domain, use case, adapter, entry point), when adding a port, or when a design question of the form "may this depend on that" comes up: the vocabulary and the rules behind the architecture chapter and the ADRs.
-- [architecture.md](architecture.md): read when touching the layers, the dependency rule, ports or adapters.
-- [implementation-notes.md](implementation-notes.md): read for implementation details.
 - [backlog.md](backlog.md): read to see ideas not built yet.

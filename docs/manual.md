@@ -59,6 +59,15 @@ repository nothing is offered. Spec chapter cli.
 
 ## 3. Setting up a repository
 
+To start a new project, run `samba init` in the repository. It writes a starter `WORKFLOW.md`, a
+`CLAUDE.md` skeleton, `docs/spec/README.md` and ADR 0 (`docs/adr/0000-...`) from the `base` method
+pack, and asks once for your validation command (or pass `--validate "make check"`; without a
+terminal it leaves a commented placeholder). It never overwrites a file that exists (those are
+reported as `skip PATH (exists)` on stderr), never commits, and `samba init --dry-run` shows what it
+would create. Fill in the `CLAUDE.md` placeholders, then review and commit the files yourself. While
+`validate.command` is unset, `samba run` and `work accept` warn that work is accepted without
+validation. Spec chapter packs.
+
 Samba reads one file from the root of the target repo: `WORKFLOW.md`. The front matter (YAML) is
 configuration, the body is the prompt sent to the agent on its first turn. Every key is optional.
 The spec chapter workflow-config has the full list with defaults.

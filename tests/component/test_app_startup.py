@@ -16,6 +16,7 @@ from samba.app.machine import Machine
 from samba.app.startup import Startup, StartupError
 from samba.domain.agent import Readiness
 from samba.app.ports import StoreError
+from samba.domain.validation import NO_VALIDATION_WARNING
 from samba.domain.states import State
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
@@ -67,6 +68,14 @@ def test_config_warnings_are_journaled_at_warning_level() -> None:
     asyncio.run(rig.startup.run())
     assert [(lvl, f["message"]) for lvl, e, f in rig.journal.records if e == "config_warning"] == [
         ("warning", "unknown key x"), ("warning", "unknown key y")]
+
+
+def test_the_missing_validate_command_warning_is_journaled_like_any_config_warning() -> None:
+    rig = Rig(warnings=[NO_VALIDATION_WARNING])
+    asyncio.run(rig.startup.run())
+    assert [(lvl, f["message"]) for lvl, e, f in rig.journal.records if e == "config_warning"] == [
+        ("warning", "validate.command is not set: Samba will accept work without running "
+                    "validation")]
 
 
 def test_the_samba_dir_is_excluded() -> None:

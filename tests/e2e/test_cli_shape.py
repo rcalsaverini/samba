@@ -35,7 +35,7 @@ def test_help_lists_exactly_the_public_commands_and_dev_apart(box: Box) -> None:
     """The command names and their order are what a person types."""
     res = bare(box, "--help")
     assert res.returncode == 0, res.stderr
-    assert listed(res.stdout) == ["run", "task", "plan", "work", "question", "adr", "explore"]
+    assert listed(res.stdout) == ["init", "run", "task", "plan", "work", "question", "adr", "explore"]
     assert res.stdout.index("development commands:") > res.stdout.index("question")
     assert "Samba itself" in res.stdout
 

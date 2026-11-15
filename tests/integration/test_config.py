@@ -17,10 +17,18 @@ from samba.adapters.shell_validator import ValidatorSettings
 from samba.adapters.workflow_file import load_config
 from samba.domain.settings import (DEFAULT_ALLOW, DEFAULT_PLANNING_ALLOW, ConfigError, Policy,
                                    Prompts, ToolAccess)
+from samba.domain.validation import NO_VALIDATION_WARNING
 
 
 def write(repo: Path, front: str, body: str = "Do {{ task.title }}\n") -> None:
     (repo / "WORKFLOW.md").write_text(f"---\n{front}---\n{body}")
+
+
+def test_an_unset_validate_command_is_a_config_warning(tmp_path: Path) -> None:
+    write(tmp_path, "")
+    assert load_config(tmp_path).config.warnings == [NO_VALIDATION_WARNING]
+    write(tmp_path, "validate:\n  command: make test\n")
+    assert load_config(tmp_path).config.warnings == []
 
 
 def test_defaults(tmp_path: Path) -> None:
@@ -53,7 +61,7 @@ def test_defaults(tmp_path: Path) -> None:
     assert cfg.work_tools == ToolAccess(allowed=tuple(DEFAULT_ALLOW), unrestricted=False)
     assert cfg.planning_tools == ToolAccess(allowed=tuple(DEFAULT_PLANNING_ALLOW),
                                             unrestricted=False)
-    assert cfg.warnings == []
+    assert cfg.warnings == [NO_VALIDATION_WARNING]
 
 
 def test_values_land_in_their_parts(tmp_path: Path) -> None:
@@ -135,7 +143,8 @@ def test_parts_are_frozen(tmp_path: Path) -> None:
 def test_unknown_keys_warn_and_empty_body_fails(tmp_path: Path) -> None:
     write(tmp_path, "bogus: 1\nhooks:\n  nope: 2\n")
     assert load_config(tmp_path).config.warnings == [
-        "unknown config key ignored: bogus", "unknown config key ignored: hooks.nope"]
+        "unknown config key ignored: bogus", "unknown config key ignored: hooks.nope",
+        NO_VALIDATION_WARNING]
     write(tmp_path, "", body="\n")
     with pytest.raises(ConfigError):
         load_config(tmp_path)
