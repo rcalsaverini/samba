@@ -1,0 +1,65 @@
+%% Phase 1: Exploration (interactive, the only phase where the Owner talks to an agent)
+%%
+%% Artifacts and the states this phase writes:
+%%   Backlog item : open -> promoted | dropped
+%%   ADR          : proposed -> accepted -> superseded
+%%                  proposed -> rejected
+%%                  (accept, reject and supersede are human-only commands)
+%%   Epic         : ready                  (the Owner approved the intent)
+%%   Task (bugfix): draft                  (fast path, no Epic and no TEP)
+%%
+%% Nothing else is produced here. Design starts when an Epic reaches `ready`.
+sequenceDiagram
+  autonumber
+
+  actor Owner
+
+  box Agent
+    participant Exp as Explorer
+  end
+
+  box Artifacts
+    participant Backlog@{ "type" : "collections" }
+    participant ADRs@{ "type" : "collections" }
+    participant Epics@{ "type" : "collections" }
+    participant Tasks@{ "type" : "collections" }
+  end
+
+  Note over Owner,Exp: Interactive session. Context: code, spec, ADRs, past work
+
+  loop questions and discussion
+    Owner->>Exp: asks, proposes, challenges
+    Exp->>Exp: reads code, spec, ADRs, past work
+    Exp->>Owner: answers, objects, lists alternatives
+  end
+
+  Owner->>Exp: "what is in the backlog?"
+  Exp->>Backlog: list items in state open
+  Exp->>Owner: shows them
+  Owner->>Exp: "let us refine item X"
+
+  alt the item is a rule or a principle
+    Exp->>Owner: "That sounds like an ADR" and a draft
+    Owner->>Exp: approves
+    Exp->>ADRs: write ADR in state proposed
+    Note over Owner,ADRs: the Owner accepts it with the human-only ADR command
+    Exp->>Backlog: item X becomes promoted, links the ADR
+  else the item changes an accepted ADR
+    Exp->>Owner: "This replaces ADR N" and a draft that names it
+    Owner->>Exp: approves
+    Exp->>ADRs: write the new ADR in state proposed, supersedes N
+    Note over Owner,ADRs: the Owner accepts the new ADR and supersedes ADR N (human-only commands).<br/>ADR N becomes superseded and is never edited
+    Exp->>Backlog: item X becomes promoted, links the new ADR
+  else the item is a goal spanning several tasks
+    Exp->>Owner: Epic draft: intent, scope, what is out of scope, paths not taken
+    Owner->>Exp: approves
+    Exp->>Epics: write Epic in state ready
+    Exp->>Backlog: item X becomes promoted, links the Epic
+  else the item is a small fix
+    Exp->>Owner: bugfix draft: what is wrong, what done looks like
+    Owner->>Exp: approves
+    Exp->>Tasks: write Task (kind bugfix) in state draft
+    Exp->>Backlog: item X becomes promoted, links the Task
+  else not worth doing
+    Exp->>Backlog: item X becomes dropped, with a reason
+  end

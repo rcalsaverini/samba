@@ -1,0 +1,62 @@
+%% Phase 4: Implementation and review (autonomous until the Owner's final review)
+%%
+%% Task states in this phase:
+%%   ready -> running -> work-review -> owner-review -> done
+%%                    -> changes-requested -> running        (Reviewer or Owner asked for changes)
+%%   running -> question                                     (plan is ambiguous, Owner answers)
+%%   running -> plan-conflict                                (the TEP is wrong, see the amendment path)
+%%   blocked                                                 (set by Samba when the TEP is amended)
+%% The Implementer is today's work phase: it sees the Task, the TEP slice it references,
+%% the ADRs, the spec and the code. Nothing else.
+sequenceDiagram
+  autonumber
+
+  box Agents
+    participant Imp as Implementer
+    participant Rev as Reviewer
+  end
+
+  actor Owner
+
+  box Artifacts
+    participant Tasks@{ "type" : "collections" }
+    participant TEPs@{ "type" : "collections" }
+    participant Backlog@{ "type" : "collections" }
+    participant Questions@{ "type" : "collections" }
+  end
+
+  Imp->>Tasks: pick up a Task in state ready whose dependencies are done
+  Tasks->>Imp: the Task. State becomes running (own worktree and branch)
+  Imp->>Imp: implements, tests first, edits the spec
+  Note over Imp,Tasks: Samba runs validation (pyright and pytest), the objective check
+  Imp->>Tasks: result: diff, commits, log. State becomes work-review
+
+  alt the Task is ambiguous
+    Imp->>Questions: ask the Owner. Task state becomes question
+    Owner->>Questions: answers. Task becomes ready again
+  else the TEP is wrong
+    Imp->>TEPs: write what conflicts and why. TEP becomes amend
+    Note over Tasks,TEPs: Samba sets every not-yet-started Task of that TEP to blocked.<br/>After the amended TEP is approved, the Designer re-slices them
+  end
+
+  Rev->>Tasks: pick up a Task in state work-review
+  Tasks->>Rev: Task, diff, validation result
+  Rev->>Rev: fresh context, reads the diff against Task, TEP, ADRs and spec
+  Note over Rev: Samba computes the objective facts: diff size, commit count,<br/>files outside the Task's file list, spec edits, test result
+
+  alt Blocker or Major findings
+    Rev->>Tasks: findings become feedback. State becomes changes-requested
+    Imp->>Tasks: pick up a Task in state changes-requested
+    Note over Imp,Rev: loop, with a round cap
+  else only Nits, or no findings
+    Rev->>Tasks: write the pre-review for the Owner (look here first, what I did not check)
+    Rev->>Backlog: nits and ADR candidates become backlog items in state open
+    Rev->>Tasks: state becomes owner-review
+  end
+
+  Owner->>Tasks: reviews Tasks in state owner-review, in batches
+  alt accepts
+    Owner->>Tasks: work accept. Samba merges and validates. State becomes done
+  else rejects
+    Owner->>Tasks: work reject with feedback. State becomes changes-requested
+  end

@@ -16,7 +16,7 @@ Samba uses these words with these meanings.
   the decision of what to do after an agent turn. Pure: no I/O, no clock, no ids, no log. The
   domain is data and functions over data.
 - **Aggregate.** A record the domain loads, changes and saves as a whole, with the invariants that
-  must hold at every save. `Task` is the one aggregate (DDD: aggregate root).
+  must hold at every save. `Task` was the first aggregate, and not necessarily the last (DDD: aggregate root).
 - **Value.** An immutable fact with no identity of its own: an id, a state, an instant, a question
   record, an agent report, a validation result. Values are compared by content and passed freely.
 - **Use case.** One operation a person or the orchestrator can perform, named for what the person
@@ -35,6 +35,69 @@ Samba uses these words with these meanings.
 - **Inside and outside.** The inside is the domain and the use cases. Everything else, including
   the entry points, the adapters, the operating system and the person, is outside. Ports are the
   edge of the inside.
+
+## Design approach: strategic design first, then tactical
+
+Domain-driven design has two halves, and the order matters. Strategic design decides what the
+problem is, where its boundaries are and what the words mean. Tactical design builds the model
+inside one boundary. A design that starts from states, tables, folders or classes skips the first
+half and usually has to be redone. Anyone adding a concept to Samba, person or agent, works in this
+order: the language and the boundary, then the model, then the ports the model needs, then the
+adapters. The principles below are what the result must satisfy.
+
+### Strategic design: the words, the boundaries, the relationships
+
+- **Ubiquitous language.** One vocabulary shared by the person, the spec, the ADRs, the prompts, the
+  tests and the code. A word has one meaning in a context. When two meanings appear, one is renamed,
+  and the code follows the language: a concept gets a name before it gets a type. The project
+  glossary holds the definitions. A term that is not in it is agreed with the person, who is the
+  domain expert, and added.
+- **Subdomains.** Not every part of the problem deserves the same care. The core is what makes Samba
+  what it is, how agent work is organized, reviewed and approved under human control, and it gets
+  the richest model. Supporting parts are needed but not distinctive. Generic parts (git, the shell,
+  files, a lock, a terminal, a log) are solved problems: keep them thin, behind an adapter, and keep
+  their words out of the model.
+- **Bounded context.** A boundary inside which a model is consistent and each term has one meaning.
+  The same word may mean different things in two contexts. Two meanings inside one context is the
+  defect. Contexts relate in stated ways: one is upstream of the other, and the downstream either
+  conforms to the upstream's model or protects itself with an anti-corruption layer, an adapter that
+  translates a foreign model into ours (the `claude` runner, which turns a stream of JSON into an
+  agent report, is one). What crosses a boundary is a published language, here the use-case results
+  and the scenario data. A context map draws these relationships. Samba's contexts and their map are
+  decided in ADRs, not assumed here.
+- **Discovery.** The model is found in conversation with the domain expert, not derived from
+  storage. A good tool is event storming: list the facts that happen in the problem, in the past
+  tense and in the expert's words (an item was promoted, a plan was approved), then find the rules
+  that react to them and the things they happen to. Aggregates, states and policies come out of
+  that, not before it.
+
+### Tactical design: the building blocks inside one context
+
+- **Entity and value.** An entity has an identity that persists through change (a task). A value has
+  none and is compared by content (a state, an instant, a question record). Prefer a value when
+  identity is not needed.
+- **Aggregate.** Entities and values changed together under one root, with invariants that hold at
+  every save. Keep aggregates small. Refer to another aggregate by its id, never by holding it. One
+  operation changes one aggregate: a rule that spans several is a use case, or a value derived from
+  them (principle 5).
+- **Domain service and policy.** A rule that belongs to no single entity is a pure function: the
+  decision after an agent turn, dependency evaluation, the retry policy. A policy is a rule of the
+  form "whenever this happens, do that".
+- **Domain event.** A fact in the past tense, named in the language. Samba uses events to model and
+  to name transitions. It has no event bus (ADR 0011), so a reaction is either derived from state or
+  done by a use case.
+- **Repository and factory.** A repository is the port through which a use case loads and saves an
+  aggregate (the task store). A factory is where creation with invariants lives.
+- **Application service** is what Samba calls a use case.
+
+Heuristics that keep a model good:
+
+- Put behavior next to the data it protects. A use case full of rules about one record means the
+  rules belong to the domain (the anemic model smell).
+- Make illegal states unrepresentable: closed sets of values, types over strings, a transition
+  table over flags.
+- Name things for what they mean in the problem, not for how they are stored or run.
+- The model serves the use cases, not the screens or the files.
 
 ## Principles
 
@@ -102,7 +165,7 @@ words belong to adapters, and the architecture test rejects them inside (ADR 000
 
 ### 5. An aggregate is a consistency boundary
 
-`Task` is loaded, changed and saved as a whole, and its invariants hold at every save. A state
+An aggregate (today the task) is loaded, changed and saved as a whole, and its invariants hold at every save. A state
 change goes through the one path that applies a transition row and saves. Concurrency between a
 running worker and a command is the store's business, resolved by merging a stale save field by
 field (architecture, The Tasks port and stale saves); the domain carries no version field and no
@@ -144,6 +207,16 @@ data that states the rules of the core, and the small end-to-end suite that driv
 (ADR 0012, ADR 0016). Unit, component and integration tests protect this implementation and go
 with it. A new behavior gets a test at the lowest level that can show it.
 
+### 10. One word, one meaning
+
+Each term of the domain is defined once, in the project glossary, and means the same in the spec,
+the ADRs, the prompts, the tests and the names in the code. A word with two meanings, or two words
+for one meaning, is a defect, and it is fixed by renaming in the change that finds it. A new
+concept is named with the person before it is typed in code or written in an ADR.
+
+Why: people and agents read the same words, and a vocabulary that drifts produces models that
+drift.
+
 ## Where a piece goes
 
 Ask these in order and stop at the first yes.
@@ -183,3 +256,4 @@ outward. A capability found in the domain is redrawn with the list in principle 
 | 7. Adapters hold no rule | 0006, 0007, 0008, 0016 |
 | 8. One composition root | 0011 |
 | 9. The contract outside the code | 0009, 0010, 0012, 0016 |
+| 10. One word, one meaning | none yet (this chapter) |

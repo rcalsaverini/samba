@@ -1,0 +1,57 @@
+%% Phase 3: Refinement and review (autonomous, no Owner)
+%%
+%% The Designer takes the second job here: slicing an approved TEP into Tasks.
+%% Rolling wave: only the next wave of Tasks is written in full. The rest stay as outlines
+%% and are detailed when their dependencies are done, so they see the code that actually landed.
+%% That limits how much work a TEP amendment can invalidate.
+%%
+%% Task states in this phase:
+%%   outline                                   (title, intent, depends_on; no steps yet)
+%%   draft -> in-review -> ready               (approved, waits for dependencies and a worker)
+%%                      -> changes-requested -> in-review   (loop, capped)
+%%                      -> blocked
+%% Constraint on every Task: one PR, a few commits, small diff, main stays green after it.
+sequenceDiagram
+  autonumber
+
+  box Agents
+    participant Des as Designer
+    participant Rev as Reviewer
+  end
+
+  box Artifacts
+    participant TEPs@{ "type" : "collections" }
+    participant Tasks@{ "type" : "collections" }
+    participant Questions@{ "type" : "collections" }
+  end
+
+  Des->>TEPs: pick up a TEP in state approved that has no Tasks yet
+  TEPs->>Des: the TEP
+  Des->>Des: reads TEP, ADRs, spec, code
+  Des->>Tasks: write the first wave of Tasks in state draft (steps, file list, tests, depends_on)
+  Des->>Tasks: write the remaining Tasks in state outline
+
+  Note over Des,Tasks: Later waves
+  Des->>Tasks: pick up an outline Task whose dependencies are done
+  Des->>Des: reads the current code, fills in the steps
+  Des->>Tasks: Task becomes draft
+
+  Rev->>Tasks: pick up Tasks in state draft
+  Tasks->>Rev: the Tasks, and the TEP they belong to
+  Rev->>Rev: fresh context, reads Tasks, TEP, ADRs, spec, code
+  Note over Rev: Senior Developer lens: could an implementer build this without deciding anything architectural?<br/>Architect lens: size, independence, conflicts between Tasks
+
+  alt Blocker or Major findings
+    Rev->>Tasks: write findings on the Task. State becomes changes-requested
+    Des->>Tasks: pick up a Task in state changes-requested
+    Des->>Tasks: fix, or contest with evidence. State becomes in-review
+  else Task too large, or the TEP is wrong
+    Rev->>Tasks: state becomes blocked
+    Rev->>Questions: ask the Owner, or send the TEP back (state amend)
+  else only Nits, or no findings
+    Rev->>Tasks: write the review report (nits, ADR candidates). State becomes ready
+  end
+
+  Note over Des,Tasks: Fast path for a bugfix Task written in exploration
+  Des->>Tasks: pick up a bugfix Task in state draft (no TEP)
+  Des->>Tasks: add steps and file list. Same review loop as above
