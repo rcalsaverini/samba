@@ -8,7 +8,7 @@ from samba.app.machine import Machine
 from samba.app.resolve import find_task
 from samba.app.results import LOCK_BUSY, Done, Refused, Text, refused
 from samba.domain.task_id import TaskId
-from samba.domain.validation import accept_tail
+from samba.domain.validation import NO_VALIDATION_WARNING, accept_tail
 from samba.app.ports import Lock, Preflight, Tasks, Terminal, Validator, Vcs
 
 EVENT = "work.accept"
@@ -91,7 +91,7 @@ class AcceptWork:
         if declined is not None:
             return declined
 
-        notes: list[str] = []
+        notes: list[str] = [] if command is not None else [NO_VALIDATION_WARNING]
         with self.lock.acquire() as held:
             if not held:
                 return refused(LOCK_BUSY)
@@ -138,8 +138,6 @@ class AcceptWork:
                     message = f"merged {commit.detail}" + (
                         ", validated" if do_validate else ", validation skipped" if no_validate
                         else "")
-                    if command is None:
-                        notes.append("samba: no validate.command; merged without validation")
             if not self.machine.fire(task_id, EVENT, message=message):
                 return refused(f"{EVENT} did not apply to {task_id}"
                                + ("" if no_merge else

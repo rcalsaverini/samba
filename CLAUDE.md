@@ -7,8 +7,11 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
 - `docs/spec/`: the specification, the source of truth for behavior. Start at `docs/spec/README.md`,
   the index: one line per chapter saying when to read it. Chapters are named by topic (`overview`,
   `layout`, `task-files`, `states`, `orchestrator`, `workflow-config`, `workspaces`, `prompts`,
-  `running-claude`, `observability`, `cli`, `principles`, `architecture`, `implementation-notes`, `backlog`) and are referenced by name, not by number. Read the chapters relevant to your task
+  `running-claude`, `observability`, `cli`, `principles`, `backlog`) and are referenced by name, not by number. Read the chapters relevant to your task
   before changing code, and update the spec in the same change when behavior changes.
+- `docs/implementation/`: how this version is built, not part of the behavior contract. Start at
+  `docs/implementation/README.md`. Chapters: `architecture`, `implementation-notes`. Read before
+  touching layers, ports or adapters.
 - `README.md`: entry point with a short quickstart; links to the manual and the spec.
 - `docs/manual.md`: the user manual (setup, daily loop, troubleshooting), for people using Samba.
   `tests/e2e/test_completion_and_docs_e2e.py` fails when a CLI subcommand is not mentioned in it,
@@ -44,6 +47,15 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
     allow and deny lists (`EXPLORE_*` in `domain/prompts.py`, handed in by `bootstrap`);
     `adapters/interactive_session.py` (`TerminalSession(command, model)`) builds the `claude` argv
     and runs it on the terminal (ADR 0019). Not an `AgentRunner`, no stream-json.
+  - `app/init_project.py`: `InitProject` (`samba init`, `DEFAULT_METHOD`; the overlay and
+    never-overwrite rules, spec chapter `packs`) over the ports `Packs` and `ProjectFiles` (in
+    `app/ports.py`), `Terminal` and `Clock`; `domain/pack_markers.py` fills `@@DATE@@` and
+    `@@VALIDATE@@`. Adapters: `adapters/package_packs.py` (`PackagePacks`, reads the package data
+    in `src/samba/packs/<name>/`, no code there) and `adapters/project_files.py`
+    (`FsProjectFiles`, rejects paths outside the repo). `bootstrap.build_init(repo)` returns
+    `InitCommands(init, complete)`; `CompleteMethods` is in `app/completion.py`. Fakes:
+    `fake_packs.py`, `fake_project_files.py`. Tests: `test_app_init_project.py`,
+    `test_pack_markers.py`, `test_package_packs.py`, `test_project_files.py`, `test_init_e2e.py`.
   - `adapters/adr_format.py`: ADR files under `docs/adr/`: front matter parsing, summary line, status edits.
     `adapters/adr_files.py` (`FileAdrs`) is the `Adrs` port over it; `app/adr.py` holds the ADR
     use cases (`ListAdrs`, `ShowAdr`, `SetAdrStatus`, `SupersedeAdr`) and `app/queries.py` the
@@ -133,7 +145,7 @@ Local orchestrator that runs Claude Code headless on markdown task files, one gi
   no `.py`. Folders have no `__init__.py`, so every test file basename is unique across `tests/`,
   and `fakes` and `component` are on the pytest `pythonpath` (pyright `extraPaths` also has
   `e2e`), so fakes and shared rigs are imported by module name. Sizes: about 40 unit, 330
-  component, 145 integration and 50 end-to-end cases (27 functions). Coverage of `src/samba`:
+  component, 145 integration and 50 end-to-end cases (29 functions). Coverage of `src/samba`:
   `uv run pytest --cov` (configured in `pyproject.toml`, subprocesses included), about 96%.
   - `unit/`: pure domain pieces (`test_task_domain.py`, `test_validation_domain.py`,
     `test_transition_table_shape.py`, `test_table_printer.py` for `entrypoints/table.py`). No

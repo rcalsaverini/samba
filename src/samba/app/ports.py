@@ -358,3 +358,34 @@ class AgentRunner(Protocol):
     async def ready(self) -> Readiness:
         """Whether the agent can run (for Claude, logged in)."""
         ...
+
+
+class Packs(Protocol):
+    """The method packs shipped with Samba (spec: packs). A pack is a set of text files
+    mirroring a project tree."""
+
+    def names(self) -> tuple[str, ...]:
+        """The names of the packs, sorted."""
+        ...
+
+    def files(self, method: str) -> dict[str, str]:
+        """The files of one pack: relative posix path to text. Raises `KeyError` for an unknown
+        name."""
+        ...
+
+
+class ProjectFilesError(Exception):
+    """A path the project files refuse: absolute, with `..`, or outside the repository."""
+
+
+class ProjectFiles(Protocol):
+    """The project being initialised: text files at paths relative to its root. Both methods
+    raise `ProjectFilesError` for a path that is absolute, contains `..` or resolves outside
+    the repository."""
+
+    def exists(self, path: str) -> bool: ...
+
+    def write(self, path: str, text: str) -> None:
+        """Write `text`, creating parent directories; replaces a file that exists (the use
+        case never asks it to)."""
+        ...

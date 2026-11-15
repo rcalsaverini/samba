@@ -1,6 +1,9 @@
 # CLI
 
 ```
+samba init     [--method NAME] [--validate COMMAND] [--dry-run] [--repo PATH]
+                  # write a method pack (packs) into the repository; never overwrites, never
+                  # commits; needs no WORKFLOW.md (see init below).
 samba run      [--repo PATH] [--exit-when-idle]
                   # start the loop (foreground; Ctrl-C stops agents and exits).
                   # --exit-when-idle: exit once nothing is running and plan-todo/ and
@@ -36,9 +39,9 @@ samba explore [TOPIC] [--repo PATH]
                   # interactive claude session to explore a topic and write ADRs.
 ```
 
-Every command is `run`, `explore` or `<noun> <verb>`, with nouns `task`, `plan`, `work`, `question`,
+Every command is `init`, `run`, `explore` or `<noun> <verb>`, with nouns `task`, `plan`, `work`, `question`,
 `adr` and `dev`. There are no top-level `new`, `list`, `show`, `status` or `transitions`, and no
-aliases: they are usage errors (exit 2). `samba --help` lists `run`, `task`, `plan`, `work`,
+aliases: they are usage errors (exit 2). `samba --help` lists `init`, `run`, `task`, `plan`, `work`,
 `question`, `adr` and `explore`, then
 `dev` apart under "development commands" (its help says it is for working on Samba itself).
 `dev transitions` accepts `--repo` and ignores it; it loads no config.
@@ -60,6 +63,21 @@ detection for `--install-completion`), `rich`, `markdown-it-py`, `mdurl`, `pygme
 `colorama` on Windows only. `pyproject.toml` declares `typer>=0.12` (the full package, not
 `typer-slim`, because shell detection needs `shellingham`); the rest is transitive.
 
+## init
+
+`samba init [--method NAME] [--validate COMMAND] [--dry-run] [--repo PATH]` writes the files of a
+method pack into the repository (the `packs` chapter has the contract: overlay on `base`, never
+overwrite, the two markers, the validation command). It is config-free like the `adr` commands: no
+`WORKFLOW.md`, no lock, nothing under `.samba/`, no commit.
+
+- `--method` defaults to `base`; an unknown name is a usage error (exit 2) naming the known methods.
+  `--method` completes from the shipped packs.
+- Result: the files created, one path per line on stdout, exit 0. Files that already exist are
+  skipped and reported on stderr as `skip PATH (exists)`, also exit 0.
+- `--dry-run` writes nothing and asks nothing: stdout has one line per file, `create PATH` or
+  `skip PATH (exists)`.
+- A path outside the repository is refused: exit 1.
+
 ## Shell completion
 
 Completion is static for command names and options, and dynamic for ids. Install it with
@@ -76,6 +94,7 @@ question text):
   offer `work-review`; `task retry` offers `stuck`; `task stop` the running states; `task
   discard` the states with a `task.discard` row; `task show` every task.
 - `question show` and `question answer` offer `TASK/QID` of every open question.
+- `init --method` offers the names of the method packs.
 - ADR numbers (`0003`) by status: `adr accept` and `adr reject` offer `proposed`, `adr supersede`
   offers `accepted` (only the first argument), `adr show` every ADR.
 
@@ -265,7 +284,9 @@ event and never merges.
   `validate.command` is set and `--no-validate` is absent, it runs in the main checkout with the
   workspaces, Validation shell and timeout, on the merged but uncommitted result; only a pass runs
   `git commit --no-edit`. This catches a branch that passes alone but fails after merging a main
-  that moved on. No `validate.command`: a note on stderr, the merge is committed unvalidated.
+  that moved on. No `validate.command`: the note `validate.command is not set: Samba will accept work without
+  running validation` on stderr (on every accept, `--no-merge` and already merged included), the
+  merge is committed unvalidated.
   Git identity comes from the user's git config. Full validation output goes to
   `runs/<id>/accept-validate.log`. The branch is kept (deleting branches is a later command);
   the orchestrator's cleanup removes the worktree.

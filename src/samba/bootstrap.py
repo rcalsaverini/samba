@@ -2,7 +2,7 @@
 
 `build(repo)` reads `WORKFLOW.md` and returns `Commands`: only use cases, the contract any front
 end (the CLI, a web page, an MCP server) can call. `build_adr(repo)` serves the ADR commands,
-which need no config. `build_orchestrator(repo)` serves `samba run` alone: the orchestrator is not
+and `build_init(repo)` serves `samba init`; neither needs config. `build_orchestrator(repo)` serves `samba run` alone: the orchestrator is not
 a use case. `build_explore(repo)` serves `samba explore`, which needs only the `claude` command
 and model. Every entry point calls it.
 """
@@ -19,6 +19,8 @@ from samba.adapters.git_vcs import GitVcs
 from samba.adapters.log_journal import LogJournal, NullJournal
 from samba.adapters.interactive_session import TerminalSession
 from samba.adapters.markdown_tasks import MarkdownTasks
+from samba.adapters.package_packs import PackagePacks
+from samba.adapters.project_files import FsProjectFiles
 from samba.adapters.shell_validator import ShellValidator
 from samba.adapters.system import SystemClock, UuidGenerator
 from samba.adapters.terminal import StdTerminal
@@ -26,9 +28,10 @@ from samba.app.accept_work import AcceptWork
 from samba.app.adr import ListAdrs, SetAdrStatus, ShowAdr, SupersedeAdr
 from samba.app.answer_question import AnswerQuestion
 from samba.app.change_state import ChangeState
-from samba.app.completion import CompleteAdrs, CompleteQuestions, CompleteTaskIds
+from samba.app.completion import CompleteAdrs, CompleteMethods, CompleteQuestions, CompleteTaskIds
 from samba.app.create_task import CreateTask
 from samba.app.explore import StartExplore
+from samba.app.init_project import InitProject
 from samba.app.machine import Machine
 from samba.app.queries import ListQuestions, ListTasks, ShowQuestion, ShowTask
 from samba.app.task_commands import (AcceptPlan, DiscardTask, RejectPlan, RejectWork, RetryTask,
@@ -47,6 +50,12 @@ class AdrCommands:
     set_status: SetAdrStatus
     supersede: SupersedeAdr
     complete: CompleteAdrs
+
+
+@dataclass(frozen=True)
+class InitCommands:
+    init: InitProject
+    complete: CompleteMethods
 
 
 @dataclass(frozen=True)
@@ -150,3 +159,11 @@ def build_adr(repo: Path) -> AdrCommands:
     adrs = FileAdrs(repo)
     return AdrCommands(ListAdrs(adrs), ShowAdr(adrs), SetAdrStatus(adrs), SupersedeAdr(adrs),
                        CompleteAdrs(adrs))
+
+
+def build_init(repo: Path) -> InitCommands:
+    """`samba init` writes files from a pack: no WORKFLOW.md, no lock, nothing under `.samba/`."""
+    packs = PackagePacks()
+    return InitCommands(
+        InitProject(packs, FsProjectFiles(repo), StdTerminal(), SystemClock()),
+        CompleteMethods(packs))

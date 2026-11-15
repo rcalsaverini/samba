@@ -1,4 +1,4 @@
-"""Architecture guard: the dependency rule of docs/spec/architecture.md.
+"""Architecture guard: the dependency rule of docs/implementation/architecture.md.
 
 Reads source files with `ast`; never imports samba.
 """
@@ -20,7 +20,7 @@ DOMAIN_MODULES = ["domain/template.py", "domain/prompts.py", "domain/__init__.py
                   "domain/now.py", "domain/states.py", "domain/questions.py",
                   "domain/transitions.py", "domain/deps.py", "domain/agent.py",
                   "domain/policy.py", "domain/task.py", "domain/task_id.py",
-                  "domain/validation.py", "domain/settings.py"]
+                  "domain/validation.py", "domain/settings.py", "domain/pack_markers.py"]
 
 # Use cases: may log and await, but import no adapter and call no clock or uuid directly.
 APP_MODULES = ["app/__init__.py", "app/turn.py", "app/machine.py", "app/results.py",
@@ -28,7 +28,7 @@ APP_MODULES = ["app/__init__.py", "app/turn.py", "app/machine.py", "app/results.
                "app/resolve.py", "app/accept_work.py", "app/create_task.py",
                "app/adr.py", "app/queries.py", "app/tick.py", "app/explore.py", "app/guard.py",
                "app/startup.py", "app/prompt_builder.py", "app/finish.py", "app/run_task.py",
-               "app/task_commands.py", "app/completion.py", "app/ports.py"]
+               "app/task_commands.py", "app/completion.py", "app/ports.py", "app/init_project.py"]
 
 FORBIDDEN = {"os", "time", "datetime", "uuid", "subprocess", "asyncio", "logging", "pathlib"}
 
@@ -282,7 +282,7 @@ def test_the_root_modules_moved_into_their_layers() -> None:
 
 
 ROOT_FILES = {"__init__.py", "__main__.py", "bootstrap.py"}
-ROOT_PACKAGES = {"domain", "app", "adapters", "entrypoints"}
+ROOT_PACKAGES = {"domain", "app", "adapters", "entrypoints", "packs"}  # packs: package data, no code
 ENTRYPOINT_FILES = {"__init__.py", "cli.py", "table.py", "orchestrator.py", "workers.py"}
 
 

@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent.parent
 SPEC_DIR = ROOT / "docs" / "spec"
+IMPL_DIR = ROOT / "docs" / "implementation"
 OLD_NAME = "SPEC" + ".md"  # built in pieces so this file does not match itself
 OLD_REF = "SPEC" + " §"
 
@@ -15,6 +16,10 @@ OLD_REF = "SPEC" + " §"
 def chapters() -> list[Path]:
     return sorted(p for p in SPEC_DIR.glob("*.md")
                   if p.name != "README.md" and not p.name.startswith("."))
+
+
+def all_chapters() -> list[Path]:
+    return chapters() + sorted(p for p in IMPL_DIR.glob("*.md") if p.name != "README.md")
 
 
 def test_index_links_every_chapter_and_every_link_resolves() -> None:
@@ -30,13 +35,13 @@ def test_the_single_file_spec_is_gone() -> None:
 
 
 def test_chapters_have_no_section_numbers() -> None:
-    for chapter in chapters():
+    for chapter in all_chapters():
         assert "§" not in chapter.read_text(), chapter.name
 
 
 def test_no_chapter_is_named_after_a_phase_or_a_version() -> None:
     pattern = re.compile(r"\bv\d|phase|\blater\b", re.I)
-    for chapter in chapters():
+    for chapter in all_chapters():
         assert not pattern.search(chapter.stem), chapter.name
         heading = chapter.read_text().splitlines()[0]
         assert not pattern.search(heading), (chapter.name, heading)
@@ -64,7 +69,7 @@ def test_no_references_to_the_dissolved_chapters() -> None:
 def test_verified_claude_code_behavior_lives_in_running_claude() -> None:
     heading = re.compile(r"^## Verified Claude Code behavior \(\d+\.\d+\.\d+, \d{4}-\d{2}-\d{2}\)$", re.M)
     assert heading.search((SPEC_DIR / "running-claude.md").read_text())
-    assert "Verified Claude Code behavior" not in (SPEC_DIR / "implementation-notes.md").read_text()
+    assert "Verified Claude Code behavior" not in (IMPL_DIR / "implementation-notes.md").read_text()
 
 
 def test_no_stale_references_outside_the_adrs() -> None:

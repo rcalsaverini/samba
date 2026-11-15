@@ -19,12 +19,12 @@ from typer.core import TyperGroup
 
 from samba.app.results import Done, Refused, Result, Table, Text, Written
 from samba.app.startup import StartupError
-from samba.bootstrap import build, build_adr, build_explore, build_orchestrator
+from samba.bootstrap import build, build_adr, build_explore, build_init, build_orchestrator
 from samba.domain.settings import ConfigError
 from samba.domain.transitions import render_markdown_table
 from samba.entrypoints.table import print_table
 
-ORDER = ("run", "task", "plan", "work", "question", "adr", "explore", "dev")
+ORDER = ("init", "run", "task", "plan", "work", "question", "adr", "explore", "dev")
 
 
 class OrderedGroup(TyperGroup):
@@ -69,6 +69,10 @@ def question_ids() -> Completer:
 
 def adr_numbers(command: str) -> Completer:
     return _completer(lambda repo, text: build_adr(repo).complete.run(command, text))
+
+
+def method_names() -> Completer:
+    return _completer(lambda repo, text: build_init(repo).complete.run(text))
 
 
 def _id(command: str) -> Any:
@@ -147,6 +151,8 @@ def render(result: Result) -> int:
     if isinstance(result, Written):
         for file in result.files:
             print(file)
+        for line in result.notes:
+            print(line, file=sys.stderr)
         return 0
     for line in result.messages:
         print(line, file=sys.stderr)
@@ -167,6 +173,22 @@ def root(repo: Path | None) -> Path:
 def exclusive(feedback: str | None, edit: bool) -> None:
     if feedback is not None and edit:
         raise typer.BadParameter("give --feedback or --edit, not both")
+
+
+@app.command("init")
+def init_cmd(
+    method: Annotated[str | None, typer.Option(
+        "--method", metavar="NAME", autocompletion=method_names(),
+        help="method pack to write (default: base)")] = None,
+    validate: Annotated[str | None, typer.Option(
+        "--validate", metavar="COMMAND",
+        help="validation command for WORKFLOW.md (asked on a terminal when not given)")] = None,
+    dry_run: Annotated[bool, typer.Option(
+        "--dry-run", help="print the files that would be created, write nothing")] = False,
+    repo: Repo = None,
+) -> None:
+    """write a method pack into the repository to start a project (never overwrites)"""
+    finish(build_init(root(repo)).init.run(method, validate, dry_run))
 
 
 @app.command("run")

@@ -9,6 +9,7 @@ from samba.app.accept_work import AcceptWork
 from samba.app.create_task import CreateTask
 from samba.app.machine import Machine
 from samba.app.results import Done, Refused, Text
+from samba.domain.validation import NO_VALIDATION_WARNING
 from samba.domain.task import Task
 from samba.domain.task_id import TaskId
 from samba.app.ports import CommitResult, MergeAttempt
@@ -73,8 +74,20 @@ def test_accept_without_a_validate_command_says_so() -> None:
     validator = FakeValidator()
     res = accept(accept_uc(tasks, FakeVcs(), command=None, validator=validator), tid, yes=True)
     assert isinstance(res, Done)
-    assert res.notes == ("samba: no validate.command; merged without validation",)
+    assert res.notes == (NO_VALIDATION_WARNING,)
     assert validator.calls == []
+
+
+def test_accept_notes_the_missing_validate_command_on_every_path() -> None:
+    line = ("validate.command is not set: Samba will accept work without running validation")
+    assert NO_VALIDATION_WARNING == line
+    for flags in ({"no_merge": True}, {"no_validate": True}):
+        tasks, tid = make("work-review")
+        res = accept(accept_uc(tasks, FakeVcs(), command=None), tid, yes=True, **flags)
+        assert isinstance(res, Done) and res.notes == (line,)
+    tasks, tid = make("work-review")
+    res = accept(accept_uc(tasks, FakeVcs(), command="make check"), tid, yes=True)
+    assert isinstance(res, Done) and res.notes == ()
 
 
 def test_accept_no_validate_skips_the_validator() -> None:
