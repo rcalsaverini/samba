@@ -133,9 +133,11 @@ The settings that matter most:
 `WORKFLOW.md` is read once at startup. After editing it, stop `samba run` (Ctrl-C) and start it
 again.
 
-On first start Samba creates `.samba/` in the repo and adds it to `.git/info/exclude` (it never
-touches your `.gitignore`). `.samba/` holds the task folders, the sidecar state, the run logs and
-`samba.log`. Spec chapter layout.
+On first start Samba creates `.samba/` in the repo. It never touches your `.gitignore` or
+`.git/info/exclude`. `.samba/` holds the task folders, the sidecar state, the run logs and
+`samba.log`. The repo's `.gitignore` ignores all of it except the markdown of finished tasks
+(`.samba/tasks/done/` and `.samba/tasks/discarded/`), which you can commit as history (ADR 0026).
+Spec chapter layout.
 
 ## 4. Writing a good task
 

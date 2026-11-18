@@ -2,4 +2,14 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-.samba/
+# Samba's runtime state: locks, logs, sidecars, agent runs. Only the markdown of finished tasks is
+# history (ADR 0026); everything else under .samba/ stays local.
+.samba/*
+!.samba/tasks/
+.samba/tasks/*
+!.samba/tasks/done/
+!.samba/tasks/discarded/
+.samba/tasks/done/*
+!.samba/tasks/done/*.md
+.samba/tasks/discarded/*
+!.samba/tasks/discarded/*.md

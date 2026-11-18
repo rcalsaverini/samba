@@ -14,7 +14,7 @@
        {"do": "work_accept", "result": "accepted", "status": "done"},
        {"do": "tick", "status": "done"}],
      "expect": {
-       "vcs": ["exclude_samba_dir", "ensure_workspace", "ensure_workspace", "preflight",
+       "vcs": ["drop_samba_exclude", "ensure_workspace", "ensure_workspace", "preflight",
                "preflight", "begin_merge", "commit_merge", "remove_workspace"],
        "validator": [["/ws/t1", "t1/validate-002.log"], ["/repo", "t1/accept-validate.log"]],
        "workspaces": [],
@@ -29,7 +29,7 @@
      "validator": [[false, "FAILED test_x\n"], [true, "ok"]],
      "steps": [{"do": "tick", "status": "work-review"}],
      "expect": {
-       "vcs": ["exclude_samba_dir", "ensure_workspace"],
+       "vcs": ["drop_samba_exclude", "ensure_workspace"],
        "validator": [["/ws/t1", "t1/validate-001.log"], ["/ws/t1", "t1/validate-002.log"]],
        "prompts_contain": [[1, "FAILED test_x"]],
        "workspaces": ["t1"],
@@ -45,7 +45,7 @@
        {"do": "work_accept", "result": "refused", "status": "work-review",
         "message": "validation failed after merge; merge aborted, task stays in work-review: boom"}],
      "expect": {
-       "vcs": ["exclude_samba_dir", "ensure_workspace", "preflight", "preflight", "begin_merge",
+       "vcs": ["drop_samba_exclude", "ensure_workspace", "preflight", "preflight", "begin_merge",
                "abort_merge"],
        "validator": [["/ws/t1", "t1/validate-001.log"], ["/repo", "t1/accept-validate.log"]],
        "workspaces": ["t1"],
@@ -62,7 +62,7 @@
        {"do": "work_accept", "result": "refused", "status": "work-review",
         "message": "merge conflict in: a.txt; merge aborted, task stays in work-review"}],
      "expect": {
-       "vcs": ["exclude_samba_dir", "ensure_workspace", "preflight", "preflight", "begin_merge"],
+       "vcs": ["drop_samba_exclude", "ensure_workspace", "preflight", "preflight", "begin_merge"],
        "validator": [],
        "workspaces": ["t1"],
        "journal": ["dispatch", "finished"],
@@ -78,7 +78,7 @@
        {"do": "answer", "text": "postgres", "status": "work-todo"},
        {"do": "tick", "status": "work-review"}],
      "expect": {
-       "vcs": ["exclude_samba_dir", "ensure_workspace", "ensure_workspace"],
+       "vcs": ["drop_samba_exclude", "ensure_workspace", "ensure_workspace"],
        "validator": [],
        "workspaces": ["t1"],
        "journal": ["dispatch", "turn_start", "finished", "dispatch", "turn_start", "finished"],

@@ -52,7 +52,7 @@ def test_a_repository_problem_becomes_a_startup_error() -> None:
     rig = Rig(vcs=FakeVcs(repo_problem="not a git repository"))
     with pytest.raises(StartupError, match="^not a git repository$"):
         asyncio.run(rig.startup.run())
-    assert ("exclude_samba_dir",) not in rig.vcs.calls
+    assert ("drop_samba_exclude",) not in rig.vcs.calls
 
 
 def test_an_agent_that_is_not_logged_in_becomes_a_startup_error() -> None:
@@ -78,10 +78,10 @@ def test_the_missing_validate_command_warning_is_journaled_like_any_config_warni
                     "validation")]
 
 
-def test_the_samba_dir_is_excluded() -> None:
+def test_startup_drops_the_old_samba_exclude_line() -> None:
     rig = Rig()
     asyncio.run(rig.startup.run())
-    assert rig.vcs.calls == [("exclude_samba_dir",)]
+    assert rig.vcs.calls == [("drop_samba_exclude",)]
 
 
 def test_running_tasks_are_recovered_to_their_todo_folders() -> None:

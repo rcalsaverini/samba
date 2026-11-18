@@ -111,12 +111,18 @@ def test_repository_problem(repo: Path, tmp_path: Path) -> None:
         f"{sub} is not the root of a git repository")
 
 
-def test_exclude_samba_dir_is_idempotent(repo: Path, tmp_path: Path) -> None:
+def test_drop_samba_exclude_removes_the_old_line_and_adds_nothing(repo: Path, tmp_path: Path) -> None:
+    """Older Samba versions excluded `.samba/` locally, which hides the tracked task files (ADR 0026).
+    Startup removes that line and never writes one, and it keeps the lines of the repo's own."""
+    exclude_file = repo / ".git" / "info" / "exclude"
+    exclude_file.write_text("# local rules\n/.samba/\nscratch.txt\n")
     vcs = make_vcs(repo, tmp_path)
-    run(vcs.exclude_samba_dir())
-    run(vcs.exclude_samba_dir())
-    exclude = (repo / ".git" / "info" / "exclude").read_text().splitlines()
-    assert exclude.count("/.samba/") == 1
+    run(vcs.drop_samba_exclude())
+    run(vcs.drop_samba_exclude())
+    assert exclude_file.read_text() == "# local rules\nscratch.txt\n"
+    exclude_file.write_text("scratch.txt\n")
+    run(vcs.drop_samba_exclude())
+    assert exclude_file.read_text() == "scratch.txt\n"
 
 
 # ---- merge ------------------------------------------------------------------------------

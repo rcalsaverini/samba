@@ -6,7 +6,7 @@ Samba is run from the root of a target git repository:
 <repo>/
   WORKFLOW.md                    # config (front matter) + first-turn prompt (body)
   CLAUDE.md                      # optional, the repo's own agent map; Claude Code loads it
-  .samba/                     # created by Samba, added to .git/info/exclude
+  .samba/                     # created by Samba; ignored by .gitignore except finished task markdown (ADR 0026)
     tasks/
       plan-todo/     <id>.md         # planning stage (states, Planning stage): ready to be planned
       plan-running/  <id>.md
@@ -26,8 +26,10 @@ Samba is run from the root of a target git repository:
   <id>/                          # git worktree per task, branch samba/<id>
 ```
 
-On startup Samba creates any missing folders and appends `.samba/` to `.git/info/exclude`
-(never edits the repo's `.gitignore`). The folder name is the complete state of a task (states, States).
+On startup Samba creates any missing folders and removes the `/.samba/` line that older versions
+wrote to `.git/info/exclude`. It never adds one, and it never edits the repo's `.gitignore`. The
+repo's `.gitignore` decides what under `.samba/` is tracked: the markdown of `done` and `discarded`
+tasks, and nothing else (ADR 0026). The folder name is the complete state of a task (states, States).
 Earlier versions used the folders `plan`, `todo`, `running`, `review` and `blocked`; startup refuses
 to run while any of them still holds task files (orchestrator, Startup).
 

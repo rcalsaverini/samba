@@ -251,7 +251,7 @@ class Vcs(Protocol):
         """The main checkout, where `work accept` validates."""
         ...
 
-    async def exclude_samba_dir(self) -> None:
+    async def drop_samba_exclude(self) -> None:
         """Keep the Samba directory out of `git status`, when it is inside the repository."""
         ...
 

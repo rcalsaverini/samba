@@ -19,7 +19,7 @@ poll loop. The behavior below does not change.
    (`plan` to `plan-todo`, `todo` to `work-todo`, `running` to the matching todo folder,
    `review` to `work-review`, `blocked` to `question` or `stuck`). Samba never migrates
    automatically. Empty old folders do not block.
-4. Create folders, update `.git/info/exclude`.
+4. Create folders, remove the old `/.samba/` line from `.git/info/exclude` if present.
 5. **Recover:** every file in `plan-running/` and `work-running/` has no live agent (we just
    started). Fire `recover` for each (states, States): back to the todo folder of its own stage
    (`plan-todo/`, `work-todo/`) without incrementing `attempts`; its session will be resumed.

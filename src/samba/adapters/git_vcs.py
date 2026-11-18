@@ -111,24 +111,28 @@ class GitVcs:
             return f"base_branch '{self.base_branch}' does not exist"
         return None
 
-    async def exclude_samba_dir(self) -> None:
+    async def drop_samba_exclude(self) -> None:
+        """Remove the `/.samba/` line that older Samba versions wrote to `.git/info/exclude`. Nothing
+        is added: the rule lives in `.gitignore` (ADR 0026), and an exclude line would hide the
+        task files that are tracked."""
         repo = self.locations.repo
         try:
             rel = self.locations.samba_dir.relative_to(repo)
         except ValueError:
-            return  # samba_dir outside the repo: nothing to exclude
+            return  # samba_dir outside the repo: no line can be ours
         res = await git(repo, "rev-parse", "--git-path", "info/exclude")
         if not res.ok:
             return
         exclude = Path(res.output.strip())
         if not exclude.is_absolute():
             exclude = repo / exclude
-        entry = f"/{rel.as_posix()}/"
-        existing = exclude.read_text() if exclude.exists() else ""
-        if entry not in existing.splitlines() and f"{rel.as_posix()}/" not in existing.splitlines():
-            exclude.parent.mkdir(parents=True, exist_ok=True)
-            sep = "" if not existing or existing.endswith("\n") else "\n"
-            exclude.write_text(existing + sep + entry + "\n")
+        if not exclude.exists():
+            return
+        old = {f"/{rel.as_posix()}/", f"{rel.as_posix()}/"}
+        lines = exclude.read_text().splitlines(keepends=True)
+        kept = [line for line in lines if line.strip() not in old]
+        if len(kept) != len(lines):
+            exclude.write_text("".join(kept))
 
     # ---- merge (the main checkout) ------------------------------------------------------
 

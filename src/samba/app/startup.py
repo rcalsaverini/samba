@@ -36,7 +36,7 @@ class Startup:
         for w in self.config_warnings:
             self.journal.warning("config_warning", message=w)
 
-        await self.vcs.exclude_samba_dir()
+        await self.vcs.drop_samba_exclude()
 
         for stage in ("plan", "work"):
             for task in self.tasks.list(running_of(stage)):

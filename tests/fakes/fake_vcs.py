@@ -52,8 +52,8 @@ class FakeVcs:
     async def repository_problem(self) -> str | None:
         return self.repo_problem
 
-    async def exclude_samba_dir(self) -> None:
-        self.calls.append(("exclude_samba_dir",))
+    async def drop_samba_exclude(self) -> None:
+        self.calls.append(("drop_samba_exclude",))
 
     async def preflight(self, branch: str) -> Preflight:
         self.calls.append(("preflight", branch))
