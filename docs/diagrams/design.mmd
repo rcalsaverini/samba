@@ -1,0 +1,55 @@
+%% Phase 2: Design and review (autonomous, no Owner)
+%%
+%% Agents never talk to each other. Each one picks up an artifact in a state it handles,
+%% writes its result onto the artifact, and moves the artifact to the next state.
+%% In Samba the orchestrator does the polling and runs one fresh agent per item.
+%%
+%% TEP states:
+%%   draft -> in-review -> approved
+%%                      -> changes-requested -> in-review   (loop, capped)
+%%                      -> blocked            (round cap, or contradicts an accepted ADR)
+%%   approved -> amend -> in-review                         (a task found the TEP wrong)
+%% Epic states touched: ready -> designing -> designed
+sequenceDiagram
+  autonumber
+
+  box Agents
+    participant Des as Designer
+    participant Rev as Reviewer
+  end
+
+  box Artifacts
+    participant Epics@{ "type" : "collections" }
+    participant TEPs@{ "type" : "collections" }
+    participant Backlog@{ "type" : "collections" }
+    participant Questions@{ "type" : "collections" }
+  end
+
+  Des->>Epics: pick up an Epic in state ready
+  Epics->>Des: the Epic. Epic becomes designing
+  Des->>Des: reads Epic, ADRs, spec, code
+  Des->>TEPs: write TEP in state draft (interfaces, order, invariants, file list)
+  TEPs->>TEPs: draft becomes in-review
+
+  Rev->>TEPs: pick up a TEP in state in-review
+  TEPs->>Rev: the TEP
+  Rev->>Rev: fresh context, reads TEP, Epic, ADRs, spec, code
+  Note over Rev: Architect lens and Senior Developer lens, one call, two sections
+
+  alt Blocker or Major findings
+    Rev->>TEPs: write findings on the TEP. State becomes changes-requested
+    Des->>TEPs: pick up a TEP in state changes-requested
+    Des->>TEPs: fix, or contest with evidence the Reviewer could read. State becomes in-review
+    Note over Des,Rev: loop, with a round cap. Settled findings stay settled
+  else TEP contradicts an accepted ADR, or round cap reached
+    Rev->>TEPs: state becomes blocked
+    Rev->>Questions: ask the Owner (supersede the ADR, or fix the TEP?)
+  else only Nits, or no findings
+    Rev->>TEPs: write the review report (nits, ADR candidates). State becomes approved
+    Rev->>Epics: Epic becomes designed
+    Rev->>Backlog: nits and ADR candidates become backlog items in state open
+  end
+
+  Note over Des,TEPs: Amendment path, triggered from implementation
+  Des->>TEPs: pick up a TEP in state amend
+  Des->>TEPs: revise the TEP. State becomes in-review

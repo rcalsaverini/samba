@@ -1,0 +1,92 @@
+%% Phase 4: Implementation and review
+%%
+%% Two merge levels, like a stack of PRs:
+%%   Task -> epic branch   gated by validation and the Reviewer. No Owner.
+%%   Epic branch -> main   gated by the Owner, once every wave of the stack is approved.
+%% A bugfix Task has no Epic. It merges straight to main and the Owner reviews it alone.
+%%
+%% Task states:
+%%   ready -> running -> work-review -> merged          (merged into the epic branch)
+%%                    -> changes-requested -> running
+%%   running -> question                                 (plan is ambiguous, Owner answers)
+%%   running -> plan-conflict                            (the TEP is wrong, see the amendment path)
+%%   held while its TEP is in amend                      (derived on each tick, never written; ADR 0023)
+%%   merged -> done                                      (when the epic branch reaches main)
+%% Waves: only the Owner's approval of a wave is stored (on the Epic). building and in-review are
+%% derived from the state of the wave's Tasks.
+%%
+%% The Implementer is today's work phase. It sees the Task, the TEP slice the Task references,
+%% the ADRs, the spec and the code. Nothing else.
+%%
+%% Pace: the system stays at most one wave ahead of the last approved wave. An Epic can opt into
+%% "wait for approval", and then wave N+1 does not start until wave N is approved.
+sequenceDiagram
+  autonumber
+
+  box Agents
+    participant Imp as Implementer
+    participant Rev as Reviewer
+  end
+
+  actor Owner
+
+  box Artifacts
+    participant Tasks@{ "type" : "collections" }
+    participant Epics@{ "type" : "collections" }
+    participant TEPs@{ "type" : "collections" }
+    participant Backlog@{ "type" : "collections" }
+    participant Questions@{ "type" : "collections" }
+  end
+
+  Note over Imp,Tasks: Task level, no Owner
+
+  Imp->>Tasks: pick up a Task in state ready whose dependencies are merged
+  Tasks->>Imp: the Task. State becomes running (own worktree, branched from the epic branch)
+  Imp->>Imp: implements, tests first, edits the spec
+  Note over Imp,Tasks: Samba runs validation (pyright and pytest), the objective check
+  Imp->>Tasks: result: diff, commits, log. State becomes work-review
+
+  alt the Task is ambiguous
+    Imp->>Questions: ask the Owner. Task state becomes question
+    Owner->>Questions: answers. Task becomes ready again
+  else the TEP is wrong
+    Imp->>TEPs: write what conflicts and why. TEP becomes amend
+    Note over Tasks,TEPs: Every not-yet-started Task of that TEP is held while the TEP is in amend<br/>(derived by the tick, nothing is written to the Tasks).<br/>After the amended TEP is approved, the Designer re-slices them
+  end
+
+  Rev->>Tasks: pick up a Task in state work-review
+  Tasks->>Rev: Task, diff, validation result
+  Rev->>Rev: fresh context, reads the diff against Task, TEP, ADRs and spec
+  Note over Rev: Samba computes the objective facts: diff size, commit count,<br/>files outside the Task's file list, spec edits, test result
+
+  alt Blocker or Major findings
+    Rev->>Tasks: findings become feedback. State becomes changes-requested
+    Imp->>Tasks: pick up a Task in state changes-requested
+    Note over Imp,Rev: loop, with a round cap
+  else only Nits, or no findings
+    Rev->>Tasks: Samba merges the Task into the epic branch. State becomes merged
+    Rev->>Backlog: nits and ADR candidates become backlog items in state open
+  end
+
+  Note over Epics,Owner: Wave level, asynchronous, the Owner reviews while the next wave builds
+
+  Epics->>Epics: every Task of wave N is merged. Wave N is in-review (derived by the tick)
+  Rev->>Epics: write the wave pre-review (look here first, what I did not check)
+  Owner->>Epics: picks up waves in state in-review, in batches
+
+  alt approves the wave
+    Owner->>Epics: wave N becomes approved. Nothing is merged to main
+  else rejects the wave
+    Owner->>Epics: reject with feedback. Wave N Tasks become changes-requested
+    Note over Epics,Tasks: later waves already built on top of wave N are reworked
+  end
+
+  Note over Epics,Owner: Epic level, the only merge to main
+
+  Epics->>Epics: every wave is approved
+  Owner->>Epics: epic accept. Samba merges the stack into main and validates once
+  Epics->>Tasks: Epic becomes done. Its merged Tasks become done
+
+  Note over Owner,Tasks: A bugfix Task skips the epic branch
+  Rev->>Tasks: bugfix Task approved, state becomes owner-review
+  Owner->>Tasks: work accept. Samba merges into main and validates. State becomes done

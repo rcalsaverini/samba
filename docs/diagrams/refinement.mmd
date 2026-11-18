@@ -1,0 +1,69 @@
+%% Phase 3: Refinement and review (autonomous, no Owner)
+%%
+%% The Designer takes its second job here: slicing an approved TEP into Tasks.
+%%
+%% Waves: Tasks form a dependency graph (depends_on). A topological layer holds tasks that do
+%% not depend on each other. The Designer orders layers risk first (the riskiest or most
+%% foundational assumption lands in wave 1) and groups consecutive layers into review waves,
+%% recording the reason on the Epic. The Owner reviews at wave boundaries (see implementation).
+%%
+%% Rolling wave: only the next wave is written in full. The rest stay as outlines and are
+%% detailed when their dependencies are in the epic branch, so they see the code that landed.
+%%
+%% Task states in this phase:
+%%   outline                                   (title, intent, wave, depends_on; no steps yet)
+%%   draft -> in-review -> ready               (approved, waits for dependencies and a worker)
+%%                      -> changes-requested -> in-review   (loop, capped)
+%%                      -> blocked
+%% Constraint on every Task: one PR worth of change, a few commits, a small diff, the build stays
+%% green after it.
+sequenceDiagram
+  autonumber
+
+  box Agents
+    participant Des as Designer
+    participant Rev as Reviewer
+  end
+
+  box Artifacts
+    participant TEPs@{ "type" : "collections" }
+    participant Epics@{ "type" : "collections" }
+    participant Tasks@{ "type" : "collections" }
+    participant Backlog@{ "type" : "collections" }
+    participant Questions@{ "type" : "collections" }
+  end
+
+  Des->>TEPs: pick up a TEP in state approved that has no Tasks yet
+  TEPs->>Des: the TEP
+  Des->>Des: reads TEP, Epic, ADRs, spec, code
+  Des->>Des: slices the TEP into Tasks, builds the depends_on graph
+  Des->>Des: orders layers risk first, groups them into review waves
+  Des->>Epics: write the wave plan (which Tasks, in which wave, and why)
+  Des->>Tasks: write the Tasks of wave 1 in state draft (steps, file list, tests, depends_on)
+  Des->>Tasks: write the Tasks of later waves in state outline
+
+  Note over Des,Tasks: Later waves, once their dependencies are in the epic branch
+  Des->>Tasks: pick up an outline Task whose dependencies are merged into the epic branch
+  Des->>Des: reads the current epic branch, fills in the steps
+  Des->>Tasks: Task becomes draft
+
+  Rev->>Tasks: pick up Tasks in state draft
+  Tasks->>Rev: the Tasks, the wave plan and the TEP
+  Rev->>Rev: fresh context, reads Tasks, TEP, ADRs, spec, code
+  Note over Rev: Senior Developer lens: could an implementer build this without deciding anything architectural?<br/>Architect lens: size, independence, conflicts between Tasks, accuracy of depends_on, wave grouping
+
+  alt Blocker or Major findings
+    Rev->>Tasks: write findings on the Task. State becomes changes-requested
+    Des->>Tasks: pick up a Task in state changes-requested
+    Des->>Tasks: fix, or contest with evidence. State becomes in-review
+  else Task too large, or the TEP is wrong
+    Rev->>Tasks: state becomes blocked
+    Rev->>Questions: ask the Owner, or send the TEP back (state amend)
+  else only Nits, or no findings
+    Rev->>Tasks: state becomes ready
+    Rev->>Backlog: nits and ADR candidates become backlog items in state open
+  end
+
+  Note over Des,Tasks: Fast path for a bugfix Task written in exploration
+  Des->>Tasks: pick up a bugfix Task in state draft (no Epic, no TEP)
+  Des->>Tasks: add steps and file list. Same review loop as above
