@@ -6,7 +6,7 @@ Status: NOT STARTED. Depends on step 3 (`samba init`, done on main) and on file 
 
 `samba init` is meant to start a new project with the method the owner wants: DDD plus hexagonal
 architecture, opinionated by default. Only `base` ships. The owner said: "I'm changing my mind a little
-bit and leaning towards making it opinionated." That lean is NOT yet an ADR. Draft ADR 0025 records the
+bit and leaning towards making it opinionated." That lean is NOT yet an ADR. ADR 0025 (proposed, on main) records the
 mechanism (packs, init); it says the opinionated stance "deserves its own ADR when the owner is sure".
 Ask before writing that ADR.
 

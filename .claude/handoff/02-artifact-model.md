@@ -1,7 +1,6 @@
 # 02: The artifact model (backlog, ADR, spec, Epic, TEP, task, bugfix)
 
-Status: proposed, not on main.
-Drafts (in the v2 worktree, `docs/adr/`):
+Status: proposed, on main, in `docs/adr/`:
 - 0021 `work-is-organized-as-backlog-epic-tep-task.md`: the artifacts and the chain between them.
 - 0023 `each-artifact-kind-is-an-aggregate-with-its-own-state-machine.md`: per-kind states and derived
   cross-artifact rules.

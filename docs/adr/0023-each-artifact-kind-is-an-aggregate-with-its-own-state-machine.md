@@ -4,7 +4,7 @@ date: 2026-11-13
 supersedes: []
 ---
 
-# 0021: Each artifact kind is an aggregate with its own state machine
+# 0023: Each artifact kind is an aggregate with its own state machine
 
 ## Context
 

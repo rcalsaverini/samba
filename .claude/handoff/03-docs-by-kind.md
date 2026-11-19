@@ -1,6 +1,7 @@
 # 03: Documents by kind, and the follow-up doc work
 
-Status: draft ADR 0024 (proposed) in the v2 worktree. Step 1 (the move) is on main.
+Status: ADR 0024 (proposed) on main at `docs/adr/0024-each-document-has-one-audience-and-one-kind-of-truth.md`.
+Step 1 (the move) is on main.
 
 ## The rule
 

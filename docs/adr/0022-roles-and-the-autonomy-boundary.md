@@ -4,7 +4,7 @@ date: 2026-11-13
 supersedes: []
 ---
 
-# 0012: Agents have roles, and the human approves intent while machines approve plans
+# 0022: Agents have roles, and the human approves intent while machines approve plans
 
 ## Context
 

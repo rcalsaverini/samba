@@ -2,25 +2,18 @@
 
 Nothing here is decided. Clean-up is safe only after checking with the owner.
 
-## Git state (checked 2026-11-17 in the transcript; re-check before acting)
+## Git state (checked 2026-11-19; re-check before acting)
 
-- Main: 3b703c4, not pushed. The branch is ahead of origin by commits made in this session.
-- Merged branch `docs/implementation-folder` and its worktree `/Users/rafael.calsaverini/Dev/sandbox/symphony-docs-kinds`.
-  Can be removed after the owner confirms.
-- Worktree `/Users/rafael.calsaverini/Dev/sandbox/symphony-autonomy-design` on `design/autonomy-model`:
-  OLD (based on 8a41dd2, has nothing of its own). Its drafts were superseded. Can be removed.
-- Worktree `/Users/rafael.calsaverini/Dev/sandbox/symphony-autonomy-design-v2` on `design/autonomy-model-v2`:
-  holds the UNCOMMITTED drafts ADR 0021 to 0025, `docs/diagrams/`, and a copy of `principles.md`. Those
-  drafts are not on main. The owner has not said whether to commit them. Ask before doing anything. Note:
-  `docs/spec/principles.md` in that worktree is a copy of an older main version, so do not merge it
-  blindly.
-- `.claude/` in the repo root is untracked, and holds `.claude/worktrees/` (subagent worktrees) and now
-  `.claude/handoff/` (these notes). Do not commit it. Consider a `.gitignore` entry (ask first: it is a
-  repo config change).
-- Subagent worktrees under `.claude/worktrees/` (e.g. `agent-a5356356d0169428f`, `agent-abb15241e24adbf94`)
-  are from finished subagents. Remove them only when no subagent runs.
-- Stale `symphony/*` branches from the old Samba tasks may still exist (about 14, from an earlier count).
-  Not checked this session.
+- Main: 04aa06a. Git reports main up to date with origin/main (ADRs and notes were pushed or committed
+  since the last handoff; verify push state before assuming).
+- The v2 worktree (`symphony-autonomy-design-v2`, branch `design/autonomy-model-v2`) is gone: it was
+  merged into main as 0c8bbae. ADRs 0021 to 0025 and the target-design diagrams are on main.
+- `.claude/handoff/` (these notes) is tracked in git. `.claude/worktrees/` no longer exists, so there
+  are no subagent worktrees to clean up.
+- The only untracked file under `.claude/` now is `.claude/.DS_Store`. Consider adding a `.DS_Store`
+  ignore rule (ask first: it is a repo config change).
+- `docs/implementation-folder` and `design/autonomy-model` branches still exist locally (now unused);
+  `symphony/*` and `samba/*` task branches also remain. Not cleaned up; ask the owner before deleting.
 
 ## Open code/tool issues noticed
 
@@ -37,17 +30,18 @@ Nothing here is decided. Clean-up is safe only after checking with the owner.
 - The drift test's failure message is weak (shows only the filename). Not fixed.
 - No "answer and discard" option for questions. Not built.
 - Samba still runs tasks through the old task store while the new artifact model is only a draft.
+- ADR title numbers inside 0021 to 0023 did not match their filenames (0011, 0012, 0021). Fixed to match
+  on 2026-11-19.
 
 ## Questions the owner must answer (collected)
 
-1. Commit the v2 drafts (ADR 0021 to 0025, the diagrams) to main, or keep them on the branch?
-2. Accept or revise the draft ADRs in order: 0021, 0022, 0023, 0024, 0025.
-3. Is Samba now opinionated (`ddd-hexagonal` default)? Needs its own ADR.
-4. Who writes the glossary terms (file 05)? He must confirm the words and the core domain.
-5. The TEP name, and whether an Epic is one file or a folder.
-6. The Designer resumes its session on review, or starts fresh?
-7. Round cap for the review loop (file 06).
-8. Is `samba explore` a command or a skill (file 08)?
-9. Warning prefix for the no-validation warning.
-10. Remove or keep the old worktrees and the `symphony/*` branches?
-11. Whether to add `.claude/` to `.gitignore`.
+1. Accept or revise the proposed ADRs in order: 0021, 0022, 0023, 0024, 0025, 0026.
+2. Is Samba now opinionated (`ddd-hexagonal` default)? Needs its own ADR.
+3. Who writes the glossary terms (file 05)? He must confirm the words and the core domain.
+4. The TEP name, and whether an Epic is one file or a folder.
+5. The Designer resumes its session on review, or starts fresh?
+6. Round cap for the review loop (file 06).
+7. Is `samba explore` a command or a skill (file 08)?
+8. Warning prefix for the no-validation warning.
+9. Remove or keep the old worktrees and the `symphony/*` and `samba/*` branches?
+10. Whether to ignore `.DS_Store` (and add `.claude/` to `.gitignore`, or keep the notes tracked).

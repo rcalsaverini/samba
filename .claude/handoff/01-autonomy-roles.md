@@ -1,7 +1,7 @@
 # 01: Roles and the autonomy boundary
 
-Status: decided in principle, draft ADR 0022 (proposed), not on main.
-Draft: `/Users/rafael.calsaverini/Dev/sandbox/symphony-autonomy-design-v2/docs/adr/0022-roles-and-the-autonomy-boundary.md`
+Status: decided in principle, ADR 0022 (proposed), on main at
+`docs/adr/0022-roles-and-the-autonomy-boundary.md`.
 
 ## Problem
 
@@ -52,6 +52,6 @@ runs of the same model share blind spots, so self-review is weak evidence.
 
 ## Next steps
 
-1. Owner accepts or revises draft ADR 0022 (it is in the v2 worktree).
+1. Owner accepts or revises ADR 0022 (proposed, on main in docs/adr/).
 2. Only after acceptance: the roles appear in `WORKFLOW.md` config (per-role model) and in the
    spec. Samba has no per-role config today (only `claude.model` and the planning model).
